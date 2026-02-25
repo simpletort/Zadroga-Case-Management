@@ -1,0 +1,72 @@
+substitutions:
+  _SERVICE_NAME: client-portal  # ← change per service
+  _REGION: us-central1
+  _REPO: us-central1-docker.pkg.dev/$PROJECT_ID/simpletort
+  _ENV: dev
+
+steps:
+  # 1. Lint with Black + Flake8
+  - name: 'python:3.11-slim'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        pip install black flake8 --quiet
+        black --check services/$_SERVICE_NAME
+        flake8 services/$_SERVICE_NAME --max-line-length=88
+    dir: '.'
+
+  # 2. Unit tests with pytest
+  - name: 'python:3.11-slim'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        pip install -r services/$_SERVICE_NAME/requirements.txt --quiet
+        pip install pytest pytest-cov --quiet
+        pytest services/$_SERVICE_NAME/tests/ --cov=services/$_SERVICE_NAME --cov-report=term-missing
+    dir: '.'
+
+  # 3. Build Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - build
+      - '-t'
+      - '$_REPO/$_SERVICE_NAME:$COMMIT_SHA'
+      - '-t'
+      - '$_REPO/$_SERVICE_NAME:$_ENV-latest'
+      - '-f'
+      - 'services/$_SERVICE_NAME/Dockerfile'
+      - 'services/$_SERVICE_NAME'
+
+  # 4. Push to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '--all-tags', '$_REPO/$_SERVICE_NAME']
+
+  # 5. Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - '$_SERVICE_NAME-$_ENV'
+      - '--image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA'
+      - '--region=$_REGION'
+      - '--platform=managed'
+      - '--no-allow-unauthenticated'
+      - '--set-env-vars=ENV=$_ENV'
+
+images:
+  - '$_REPO/$_SERVICE_NAME:$COMMIT_SHA'
+  - '$_REPO/$_SERVICE_NAME:$_ENV-latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+
+timeout: '1200s'
+
+tags:
+  - '$_SERVICE_NAME'
+  - '$_ENV'
+  - '$COMMIT_SHA'
