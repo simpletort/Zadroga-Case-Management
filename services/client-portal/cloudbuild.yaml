@@ -1,7 +1,7 @@
 substitutions:
   _SERVICE_NAME: client-portal  # ← change per service 
   _REGION: us-central1
-  _REPO: us-central1-docker.pkg.dev/$PROJECT_ID/simpletort
+  _REPO: us-central1-docker.pkg.dev/simple-tort-zadroga-prod/simpletort
   _ENV: dev
 
 steps:
