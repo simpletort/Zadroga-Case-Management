@@ -1,33 +1,29 @@
 substitutions:
-  _SERVICE_NAME: client-portal  # ← change per service
+  _SERVICE_NAME: lead-intake          # ← change per service
   _REGION: us-central1
   _REPO: us-central1-docker.pkg.dev/$PROJECT_ID/simpletort
-  _ENV: dev
+  _ENV: dev                           # overridden by trigger (dev/staging/prod)
 
 steps:
-  # 1. Lint with Black + Flake8
-  - name: 'python:3.11-slim'
-    entrypoint: bash
-    args:
-      - '-c'
-      - |
-        pip install black flake8 --quiet
-        black --check services/$_SERVICE_NAME
-        flake8 services/$_SERVICE_NAME --max-line-length=88
-    dir: '.'
+  # 1. Install dependencies
+  - name: 'node:18-alpine'
+    entrypoint: npm
+    args: ['ci']
+    dir: 'services/$_SERVICE_NAME'
 
-  # 2. Unit tests with pytest
-  - name: 'python:3.11-slim'
-    entrypoint: bash
-    args:
-      - '-c'
-      - |
-        pip install -r services/$_SERVICE_NAME/requirements.txt --quiet
-        pip install pytest pytest-cov --quiet
-        pytest services/$_SERVICE_NAME/tests/ --cov=services/$_SERVICE_NAME --cov-report=term-missing
-    dir: '.'
+  # 2. Lint
+  - name: 'node:18-alpine'
+    entrypoint: npm
+    args: ['run', 'lint']
+    dir: 'services/$_SERVICE_NAME'
 
-  # 3. Build Docker image
+  # 3. Unit tests
+  - name: 'node:18-alpine'
+    entrypoint: npm
+    args: ['test', '--', '--coverage']
+    dir: 'services/$_SERVICE_NAME'
+
+  # 4. Build Docker image
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - build
@@ -39,11 +35,11 @@ steps:
       - 'services/$_SERVICE_NAME/Dockerfile'
       - 'services/$_SERVICE_NAME'
 
-  # 4. Push to Artifact Registry
+  # 5. Push to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
     args: ['push', '--all-tags', '$_REPO/$_SERVICE_NAME']
 
-  # 5. Deploy to Cloud Run
+  # 6. Deploy to Cloud Run (skipped on PR builds via trigger filter)
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
