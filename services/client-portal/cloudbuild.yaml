@@ -1,8 +1,8 @@
 substitutions:
-  _SERVICE_NAME: lead-intake          # ← change per service
+  _SERVICE_NAME: client-portal  # ← change per service 
   _REGION: us-central1
-  _REPO: us-central1-docker.pkg.dev/$PROJECT_ID/simpletort
-  _ENV: dev                           # overridden by trigger (dev/staging/prod)
+  _REPO: us-central1-docker.pkg.dev/simple-tort-zadroga-prod/simpletort
+  _ENV: dev
 
 steps:
   # 1. Install dependencies
