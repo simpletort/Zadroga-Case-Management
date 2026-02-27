@@ -1,9 +1,3 @@
-substitutions:
-  _SERVICE_NAME: client-portal
-  _REGION: us-central1
-  _REPO: us-central1-docker.pkg.dev/$PROJECT_ID/simpletort
-  _ENV: dev
-
 steps:
   # 1. Lint
   - name: 'python:3.11-slim'

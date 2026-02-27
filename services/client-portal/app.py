@@ -8,9 +8,5 @@ def hello():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
-```
 
-**`requirements.txt`**
-```
-flask==3.0.3
-gunicorn==22.0.0
+
