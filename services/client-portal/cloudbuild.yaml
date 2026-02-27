@@ -22,13 +22,16 @@ steps:
 
   # 3. Build image
   - name: 'gcr.io/cloud-builders/docker'
+    dir: 'services/client-portal'
     args:
       - build
       - '-t'
       - '$_REPO/$_SERVICE_NAME:$COMMIT_SHA'
       - '-t'
       - '$_REPO/$_SERVICE_NAME:$_ENV-latest'
-      - '.'
+      - '-f'
+      - 'services/client-portal/Dockerfile'
+      - 'services/client-portal'
 
   # 4. Push image
   - name: 'gcr.io/cloud-builders/docker'
