@@ -1,29 +1,30 @@
 substitutions:
-  _SERVICE_NAME: client-portal  # ← change per service 
+  _SERVICE_NAME: client-portal
   _REGION: us-central1
-  _REPO: us-central1-docker.pkg.dev/simple-tort-zadroga-prod/simpletort
+  _REPO: us-central1-docker.pkg.dev/$PROJECT_ID/simpletort
   _ENV: dev
 
 steps:
-  # 1. Install dependencies
-  - name: 'node:18-alpine'
-    entrypoint: npm
-    args: ['ci']
-    dir: 'services/$_SERVICE_NAME'
+  # 1. Lint
+  - name: 'python:3.11-slim'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        pip install black flake8 --quiet
+        black --check .
+        flake8 . --max-line-length=88
 
-  # 2. Lint
-  - name: 'node:18-alpine'
-    entrypoint: npm
-    args: ['run', 'lint']
-    dir: 'services/$_SERVICE_NAME'
+  # 2. Test
+  - name: 'python:3.11-slim'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        pip install -r requirements.txt pytest --quiet
+        pytest tests/ -v
 
-  # 3. Unit tests
-  - name: 'node:18-alpine'
-    entrypoint: npm
-    args: ['test', '--', '--coverage']
-    dir: 'services/$_SERVICE_NAME'
-
-  # 4. Build Docker image
+  # 3. Build image
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - build
@@ -31,15 +32,13 @@ steps:
       - '$_REPO/$_SERVICE_NAME:$COMMIT_SHA'
       - '-t'
       - '$_REPO/$_SERVICE_NAME:$_ENV-latest'
-      - '-f'
-      - 'services/$_SERVICE_NAME/Dockerfile'
-      - 'services/$_SERVICE_NAME'
+      - '.'
 
-  # 5. Push to Artifact Registry
+  # 4. Push image
   - name: 'gcr.io/cloud-builders/docker'
     args: ['push', '--all-tags', '$_REPO/$_SERVICE_NAME']
 
-  # 6. Deploy to Cloud Run (skipped on PR builds via trigger filter)
+  # 5. Deploy to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
@@ -49,7 +48,7 @@ steps:
       - '--image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA'
       - '--region=$_REGION'
       - '--platform=managed'
-      - '--no-allow-unauthenticated'
+      - '--allow-unauthenticated'
       - '--set-env-vars=ENV=$_ENV'
 
 images:
@@ -58,11 +57,5 @@ images:
 
 options:
   logging: CLOUD_LOGGING_ONLY
-  machineType: E2_HIGHCPU_8
 
-timeout: '1200s'
-
-tags:
-  - '$_SERVICE_NAME'
-  - '$_ENV'
-  - '$COMMIT_SHA'
+timeout: '600s'
