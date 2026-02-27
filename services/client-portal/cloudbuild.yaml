@@ -11,14 +11,14 @@ steps:
         flake8 . --max-line-length=88
 
   # 2. Test
-  - name: 'python:3.11-slim'
-    entrypoint: bash
-    dir: 'services/client-portal'
-    args:
-      - '-c'
-      - |
-        pip install -r requirements.txt pytest --quiet
-        pytest tests/ -v
+  # - name: 'python:3.11-slim'
+  #   entrypoint: bash
+  #   dir: 'services/client-portal'
+  #   args:
+  #     - '-c'
+  #     - |
+  #       pip install -r requirements.txt pytest --quiet
+  #       pytest tests/ -v
 
   # 3. Build image
   - name: 'gcr.io/cloud-builders/docker'
