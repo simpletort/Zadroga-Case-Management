@@ -30,8 +30,7 @@ steps:
       - '-t'
       - '$_REPO/$_SERVICE_NAME:$_ENV-latest'
       - '-f'
-      - 'services/client-portal/Dockerfile'
-      - 'services/client-portal'
+      - .
 
   # 4. Push image
   - name: 'gcr.io/cloud-builders/docker'
