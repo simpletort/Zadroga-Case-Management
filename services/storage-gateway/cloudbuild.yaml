@@ -1,0 +1,59 @@
+steps:
+  # 1. Lint
+  - name: 'python:3.11-slim'
+    entrypoint: bash
+    dir: 'services/client-portal'
+    args:
+      - '-c'
+      - |
+        pip install black flake8 --quiet
+        black --check .
+        flake8 . --max-line-length=88
+
+  # 2. Test
+  # - name: 'python:3.11-slim'
+  #   entrypoint: bash
+  #   dir: 'services/client-portal'
+  #   args:
+  #     - '-c'
+  #     - |
+  #       pip install -r requirements.txt pytest --quiet
+  #       pytest tests/ -v
+
+  # 3. Build image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - build
+      - '-t'
+      - '$_REPO/$_SERVICE_NAME:$COMMIT_SHA'
+      - '-t'
+      - '$_REPO/$_SERVICE_NAME:$_ENV-latest'
+      - '-f'
+      - 'services/client-portal/Dockerfile'
+      - 'services/client-portal'
+
+  # 4. Push image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '--all-tags', '$_REPO/$_SERVICE_NAME']
+
+  # 5. Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - '$_SERVICE_NAME-$_ENV'
+      - '--image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA'
+      - '--region=$_REGION'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--set-env-vars=ENV=$_ENV'
+
+images:
+  - '$_REPO/$_SERVICE_NAME:$COMMIT_SHA'
+  - '$_REPO/$_SERVICE_NAME:$_ENV-latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: '600s'
