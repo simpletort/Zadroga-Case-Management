@@ -38,16 +38,26 @@ steps:
 
   # 5. Deploy to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: gcloud
+    entrypoint: bash
     args:
-      - run
-      - deploy
-      - '$_SERVICE_NAME-$_ENV'
-      - '--image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA'
-      - '--region=$_REGION'
-      - '--platform=managed'
-      - '--allow-unauthenticated'
-      - '--set-env-vars=ENV=$_ENV'
+      - '-c'
+      - |
+        if [ "$_ENV" = "prod" ]; then
+          echo "Production deployment - running canary..."
+          bash scripts/canary-deploy.sh \
+            $_SERVICE_NAME-$_ENV \
+            $_REPO/$_SERVICE_NAME:$COMMIT_SHA \
+            $_REGION \
+            $PROJECT_ID
+        else
+          echo "Staging deployment - deploying directly..."
+          gcloud run deploy $_SERVICE_NAME-$_ENV \
+            --image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA \
+            --region=$_REGION \
+            --platform=managed \
+            --allow-unauthenticated \
+            --set-env-vars=ENV=$_ENV
+        fi
 
 images:
   - '$_REPO/$_SERVICE_NAME:$COMMIT_SHA'
