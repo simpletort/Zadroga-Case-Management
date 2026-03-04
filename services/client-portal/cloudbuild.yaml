@@ -42,6 +42,8 @@ steps:
     args:
       - '-c'
       - |
+        echo ">>> _ENV is: '$_ENV'"
+        echo ">>> SERVICE: '$_SERVICE_NAME-$_ENV'"
         if [ "$_ENV" = "prod" ]; then
           echo "Production deployment - running canary..."
           bash scripts/canary-deploy.sh \
