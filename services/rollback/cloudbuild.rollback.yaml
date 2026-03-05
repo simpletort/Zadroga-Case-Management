@@ -1,0 +1,7 @@
+steps:
+- name: gcr.io/google.com/cloudsdktool/cloud-sdk
+  entrypoint: bash
+  args:
+    - scripts/rollback.sh
+    - ${_SERVICE_NAME}
+    - us-central1
