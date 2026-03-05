@@ -5,3 +5,6 @@ steps:
     - scripts/rollback.sh
     - ${_SERVICE_NAME}
     - us-central1
+  
+options:
+  logging: CLOUD_LOGGING_ONLY
