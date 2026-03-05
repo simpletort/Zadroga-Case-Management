@@ -38,10 +38,12 @@ steps:
 
   # 5. Deploy to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: bash
+    entrypoint: gcloud
     args:
       - '-c'
       - |
+        echo ">>> _ENV is: '$_ENV'"
+        echo ">>> SERVICE: '$_SERVICE_NAME-$_ENV'"
         if [ "$_ENV" = "prod" ]; then
           echo "Production deployment - running canary..."
           bash scripts/canary-deploy.sh \
