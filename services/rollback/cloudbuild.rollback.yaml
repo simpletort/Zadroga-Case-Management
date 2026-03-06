@@ -1,0 +1,10 @@
+steps:
+- name: gcr.io/google.com/cloudsdktool/cloud-sdk
+  entrypoint: bash
+  args:
+    - services/rollback/rollback.sh
+    - ${_SERVICE_NAME}
+    - us-central1
+  
+options:
+  logging: CLOUD_LOGGING_ONLY
