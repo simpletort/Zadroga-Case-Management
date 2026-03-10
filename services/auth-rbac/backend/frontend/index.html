@@ -1,0 +1,1319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Legal Portal — User Management</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=Karla:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ── Reset & tokens ──────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --ink:        #0f1117;
+      --ink-2:      #3d404d;
+      --ink-3:      #7c7f90;
+      --border:     #d8dae3;
+      --surface:    #f7f8fc;
+      --white:      #ffffff;
+      --accent:     #1a2e5a;
+      --accent-mid: #2e4d99;
+      --accent-lt:  #e8edf8;
+      --gold:       #b8860b;
+      --gold-lt:    #fdf6e3;
+      --red:        #c0392b;
+      --red-lt:     #fdf0ee;
+      --green:      #1e6b42;
+      --green-lt:   #edf7f2;
+      --amber:      #b45309;
+      --amber-lt:   #fef3c7;
+
+      --r-sm:  4px;
+      --r-md:  8px;
+      --r-lg:  12px;
+      --r-xl:  16px;
+
+      --shadow-sm: 0 1px 3px rgba(0,0,0,.08);
+      --shadow-md: 0 4px 16px rgba(0,0,0,.10);
+      --shadow-lg: 0 12px 40px rgba(0,0,0,.14);
+
+      --font-display: 'DM Serif Display', serif;
+      --font-body:    'Karla', sans-serif;
+      --font-mono:    'DM Mono', monospace;
+    }
+
+    html { font-size: 15px; }
+    body {
+      font-family: var(--font-body);
+      background: var(--surface);
+      color: var(--ink);
+      min-height: 100vh;
+      line-height: 1.55;
+    }
+
+    /* ── Layout ──────────────────────────────────────────────────────────── */
+    .layout { display: flex; min-height: 100vh; }
+
+    /* ── Sidebar ─────────────────────────────────────────────────────────── */
+    .sidebar {
+      width: 230px;
+      min-width: 230px;
+      background: var(--accent);
+      display: flex;
+      flex-direction: column;
+      padding: 0;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    .sidebar-logo {
+      padding: 28px 24px 20px;
+      border-bottom: 1px solid rgba(255,255,255,.1);
+    }
+    .sidebar-logo h1 {
+      font-family: var(--font-display);
+      font-size: 1.25rem;
+      color: #fff;
+      line-height: 1.2;
+      letter-spacing: .01em;
+    }
+    .sidebar-logo p {
+      font-size: .72rem;
+      color: rgba(255,255,255,.5);
+      margin-top: 3px;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+    .nav-section { padding: 20px 12px 0; }
+    .nav-label {
+      font-size: .65rem;
+      text-transform: uppercase;
+      letter-spacing: .12em;
+      color: rgba(255,255,255,.35);
+      padding: 0 12px;
+      margin-bottom: 6px;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      border-radius: var(--r-md);
+      color: rgba(255,255,255,.65);
+      font-size: .88rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background .15s, color .15s;
+      text-decoration: none;
+    }
+    .nav-item:hover { background: rgba(255,255,255,.08); color: #fff; }
+    .nav-item.active { background: rgba(255,255,255,.14); color: #fff; }
+    .nav-icon { width: 16px; height: 16px; opacity: .8; flex-shrink: 0; }
+    .sidebar-footer {
+      margin-top: auto;
+      padding: 16px 24px;
+      border-top: 1px solid rgba(255,255,255,.1);
+    }
+    .sidebar-user { display: flex; align-items: center; gap: 10px; }
+    .avatar-sm {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: var(--accent-mid);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: .75rem; color: #fff; flex-shrink: 0;
+    }
+    .sidebar-user-info small { display: block; font-size: .68rem; color: rgba(255,255,255,.4); }
+    .sidebar-user-info span { font-size: .82rem; color: rgba(255,255,255,.85); font-weight: 600; }
+
+    /* ── Main ────────────────────────────────────────────────────────────── */
+    .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+    .topbar {
+      background: var(--white);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .topbar-title { font-family: var(--font-display); font-size: 1.4rem; color: var(--ink); }
+    .topbar-actions { display: flex; gap: 10px; align-items: center; }
+
+    .content { padding: 28px 32px; display: flex; flex-direction: column; gap: 20px; }
+
+    /* ── Role-gate banner ─────────────────────────────────────────────────── */
+    #access-denied {
+      background: var(--red-lt);
+      border: 1px solid #f5c6c2;
+      border-radius: var(--r-lg);
+      padding: 32px;
+      text-align: center;
+      display: none;
+    }
+    #access-denied h2 { color: var(--red); font-family: var(--font-display); font-size: 1.5rem; margin-bottom: 8px; }
+    #access-denied p  { color: var(--ink-2); }
+
+    /* ── Toolbar ─────────────────────────────────────────────────────────── */
+    .toolbar {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      padding: 16px 20px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .search-wrap { position: relative; flex: 1; min-width: 200px; }
+    .search-wrap svg { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--ink-3); pointer-events: none; }
+    .search-input {
+      width: 100%;
+      padding: 8px 12px 8px 36px;
+      border: 1px solid var(--border);
+      border-radius: var(--r-md);
+      font-family: var(--font-body);
+      font-size: .88rem;
+      color: var(--ink);
+      background: var(--surface);
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .search-input:focus { outline: none; border-color: var(--accent-mid); box-shadow: 0 0 0 3px rgba(46,77,153,.12); }
+
+    select.filter {
+      padding: 8px 32px 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--r-md);
+      font-family: var(--font-body);
+      font-size: .88rem;
+      color: var(--ink);
+      background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237c7f90' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 10px center;
+      -webkit-appearance: none;
+      appearance: none;
+      cursor: pointer;
+      transition: border-color .15s;
+    }
+    select.filter:focus { outline: none; border-color: var(--accent-mid); }
+
+    /* ── Buttons ─────────────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 16px;
+      border-radius: var(--r-md);
+      font-family: var(--font-body);
+      font-size: .88rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all .15s;
+      white-space: nowrap;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-mid); }
+    .btn-ghost { background: transparent; color: var(--ink-2); border: 1px solid var(--border); }
+    .btn-ghost:hover { background: var(--surface); border-color: var(--ink-3); }
+    .btn-danger { background: var(--red); color: #fff; }
+    .btn-danger:hover { background: #a93226; }
+    .btn-sm { padding: 5px 10px; font-size: .8rem; }
+    .btn:disabled { opacity: .4; cursor: not-allowed; }
+
+    /* ── Stats row ───────────────────────────────────────────────────────── */
+    .stats-row { display: flex; gap: 12px; flex-wrap: wrap; }
+    .stat-card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      padding: 16px 20px;
+      flex: 1;
+      min-width: 140px;
+    }
+    .stat-card .stat-label { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-3); margin-bottom: 6px; }
+    .stat-card .stat-val   { font-family: var(--font-display); font-size: 1.8rem; color: var(--accent); line-height: 1; }
+    .stat-card .stat-sub   { font-size: .75rem; color: var(--ink-3); margin-top: 4px; }
+
+    /* ── Table card ──────────────────────────────────────────────────────── */
+    .card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      overflow: hidden;
+    }
+    .card-header {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .card-header h2 { font-size: .95rem; font-weight: 700; color: var(--ink); }
+
+    .bulk-bar {
+      background: var(--accent-lt);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 20px;
+      display: none;
+      align-items: center;
+      gap: 12px;
+      font-size: .85rem;
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .bulk-bar.visible { display: flex; }
+    .bulk-sep { width: 1px; height: 16px; background: var(--border); }
+
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      padding: 10px 16px;
+      text-align: left;
+      font-size: .72rem;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--ink-3);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+      position: sticky;
+      top: 0;
+    }
+    thead th:first-child { padding-left: 20px; }
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background .12s;
+    }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: var(--surface); }
+    tbody tr.selected { background: var(--accent-lt); }
+    td {
+      padding: 12px 16px;
+      font-size: .88rem;
+      color: var(--ink-2);
+      vertical-align: middle;
+    }
+    td:first-child { padding-left: 20px; }
+
+    .user-cell { display: flex; align-items: center; gap: 10px; }
+    .avatar {
+      width: 34px; height: 34px; border-radius: 50%;
+      background: var(--accent-mid);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: .78rem; color: #fff; flex-shrink: 0;
+    }
+    .user-name  { font-weight: 600; color: var(--ink); font-size: .88rem; }
+    .user-email { font-size: .78rem; color: var(--ink-3); font-family: var(--font-mono); }
+
+    /* role badges */
+    .badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 9px;
+      border-radius: 100px;
+      font-size: .73rem;
+      font-weight: 700;
+      letter-spacing: .03em;
+      white-space: nowrap;
+    }
+    .badge-client          { background: var(--surface);   color: var(--ink-3);   border: 1px solid var(--border); }
+    .badge-admin_staff     { background: var(--amber-lt);  color: var(--amber);   border: 1px solid #fde68a; }
+    .badge-paralegal       { background: var(--accent-lt); color: var(--accent);  border: 1px solid #c7d2f0; }
+    .badge-junior_partner  { background: var(--gold-lt);   color: var(--gold);    border: 1px solid #fce4a0; }
+    .badge-senior_partner  { background: #1a2e5a1a;        color: var(--accent);  border: 1px solid #1a2e5a44; }
+    .badge-active          { background: var(--green-lt);  color: var(--green);   border: 1px solid #a7d7bb; }
+    .badge-suspended       { background: var(--red-lt);    color: var(--red);     border: 1px solid #f5c6c2; }
+    .badge-deleted         { background: var(--surface);   color: var(--ink-3);   border: 1px solid var(--border); }
+
+    .actions-cell { display: flex; gap: 6px; align-items: center; }
+
+    .empty-state {
+      text-align: center;
+      padding: 64px 32px;
+      color: var(--ink-3);
+    }
+    .empty-state svg { margin-bottom: 12px; opacity: .4; }
+    .empty-state p { font-size: .9rem; }
+
+    .loading-row td { text-align: center; padding: 48px; color: var(--ink-3); font-style: italic; }
+
+    /* ── Pagination ──────────────────────────────────────────────────────── */
+    .pagination {
+      padding: 12px 20px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: .82rem;
+      color: var(--ink-3);
+      gap: 12px;
+    }
+    .pag-btns { display: flex; gap: 6px; }
+    .pag-btn {
+      padding: 5px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      background: var(--white);
+      font-family: var(--font-body);
+      font-size: .82rem;
+      cursor: pointer;
+      color: var(--ink-2);
+      transition: all .12s;
+    }
+    .pag-btn:hover:not(:disabled) { background: var(--surface); border-color: var(--ink-3); }
+    .pag-btn:disabled { opacity: .35; cursor: not-allowed; }
+
+    /* ── Activity log ─────────────────────────────────────────────────────── */
+    .log-list { padding: 0; list-style: none; }
+    .log-item {
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      font-size: .84rem;
+    }
+    .log-item:last-child { border-bottom: none; }
+    .log-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      margin-top: 5px; flex-shrink: 0;
+    }
+    .log-dot-blue   { background: var(--accent-mid); }
+    .log-dot-green  { background: var(--green); }
+    .log-dot-red    { background: var(--red); }
+    .log-dot-amber  { background: var(--amber); }
+    .log-event { color: var(--ink); font-weight: 600; }
+    .log-detail { color: var(--ink-3); font-size: .78rem; margin-top: 2px; font-family: var(--font-mono); }
+    .log-time   { margin-left: auto; color: var(--ink-3); font-size: .75rem; white-space: nowrap; }
+
+    /* ── Permission preview panel ────────────────────────────────────────── */
+    .perm-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 8px;
+      padding: 16px;
+    }
+    .perm-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      border-radius: var(--r-md);
+      font-size: .8rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      transition: all .15s;
+    }
+    .perm-item.has-perm  { background: var(--green-lt); border-color: #a7d7bb; color: var(--green); }
+    .perm-item.no-perm   { opacity: .4; }
+    .perm-check { font-size: .9rem; }
+
+    /* ── Modal ───────────────────────────────────────────────────────────── */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.45);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 100;
+      opacity: 0; pointer-events: none;
+      transition: opacity .2s;
+    }
+    .modal-overlay.open { opacity: 1; pointer-events: all; }
+    .modal {
+      background: var(--white);
+      border-radius: var(--r-xl);
+      width: 460px;
+      max-width: calc(100vw - 32px);
+      box-shadow: var(--shadow-lg);
+      transform: translateY(16px);
+      transition: transform .2s;
+    }
+    .modal-overlay.open .modal { transform: translateY(0); }
+    .modal-header {
+      padding: 20px 24px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .modal-header h3 { font-family: var(--font-display); font-size: 1.15rem; color: var(--ink); }
+    .modal-header p  { font-size: .82rem; color: var(--ink-3); margin-top: 3px; }
+    .modal-close {
+      background: none; border: none; cursor: pointer; color: var(--ink-3);
+      padding: 2px; border-radius: var(--r-sm); transition: color .12s;
+      flex-shrink: 0;
+    }
+    .modal-close:hover { color: var(--ink); }
+    .modal-body   { padding: 20px 24px; }
+    .modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
+
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-size: .82rem; font-weight: 600; color: var(--ink-2); margin-bottom: 6px; }
+    .form-group select, .form-group input {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--r-md);
+      font-family: var(--font-body);
+      font-size: .88rem;
+      color: var(--ink);
+      background: var(--surface);
+      transition: border-color .15s;
+    }
+    .form-group select:focus, .form-group input:focus {
+      outline: none;
+      border-color: var(--accent-mid);
+      box-shadow: 0 0 0 3px rgba(46,77,153,.1);
+    }
+
+    .confirm-box {
+      background: var(--amber-lt);
+      border: 1px solid #fde68a;
+      border-radius: var(--r-md);
+      padding: 12px 14px;
+      font-size: .83rem;
+      color: var(--amber);
+      margin-top: 4px;
+    }
+
+    /* ── Toast ───────────────────────────────────────────────────────────── */
+    #toast {
+      position: fixed; bottom: 24px; right: 24px; z-index: 200;
+      background: var(--ink);
+      color: #fff;
+      padding: 12px 18px;
+      border-radius: var(--r-md);
+      font-size: .87rem;
+      box-shadow: var(--shadow-md);
+      transform: translateY(16px);
+      opacity: 0;
+      transition: all .25s;
+      max-width: 320px;
+    }
+    #toast.show { opacity: 1; transform: translateY(0); }
+    #toast.success { background: var(--green); }
+    #toast.error   { background: var(--red); }
+
+    /* ── Responsive ──────────────────────────────────────────────────────── */
+    @media (max-width: 900px) {
+      .sidebar { display: none; }
+      .content { padding: 16px; }
+      .topbar  { padding: 12px 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="layout">
+
+  <!-- ── Sidebar ─────────────────────────────────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <h1>Legal Portal</h1>
+      <p>Administration</p>
+    </div>
+
+    <div class="nav-section">
+      <p class="nav-label">Management</p>
+      <a class="nav-item active" href="#">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Users &amp; Roles
+      </a>
+      <a class="nav-item" href="#">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        Cases
+      </a>
+      <a class="nav-item" href="#">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Activity Log
+      </a>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-user">
+        <div class="avatar-sm" id="sidebar-avatar">SP</div>
+        <div class="sidebar-user-info">
+          <span id="sidebar-name">Senior Partner</span>
+          <small id="sidebar-role-label">senior_partner</small>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── Main ────────────────────────────────────────────────────────────── -->
+  <div class="main">
+
+    <header class="topbar">
+      <div class="topbar-title">User Management</div>
+      <div class="topbar-actions">
+        <button class="btn btn-ghost btn-sm" id="btn-refresh" title="Refresh">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          Refresh
+        </button>
+        <button class="btn btn-primary btn-sm" id="btn-invite">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Invite User
+        </button>
+      </div>
+    </header>
+
+    <div class="content" id="page-content">
+
+      <!-- Access denied gate (shown for non-admin roles) -->
+      <div id="access-denied">
+        <h2>Access Restricted</h2>
+        <p>This page is only accessible to <strong>Admin Staff</strong> and <strong>Senior Partner</strong> roles.</p>
+      </div>
+
+      <!-- Main content (hidden until role check passes) -->
+      <div id="admin-content" style="display:none; display:flex; flex-direction:column; gap:20px;">
+
+        <!-- Stats -->
+        <div class="stats-row" id="stats-row">
+          <div class="stat-card">
+            <div class="stat-label">Total Users</div>
+            <div class="stat-val" id="stat-total">—</div>
+            <div class="stat-sub">all roles</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Active</div>
+            <div class="stat-val" id="stat-active">—</div>
+            <div class="stat-sub">currently active</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Staff</div>
+            <div class="stat-val" id="stat-staff">—</div>
+            <div class="stat-sub">non-client roles</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Clients</div>
+            <div class="stat-val" id="stat-clients">—</div>
+            <div class="stat-sub">portal users</div>
+          </div>
+        </div>
+
+        <!-- Toolbar -->
+        <div class="toolbar">
+          <div class="search-wrap">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" class="search-input" id="search" placeholder="Search by name or email…" />
+          </div>
+          <select class="filter" id="filter-role">
+            <option value="">All Roles</option>
+            <option value="client">Client</option>
+            <option value="admin_staff">Admin Staff</option>
+            <option value="paralegal">Paralegal</option>
+            <option value="junior_partner">Junior Partner</option>
+            <option value="senior_partner">Senior Partner</option>
+          </select>
+          <select class="filter" id="filter-status">
+            <option value="">All Statuses</option>
+            <option value="active">Active</option>
+            <option value="suspended">Suspended</option>
+            <option value="deleted">Deleted</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" id="btn-perms-preview">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            Permission Preview
+          </button>
+        </div>
+
+        <!-- Users table card -->
+        <div class="card">
+          <div class="card-header">
+            <h2>Users</h2>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <span id="result-count" style="font-size:.78rem;color:var(--ink-3);"></span>
+              <button class="btn btn-ghost btn-sm" id="btn-bulk-role" disabled>
+                Bulk Change Role
+              </button>
+            </div>
+          </div>
+
+          <!-- Bulk action bar -->
+          <div class="bulk-bar" id="bulk-bar">
+            <span id="bulk-count">0 selected</span>
+            <div class="bulk-sep"></div>
+            <button class="btn btn-ghost btn-sm" id="btn-bulk-confirm">Change Role</button>
+            <button class="btn btn-ghost btn-sm" id="btn-bulk-clear">Clear</button>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th><input type="checkbox" id="select-all" title="Select all" /></th>
+                  <th>User</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Joined</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="user-tbody">
+                <tr class="loading-row"><td colspan="6">Loading users…</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="pagination">
+            <span id="pag-info">—</span>
+            <div class="pag-btns">
+              <button class="pag-btn" id="btn-prev" disabled>← Prev</button>
+              <button class="pag-btn" id="btn-next" disabled>Next →</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Activity log card -->
+        <div class="card">
+          <div class="card-header">
+            <h2>Recent Activity</h2>
+            <button class="btn btn-ghost btn-sm" id="btn-load-more-log">Load more</button>
+          </div>
+          <ul class="log-list" id="log-list">
+            <li style="padding:32px;text-align:center;color:var(--ink-3);font-style:italic;">Loading activity…</li>
+          </ul>
+        </div>
+
+      </div><!-- /admin-content -->
+    </div><!-- /content -->
+  </div><!-- /main -->
+</div><!-- /layout -->
+
+<!-- ── Toast ──────────────────────────────────────────────────────────────── -->
+<div id="toast"></div>
+
+<!-- ── Role-change modal ──────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="modal-role">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-role-title">
+    <div class="modal-header">
+      <div>
+        <h3 id="modal-role-title">Change User Role</h3>
+        <p id="modal-role-sub">Assign a new role to this user.</p>
+      </div>
+      <button class="modal-close" id="modal-role-close" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>New Role</label>
+        <select id="modal-new-role">
+          <option value="client">Client</option>
+          <option value="admin_staff">Admin Staff</option>
+          <option value="paralegal">Paralegal</option>
+          <option value="junior_partner">Junior Partner</option>
+          <option value="senior_partner">Senior Partner</option>
+        </select>
+      </div>
+      <div class="confirm-box" id="modal-confirm-text">
+        ⚠ This will immediately update the user's JWT claims. They will receive new permissions on their next request.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="modal-role-cancel">Cancel</button>
+      <button class="btn btn-primary" id="modal-role-confirm">Confirm Change</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Bulk role modal ────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="modal-bulk">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-bulk-title">
+    <div class="modal-header">
+      <div>
+        <h3 id="modal-bulk-title">Bulk Role Change</h3>
+        <p id="modal-bulk-sub">Change the role for all selected users.</p>
+      </div>
+      <button class="modal-close" id="modal-bulk-close" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Assign Role to All Selected</label>
+        <select id="modal-bulk-role">
+          <option value="client">Client</option>
+          <option value="admin_staff">Admin Staff</option>
+          <option value="paralegal">Paralegal</option>
+          <option value="junior_partner">Junior Partner</option>
+          <option value="senior_partner">Senior Partner</option>
+        </select>
+      </div>
+      <div class="confirm-box">
+        ⚠ This will update JWT claims for all selected users immediately.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="modal-bulk-cancel">Cancel</button>
+      <button class="btn btn-primary" id="modal-bulk-confirm">Apply to All</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Permission preview modal ───────────────────────────────────────────── -->
+<div class="modal-overlay" id="modal-perms">
+  <div class="modal" style="width:580px;" role="dialog" aria-modal="true" aria-labelledby="modal-perms-title">
+    <div class="modal-header">
+      <div>
+        <h3 id="modal-perms-title">Permission Preview</h3>
+        <p>Permissions granted to each role</p>
+      </div>
+      <button class="modal-close" id="modal-perms-close" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body" style="padding:0;">
+      <div style="padding:16px 20px 8px; border-bottom:1px solid var(--border);">
+        <label style="font-size:.82rem;font-weight:600;color:var(--ink-2);display:block;margin-bottom:6px;">Preview Role</label>
+        <select id="perms-role-select" class="filter" style="width:220px;">
+          <option value="client">Client</option>
+          <option value="admin_staff">Admin Staff</option>
+          <option value="paralegal">Paralegal</option>
+          <option value="junior_partner">Junior Partner</option>
+          <option value="senior_partner">Senior Partner</option>
+        </select>
+      </div>
+      <div class="perm-grid" id="perm-grid"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="modal-perms-close-btn">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Invite modal ───────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="modal-invite">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-invite-title">
+    <div class="modal-header">
+      <div>
+        <h3 id="modal-invite-title">Invite New User</h3>
+        <p>Send a unique portal registration link.</p>
+      </div>
+      <button class="modal-close" id="modal-invite-close" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Email Address</label>
+        <input type="email" id="invite-email" placeholder="user@example.com" />
+      </div>
+      <div id="invite-result" style="display:none;">
+        <div class="confirm-box" style="background:var(--green-lt);border-color:#a7d7bb;color:var(--green);">
+          ✓ Invite link generated:
+          <div style="margin-top:6px;word-break:break-all;font-family:var(--font-mono);font-size:.75rem;" id="invite-link-text"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="modal-invite-cancel">Cancel</button>
+      <button class="btn btn-primary" id="modal-invite-confirm">Generate Invite</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// Configuration — update BASE_URL to your Firebase Functions base URL
+// ═══════════════════════════════════════════════════════════════════════════
+const BASE_URL   = window.PORTAL_API_BASE || 'https://us-central1-YOUR-PROJECT.cloudfunctions.net';
+const PAGE_SIZE  = 20;
+
+// ── RBAC permission matrix (mirrors rbac.py ROLE_PERMISSIONS) ─────────────
+// F-04 fix included: admin_staff has manage_users
+const ROLE_PERMISSIONS = {
+  client:          ['view_own_case', 'view_own_documents', 'upload_documents'],
+  admin_staff:     ['view_all_cases', 'manage_tasks', 'log_communications', 'view_documents', 'view_notes', 'manage_users'],
+  paralegal:       ['view_all_cases', 'manage_tasks', 'log_communications', 'view_documents', 'view_notes', 'request_documents', 'upload_documents', 'add_notes', 'submit_for_review'],
+  junior_partner:  ['view_all_cases', 'manage_tasks', 'log_communications', 'view_documents', 'view_notes', 'request_documents', 'upload_documents', 'add_notes', 'submit_for_review', 'approve_reject_cases', 'escalate_cases', 'view_phi'],
+  senior_partner:  ['view_all_cases', 'view_own_case', 'manage_tasks', 'log_communications', 'request_documents', 'upload_documents', 'view_documents', 'view_own_documents', 'add_notes', 'view_notes', 'submit_for_review', 'approve_reject_cases', 'escalate_cases', 'view_phi', 'manage_users', 'assign_roles', 'view_reports', 'view_audit_log', 'system_admin'],
+};
+const ALL_PERMISSIONS = [...new Set(Object.values(ROLE_PERMISSIONS).flat())].sort();
+
+// ── Simulated session (replace with Firebase Auth SDK in production) ──────
+// In a real deployment, read the Firebase Auth current user and their custom claims.
+const SESSION = {
+  uid:          'current-admin-uid',
+  display_name: 'Alexandra Torres',
+  role:         'senior_partner',   // change to 'client' to see the access-denied gate
+  token:        'REPLACE_WITH_FIREBASE_ID_TOKEN',
+};
+
+// ── State ─────────────────────────────────────────────────────────────────
+let allUsers      = [];
+let filteredUsers = [];
+let currentPage   = 0;
+let selectedUids  = new Set();
+let pendingRole   = { uid: null, name: null, currentRole: null };
+let auditLogs     = [];
+let logOffset     = 0;
+
+// ─────────────────────────────────────────────────────────────────────────
+// Role-gate: only admin_staff and senior_partner may access this page
+// ─────────────────────────────────────────────────────────────────────────
+function initAccessControl() {
+  const allowed = ['admin_staff', 'senior_partner'];
+  if (!allowed.includes(SESSION.role)) {
+    document.getElementById('access-denied').style.display = 'block';
+    document.getElementById('admin-content').style.display = 'none';
+    return false;
+  }
+  document.getElementById('access-denied').style.display = 'none';
+  document.getElementById('admin-content').style.display = 'flex';
+  // Populate sidebar identity
+  document.getElementById('sidebar-name').textContent       = SESSION.display_name;
+  document.getElementById('sidebar-role-label').textContent = SESSION.role;
+  document.getElementById('sidebar-avatar').textContent     = SESSION.display_name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2);
+  return true;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// API helpers — wrap fetch with Authorization header
+// ─────────────────────────────────────────────────────────────────────────
+async function apiFetch(path, opts = {}) {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    ...opts,
+    headers: {
+      'Authorization': `Bearer ${SESSION.token}`,
+      'Content-Type':  'application/json',
+      ...(opts.headers || {}),
+    },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Mock data — used when API is unreachable (dev/demo mode)
+// ─────────────────────────────────────────────────────────────────────────
+function mockUsers() {
+  const roles    = ['client','client','client','admin_staff','paralegal','junior_partner','senior_partner'];
+  const statuses = ['active','active','active','active','suspended'];
+  const names    = [
+    ['Marcus Ellison','m.ellison@law.example'],
+    ['Priya Nair','p.nair@law.example'],
+    ['David Chen','d.chen@law.example'],
+    ['Sandra Okoro','s.okoro@law.example'],
+    ['Ben Hartley','b.hartley@law.example'],
+    ['Zoe Ramos','z.ramos@law.example'],
+    ['Alexandra Torres','a.torres@law.example'],
+    ['James Wu','j.wu@client.example'],
+    ['Fatima Al-Rashid','f.alrashid@client.example'],
+    ['Oliver Grant','o.grant@client.example'],
+    ['Yuki Tanaka','y.tanaka@law.example'],
+    ['Nina Petrov','n.petrov@client.example'],
+  ];
+  return names.map(([n,e], i) => ({
+    uid:          `uid-${i+1}`,
+    display_name: n,
+    email:        e,
+    role:         roles[i % roles.length],
+    status:       statuses[i % statuses.length],
+    created_at:   new Date(Date.now() - (i * 86400000 * 12)).toISOString(),
+  }));
+}
+
+function mockAuditLogs() {
+  const events = [
+    { event_type:'role_change',      uid:'uid-4', description:'Role changed: client → admin_staff', dot:'blue'  },
+    { event_type:'user_soft_deleted',uid:'uid-8', description:'User soft-deleted',                  dot:'red'   },
+    { event_type:'user_created',     uid:'uid-12',description:'New user registered',                dot:'green' },
+    { event_type:'permission_denied',uid:'uid-1', description:'Permission denied: manage_users',    dot:'amber' },
+    { event_type:'role_change',      uid:'uid-3', description:'Role changed: client → paralegal',   dot:'blue'  },
+    { event_type:'user_created',     uid:'uid-9', description:'New user registered via invite',     dot:'green' },
+  ];
+  return events.map((e, i) => ({
+    ...e,
+    timestamp: new Date(Date.now() - (i * 3600000 * 4)).toISOString(),
+  }));
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Load users
+// ─────────────────────────────────────────────────────────────────────────
+async function loadUsers() {
+  try {
+    const data = await apiFetch('/listUsers?page_size=200');
+    allUsers = data.users || [];
+  } catch {
+    // Fall back to mock data if API unreachable (demo mode)
+    allUsers = mockUsers();
+  }
+  updateStats();
+  applyFilters();
+}
+
+function updateStats() {
+  const active  = allUsers.filter(u => u.status === 'active').length;
+  const staff   = allUsers.filter(u => u.role !== 'client').length;
+  const clients = allUsers.filter(u => u.role === 'client').length;
+  document.getElementById('stat-total').textContent   = allUsers.length;
+  document.getElementById('stat-active').textContent  = active;
+  document.getElementById('stat-staff').textContent   = staff;
+  document.getElementById('stat-clients').textContent = clients;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Filter + search
+// ─────────────────────────────────────────────────────────────────────────
+function applyFilters() {
+  const q      = document.getElementById('search').value.trim().toLowerCase();
+  const role   = document.getElementById('filter-role').value;
+  const status = document.getElementById('filter-status').value;
+
+  filteredUsers = allUsers.filter(u => {
+    if (role   && u.role   !== role)   return false;
+    if (status && u.status !== status) return false;
+    if (q) {
+      const n = (u.display_name || '').toLowerCase();
+      const e = (u.email        || '').toLowerCase();
+      if (!n.includes(q) && !e.includes(q)) return false;
+    }
+    return true;
+  });
+
+  currentPage = 0;
+  selectedUids.clear();
+  updateSelectAll();
+  updateBulkBar();
+  renderTable();
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Render table
+// ─────────────────────────────────────────────────────────────────────────
+function renderTable() {
+  const tbody   = document.getElementById('user-tbody');
+  const start   = currentPage * PAGE_SIZE;
+  const end     = start + PAGE_SIZE;
+  const page    = filteredUsers.slice(start, end);
+  const total   = filteredUsers.length;
+
+  document.getElementById('result-count').textContent = `${total} user${total !== 1 ? 's' : ''}`;
+  document.getElementById('pag-info').textContent     = total ? `${start+1}–${Math.min(end,total)} of ${total}` : '0 results';
+  document.getElementById('btn-prev').disabled        = currentPage === 0;
+  document.getElementById('btn-next').disabled        = end >= total;
+
+  if (!page.length) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <p>No users match your filters.</p>
+    </div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = page.map(u => {
+    const initials = (u.display_name || 'U').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+    const joined   = u.created_at ? new Date(u.created_at).toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'}) : '—';
+    const checked  = selectedUids.has(u.uid) ? 'checked' : '';
+    return `
+    <tr data-uid="${u.uid}" class="${selectedUids.has(u.uid) ? 'selected' : ''}">
+      <td><input type="checkbox" class="row-check" data-uid="${u.uid}" ${checked}/></td>
+      <td>
+        <div class="user-cell">
+          <div class="avatar">${initials}</div>
+          <div>
+            <div class="user-name">${esc(u.display_name)}</div>
+            <div class="user-email">${esc(u.email)}</div>
+          </div>
+        </div>
+      </td>
+      <td><span class="badge badge-${u.role}">${roleLabel(u.role)}</span></td>
+      <td><span class="badge badge-${u.status}">${u.status}</span></td>
+      <td style="color:var(--ink-3);font-size:.8rem;">${joined}</td>
+      <td>
+        <div class="actions-cell">
+          <button class="btn btn-ghost btn-sm btn-change-role" data-uid="${u.uid}" data-name="${esc(u.display_name)}" data-role="${u.role}" title="Change role">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            Role
+          </button>
+          ${u.status === 'active'
+            ? `<button class="btn btn-ghost btn-sm btn-toggle-status" data-uid="${u.uid}" data-action="suspend" title="Suspend">Suspend</button>`
+            : u.status === 'suspended'
+            ? `<button class="btn btn-ghost btn-sm btn-toggle-status" data-uid="${u.uid}" data-action="reactivate" title="Reactivate">Reactivate</button>`
+            : ''}
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  // Bind row events
+  document.querySelectorAll('.row-check').forEach(cb => {
+    cb.addEventListener('change', e => {
+      const uid = e.target.dataset.uid;
+      if (e.target.checked) selectedUids.add(uid);
+      else                   selectedUids.delete(uid);
+      e.target.closest('tr').classList.toggle('selected', e.target.checked);
+      updateSelectAll();
+      updateBulkBar();
+    });
+  });
+  document.querySelectorAll('.btn-change-role').forEach(btn => {
+    btn.addEventListener('click', () => openRoleModal(btn.dataset.uid, btn.dataset.name, btn.dataset.role));
+  });
+  document.querySelectorAll('.btn-toggle-status').forEach(btn => {
+    btn.addEventListener('click', () => toggleStatus(btn.dataset.uid, btn.dataset.action));
+  });
+}
+
+function esc(str) {
+  return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function roleLabel(r) {
+  return { client:'Client', admin_staff:'Admin Staff', paralegal:'Paralegal', junior_partner:'Junior Partner', senior_partner:'Senior Partner' }[r] || r;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Select all + bulk bar
+// ─────────────────────────────────────────────────────────────────────────
+function updateSelectAll() {
+  const allChecks = document.querySelectorAll('.row-check');
+  const allSel    = allChecks.length > 0 && [...allChecks].every(c => c.checked);
+  const someSel   = [...allChecks].some(c => c.checked);
+  const sa = document.getElementById('select-all');
+  sa.checked       = allSel;
+  sa.indeterminate = !allSel && someSel;
+}
+function updateBulkBar() {
+  const n    = selectedUids.size;
+  const bar  = document.getElementById('bulk-bar');
+  const bbtn = document.getElementById('btn-bulk-role');
+  bar.classList.toggle('visible', n > 0);
+  bbtn.disabled = n === 0;
+  document.getElementById('bulk-count').textContent = `${n} user${n !== 1 ? 's' : ''} selected`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Role change modal
+// ─────────────────────────────────────────────────────────────────────────
+function openRoleModal(uid, name, currentRole) {
+  pendingRole = { uid, name, currentRole };
+  document.getElementById('modal-role-sub').textContent   = `Changing role for: ${name}`;
+  document.getElementById('modal-new-role').value         = currentRole;
+  document.getElementById('modal-confirm-text').textContent =
+    '⚠ This will immediately update the user\'s JWT claims. They will receive new permissions on their next request.';
+  openModal('modal-role');
+}
+
+async function confirmRoleChange() {
+  const newRole = document.getElementById('modal-new-role').value;
+  if (newRole === pendingRole.currentRole) { closeModal('modal-role'); return; }
+  try {
+    await apiFetch('/updateUser', {
+      method: 'PUT',
+      body: JSON.stringify({ uid: pendingRole.uid, role: newRole }),
+    });
+  } catch {
+    // Demo mode — update locally
+    const user = allUsers.find(u => u.uid === pendingRole.uid);
+    if (user) user.role = newRole;
+  }
+  // Update local state regardless
+  const user = allUsers.find(u => u.uid === pendingRole.uid);
+  if (user) user.role = newRole;
+  applyFilters();
+  closeModal('modal-role');
+  showToast(`Role updated to ${roleLabel(newRole)}`, 'success');
+  addLocalLog(`Role changed for ${pendingRole.name}: ${roleLabel(pendingRole.currentRole)} → ${roleLabel(newRole)}`, 'blue');
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Bulk role change
+// ─────────────────────────────────────────────────────────────────────────
+function openBulkModal() {
+  document.getElementById('modal-bulk-sub').textContent = `Changing role for ${selectedUids.size} user(s).`;
+  openModal('modal-bulk');
+}
+async function confirmBulkRoleChange() {
+  const newRole = document.getElementById('modal-bulk-role').value;
+  const uids    = [...selectedUids];
+  for (const uid of uids) {
+    try {
+      await apiFetch('/updateUser', { method:'PUT', body: JSON.stringify({ uid, role: newRole }) });
+    } catch { /* demo */ }
+    const user = allUsers.find(u => u.uid === uid);
+    if (user) user.role = newRole;
+  }
+  selectedUids.clear();
+  applyFilters();
+  closeModal('modal-bulk');
+  showToast(`Updated ${uids.length} user${uids.length !== 1 ? 's' : ''} to ${roleLabel(newRole)}`, 'success');
+  addLocalLog(`Bulk role change: ${uids.length} users → ${roleLabel(newRole)}`, 'blue');
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Status toggle (suspend / reactivate)
+// ─────────────────────────────────────────────────────────────────────────
+async function toggleStatus(uid, action) {
+  const newStatus = action === 'suspend' ? 'suspended' : 'active';
+  try {
+    await apiFetch('/updateUser', { method:'PUT', body: JSON.stringify({ uid, status: newStatus }) });
+  } catch { /* demo */ }
+  const user = allUsers.find(u => u.uid === uid);
+  if (user) user.status = newStatus;
+  applyFilters();
+  showToast(`User ${action === 'suspend' ? 'suspended' : 'reactivated'}`, newStatus === 'active' ? 'success' : 'error');
+  addLocalLog(`User ${user?.display_name || uid} ${action === 'suspend' ? 'suspended' : 'reactivated'}`, action === 'suspend' ? 'red' : 'green');
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Activity log
+// ─────────────────────────────────────────────────────────────────────────
+async function loadAuditLog() {
+  try {
+    const data = await apiFetch('/getAuditLog?limit=20');
+    auditLogs  = data.logs || [];
+  } catch {
+    auditLogs = mockAuditLogs();
+  }
+  renderAuditLog();
+}
+
+function renderAuditLog() {
+  const list = document.getElementById('log-list');
+  if (!auditLogs.length) {
+    list.innerHTML = '<li style="padding:32px;text-align:center;color:var(--ink-3);font-style:italic;">No activity yet.</li>';
+    return;
+  }
+  list.innerHTML = auditLogs.map(log => {
+    const dotClass = {
+      role_change:       'log-dot-blue',
+      user_created:      'log-dot-green',
+      user_soft_deleted: 'log-dot-red',
+      user_deleted_from_auth: 'log-dot-red',
+      permission_denied: 'log-dot-amber',
+    }[log.event_type] || 'log-dot-blue';
+    const time = log.timestamp ? new Date(log.timestamp).toLocaleString('en-GB', {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '';
+    const detail = log.description || log.event_type?.replace(/_/g,' ');
+    return `<li class="log-item">
+      <div class="log-dot ${dotClass}"></div>
+      <div>
+        <div class="log-event">${esc(log.event_type?.replace(/_/g,' ') || '')}</div>
+        <div class="log-detail">${esc(detail)}${log.uid ? ` · uid:${log.uid.slice(0,12)}…` : ''}</div>
+      </div>
+      <div class="log-time">${time}</div>
+    </li>`;
+  }).join('');
+}
+
+function addLocalLog(description, dot = 'blue') {
+  auditLogs.unshift({ event_type: description, description, uid: SESSION.uid, timestamp: new Date().toISOString(), _dot: dot });
+  if (auditLogs.length > 50) auditLogs.pop();
+  renderAuditLog();
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Permission preview modal
+// ─────────────────────────────────────────────────────────────────────────
+function renderPermGrid(role) {
+  const granted = new Set(ROLE_PERMISSIONS[role] || []);
+  const grid    = document.getElementById('perm-grid');
+  grid.innerHTML = ALL_PERMISSIONS.map(p => {
+    const has = granted.has(p);
+    return `<div class="perm-item ${has ? 'has-perm' : 'no-perm'}">
+      <span class="perm-check">${has ? '✓' : '○'}</span>
+      <span>${p.replace(/_/g, ' ')}</span>
+    </div>`;
+  }).join('');
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Invite modal
+// ─────────────────────────────────────────────────────────────────────────
+async function generateInvite() {
+  const email = document.getElementById('invite-email').value.trim();
+  if (!email) { showToast('Please enter an email address', 'error'); return; }
+  let link;
+  try {
+    const data = await apiFetch('/createInvite', { method:'POST', body: JSON.stringify({ email }) });
+    link = data.invite_link;
+  } catch {
+    link = `https://your-project.web.app/register?token=DEMO_TOKEN&email=${encodeURIComponent(email)}`;
+  }
+  document.getElementById('invite-link-text').textContent = link;
+  document.getElementById('invite-result').style.display = 'block';
+  addLocalLog(`Invite sent to ${email}`, 'green');
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Modal helpers
+// ─────────────────────────────────────────────────────────────────────────
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+// Close on overlay click
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(overlay.id); });
+});
+// Close on Escape
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.querySelectorAll('.modal-overlay.open').forEach(m => closeModal(m.id));
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Toast
+// ─────────────────────────────────────────────────────────────────────────
+let _toastTimer;
+function showToast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className   = `show ${type}`;
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => { t.className = ''; }, 3200);
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Event bindings
+// ─────────────────────────────────────────────────────────────────────────
+document.getElementById('search').addEventListener('input',        applyFilters);
+document.getElementById('filter-role').addEventListener('change',  applyFilters);
+document.getElementById('filter-status').addEventListener('change',applyFilters);
+
+document.getElementById('btn-refresh').addEventListener('click', () => { loadUsers(); loadAuditLog(); showToast('Refreshed'); });
+document.getElementById('btn-invite').addEventListener('click', () => { document.getElementById('invite-result').style.display='none'; document.getElementById('invite-email').value=''; openModal('modal-invite'); });
+
+document.getElementById('select-all').addEventListener('change', e => {
+  const page = filteredUsers.slice(currentPage * PAGE_SIZE, (currentPage+1) * PAGE_SIZE);
+  page.forEach(u => e.target.checked ? selectedUids.add(u.uid) : selectedUids.delete(u.uid));
+  renderTable();
+  updateBulkBar();
+});
+
+document.getElementById('btn-prev').addEventListener('click',  () => { currentPage--; renderTable(); });
+document.getElementById('btn-next').addEventListener('click',  () => { currentPage++; renderTable(); });
+document.getElementById('btn-bulk-role').addEventListener('click', openBulkModal);
+document.getElementById('btn-bulk-confirm').addEventListener('click', openBulkModal);
+document.getElementById('btn-bulk-clear').addEventListener('click', () => { selectedUids.clear(); applyFilters(); });
+document.getElementById('btn-load-more-log').addEventListener('click', () => { logOffset += 20; loadAuditLog(); });
+
+// Role modal
+document.getElementById('modal-role-close').addEventListener('click',   () => closeModal('modal-role'));
+document.getElementById('modal-role-cancel').addEventListener('click',  () => closeModal('modal-role'));
+document.getElementById('modal-role-confirm').addEventListener('click', confirmRoleChange);
+
+// Bulk modal
+document.getElementById('modal-bulk-close').addEventListener('click',   () => closeModal('modal-bulk'));
+document.getElementById('modal-bulk-cancel').addEventListener('click',  () => closeModal('modal-bulk'));
+document.getElementById('modal-bulk-confirm').addEventListener('click', confirmBulkRoleChange);
+
+// Permissions modal
+document.getElementById('btn-perms-preview').addEventListener('click', () => { renderPermGrid(document.getElementById('perms-role-select').value); openModal('modal-perms'); });
+document.getElementById('perms-role-select').addEventListener('change', e => renderPermGrid(e.target.value));
+document.getElementById('modal-perms-close').addEventListener('click',     () => closeModal('modal-perms'));
+document.getElementById('modal-perms-close-btn').addEventListener('click', () => closeModal('modal-perms'));
+
+// Invite modal
+document.getElementById('modal-invite-close').addEventListener('click',   () => closeModal('modal-invite'));
+document.getElementById('modal-invite-cancel').addEventListener('click',  () => closeModal('modal-invite'));
+document.getElementById('modal-invite-confirm').addEventListener('click', generateInvite);
+
+// ─────────────────────────────────────────────────────────────────────────
+// Boot
+// ─────────────────────────────────────────────────────────────────────────
+if (initAccessControl()) {
+  loadUsers();
+  loadAuditLog();
+}
+</script>
+</body>
+</html>

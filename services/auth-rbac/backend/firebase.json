@@ -1,0 +1,32 @@
+{
+  "functions": [
+    {
+      "source":   "functions",
+      "codebase": "default",
+      "runtime":  "python312",
+      "ignore":   ["venv", ".venv", "**/__pycache__", "**/*.pyc", "tests/**"]
+    }
+  ],
+
+  "hosting": {
+    "public": "frontend/dist",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [
+      { "source": "**", "destination": "/index.html" }
+    ]
+  },
+
+  "firestore": {
+    "rules":   "firestore/firestore.rules",
+    "indexes": "firestore/firestore_indexes.json"
+  },
+
+  "emulators": {
+    "auth":      { "port": 9099 },
+    "functions": { "port": 5001 },
+    "firestore": { "port": 8080 },
+    "hosting":   { "port": 5000 },
+    "ui":        { "enabled": true, "port": 4000 },
+    "singleProjectMode": true
+  }
+}

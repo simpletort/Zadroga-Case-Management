@@ -1,0 +1,376 @@
+rules_version = '2';
+
+// ════════════════════════════════════════════════════════════════════════════
+// Legal Portal — Firestore Security Rules
+//
+// Architecture:
+//   These rules are the SECOND security layer. The first layer is the Cloud
+//   Functions middleware (jwt_middleware.py + rbac.py). Rules here enforce
+//   the same RBAC at the database level so direct Firestore SDK calls from
+//   the browser are also protected.
+//
+// Role values (stored in request.auth.token.role via Firebase custom claims):
+//   "client"         — own case file only
+//   "admin_staff"    — view all cases, manage tasks, log communications
+//   "paralegal"      — admin_staff + request docs, add notes, submit for review
+//   "junior_partner" — paralegal + approve/reject, escalate, view PHI
+//   "senior_partner" — full system access
+//
+// PHI fields (protected with extra role check on junior_partner+):
+//   phi_data, ssn, dob, medical_info
+// ════════════════════════════════════════════════════════════════════════════
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper functions ────────────────────────────────────────────────────
+
+    // Is the request from an authenticated user?
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    // Get the caller's role from JWT custom claims (set by auth_service.py)
+    function role() {
+      return request.auth.token.get('role', 'client');
+    }
+
+    // Is the account active? (active flag set in custom claims)
+    function isActive() {
+      return request.auth.token.get('active', false) == true;
+    }
+
+    // Is the caller a valid, active authenticated user?
+    function validUser() {
+      return isAuth() && isActive();
+    }
+
+    // ── Role checks ─────────────────────────────────────────────────────────
+
+    function isClient()        { return validUser() && role() == 'client'; }
+    function isAdminStaff()    { return validUser() && role() == 'admin_staff'; }
+    function isParalegal()     { return validUser() && role() == 'paralegal'; }
+    function isJuniorPartner() { return validUser() && role() == 'junior_partner'; }
+    function isSeniorPartner() { return validUser() && role() == 'senior_partner'; }
+
+    // Is the caller any staff role (not a client)?
+    function isAnyStaff() {
+      return validUser() && role() in [
+        'admin_staff', 'paralegal', 'junior_partner', 'senior_partner'
+      ];
+    }
+
+    // Can the caller view all cases (admin_staff and above)?
+    function canViewAllCases() {
+      return validUser() && role() in [
+        'admin_staff', 'paralegal', 'junior_partner', 'senior_partner'
+      ];
+    }
+
+    // Can the caller add/edit notes (paralegal and above)?
+    function canAddNotes() {
+      return validUser() && role() in [
+        'paralegal', 'junior_partner', 'senior_partner'
+      ];
+    }
+
+    // Can the caller approve/reject or escalate cases (junior_partner+)?
+    function canApproveReject() {
+      return validUser() && role() in ['junior_partner', 'senior_partner'];
+    }
+
+    // Can the caller access PHI fields (junior_partner+)?
+    function canViewPHI() {
+      return validUser() && role() in ['junior_partner', 'senior_partner'];
+    }
+
+    // Can the caller manage users and roles (admin_staff + senior_partner)?
+    function canManageUsers() {
+      return validUser() && role() in ['admin_staff', 'senior_partner'];
+    }
+
+    // Can the caller view reports (senior_partner only)?
+    function canViewReports() { return isSeniorPartner(); }
+
+    // Can the caller view the audit log (senior_partner only)?
+    function canViewAuditLog() { return isSeniorPartner(); }
+
+    // ── PHI field protection ────────────────────────────────────────────────
+    // Returns true if the incoming write does NOT include restricted PHI fields
+    // for users who shouldn't be writing them.
+    function doesNotWritePHI() {
+      return !(
+        'phi_data'     in request.resource.data ||
+        'ssn'          in request.resource.data ||
+        'dob'          in request.resource.data ||
+        'medical_info' in request.resource.data
+      );
+    }
+
+    // Returns true if only non-PHI fields are being changed in an update
+    function onlyNonPHIFields() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        'phi_data', 'ssn', 'dob', 'medical_info'
+      ]);
+    }
+
+    // ── Field immutability helpers ──────────────────────────────────────────
+    // Ensure critical fields are never changed once set
+    function uidUnchanged() {
+      return !('uid' in request.resource.data.diff(resource.data).changedKeys());
+    }
+
+    function roleUnchangedByClient() {
+      // Clients cannot change their own role field
+      return isClient()
+        ? !('role' in request.resource.data.diff(resource.data).changedKeys())
+        : true;
+    }
+
+
+    // ════════════════════════════════════════════════════════════════════════
+    // COLLECTION: users
+    // Stores: uid, email, display_name, role, status, email_verified,
+    //         created_at, updated_at, [phi_data, ssn, dob, medical_info]
+    // ════════════════════════════════════════════════════════════════════════
+    match /users/{uid} {
+
+      // READ — users can read their own profile; staff can read any profile
+      allow read: if validUser() && (
+        request.auth.uid == uid ||
+        isAnyStaff()
+      );
+
+      // CREATE — only staff roles can create user profiles via the API
+      // (Cloud Functions create_user() calls this via the Admin SDK,
+      //  which bypasses rules — this prevents direct client-side creates)
+      allow create: if canManageUsers();
+
+      // UPDATE — users can update their own safe fields (display_name, phone)
+      //          Staff can update any field except they cannot write PHI
+      //          unless they have VIEW_PHI permission (junior_partner+)
+      allow update: if validUser() && (
+        // Own profile — limited fields, cannot change role or uid
+        (request.auth.uid == uid &&
+          request.resource.data.diff(resource.data).changedKeys()
+            .hasOnly(['display_name', 'phone', 'updated_at']) &&
+          uidUnchanged() &&
+          roleUnchangedByClient()
+        )
+        ||
+        // Admin staff can update any non-PHI field
+        (canManageUsers() && (canViewPHI() || onlyNonPHIFields()))
+        ||
+        // Junior partner+ can update PHI fields
+        (canViewPHI() && canManageUsers())
+      );
+
+      // DELETE — never allowed from client SDK (soft-delete only via Admin SDK)
+      allow delete: if false;
+
+
+      // ── Subcollection: users/{uid}/private ──────────────────────────────
+      // Extra isolation for highly sensitive per-user data
+      match /private/{doc} {
+        allow read:   if canViewPHI() || request.auth.uid == uid;
+        allow write:  if canViewPHI();
+        allow delete: if false;
+      }
+    }
+
+
+    // ════════════════════════════════════════════════════════════════════════
+    // COLLECTION: cases
+    // Stores: client_uid, title, status, case_type, created_at, updated_at,
+    //         assigned_staff[], [escalation_reason, review_notes]
+    //
+    // CLIENT ISOLATION:
+    //   Clients can only read/write documents where client_uid == their uid.
+    //   Staff see all cases.
+    // ════════════════════════════════════════════════════════════════════════
+    match /cases/{caseId} {
+
+      // READ — clients see only their own; staff see all
+      allow read: if validUser() && (
+        canViewAllCases() ||
+        (isClient() && resource.data.client_uid == request.auth.uid)
+      );
+
+      // CREATE — only staff can open new cases
+      allow create: if isAnyStaff() &&
+        request.resource.data.keys().hasAll(['client_uid', 'title', 'status']) &&
+        doesNotWritePHI();
+
+      // UPDATE — graduated by role:
+      //   admin_staff:    can update task/communication fields only
+      //   paralegal:      can update above + request_docs, notes, submit_for_review
+      //   junior_partner: can update above + status (approve/reject/escalate)
+      //   senior_partner: can update any field
+      allow update: if validUser() && (
+        isSeniorPartner()
+        ||
+        (canApproveReject() && doesNotWritePHI())
+        ||
+        (canAddNotes() &&
+          doesNotWritePHI() &&
+          !request.resource.data.diff(resource.data).changedKeys()
+            .hasAny(['status', 'escalation_reason']))
+        ||
+        (isAdminStaff() &&
+          request.resource.data.diff(resource.data).changedKeys()
+            .hasOnly(['assigned_staff', 'last_communication', 'task_status', 'updated_at']))
+        ||
+        // Clients can only update their own case's client-facing fields
+        (isClient() &&
+          resource.data.client_uid == request.auth.uid &&
+          request.resource.data.diff(resource.data).changedKeys()
+            .hasOnly(['client_message', 'updated_at']))
+      );
+
+      // DELETE — never (cases are permanent records)
+      allow delete: if false;
+
+
+      // ── Subcollection: cases/{caseId}/documents ─────────────────────────
+      // Stores: filename, url, uploaded_by, uploaded_at, type, visible_to_client
+      match /documents/{docId} {
+
+        // READ — clients see only docs in their own case where visible_to_client==true
+        allow read: if validUser() && (
+          canViewAllCases() ||
+          (isClient() &&
+            get(/databases/$(database)/documents/cases/$(caseId)).data.client_uid
+              == request.auth.uid &&
+            resource.data.get('visible_to_client', false) == true)
+        );
+
+        // CREATE — clients can upload to their own case; paralegal+ can upload anywhere
+        allow create: if validUser() && (
+          (isClient() &&
+            get(/databases/$(database)/documents/cases/$(caseId)).data.client_uid
+              == request.auth.uid &&
+            request.resource.data.keys().hasAll(['filename', 'uploaded_by', 'uploaded_at']) &&
+            request.resource.data.uploaded_by == request.auth.uid)
+          ||
+          (canAddNotes())   // paralegal+ can upload to any case
+        );
+
+        // UPDATE — only staff can update doc metadata (e.g. toggle visible_to_client)
+        allow update: if isAnyStaff();
+
+        // DELETE — senior partner only
+        allow delete: if isSeniorPartner();
+      }
+
+
+      // ── Subcollection: cases/{caseId}/notes ─────────────────────────────
+      // Stores: content, author_uid, author_role, created_at,
+      //         is_client_visible, is_privileged
+      match /notes/{noteId} {
+
+        // READ — clients see only notes where is_client_visible==true (and their own case)
+        //         privileged notes (attorney-client) visible to junior_partner+ only
+        allow read: if validUser() && (
+          (isSeniorPartner() || isJuniorPartner())
+          ||
+          (isParalegal() && !resource.data.get('is_privileged', false))
+          ||
+          (isAdminStaff() && !resource.data.get('is_privileged', false))
+          ||
+          (isClient() &&
+            get(/databases/$(database)/documents/cases/$(caseId)).data.client_uid
+              == request.auth.uid &&
+            resource.data.get('is_client_visible', false) == true &&
+            !resource.data.get('is_privileged', false))
+        );
+
+        // CREATE — paralegal and above can add notes
+        allow create: if canAddNotes() &&
+          request.resource.data.keys().hasAll(['content', 'author_uid', 'created_at']) &&
+          request.resource.data.author_uid == request.auth.uid;
+
+        // UPDATE — only the original author can edit (within 24h — enforced app-side)
+        //          or senior_partner can edit any note
+        allow update: if isSeniorPartner() ||
+          (canAddNotes() && resource.data.author_uid == request.auth.uid);
+
+        // DELETE — senior partner only
+        allow delete: if isSeniorPartner();
+      }
+
+
+      // ── Subcollection: cases/{caseId}/communications ─────────────────────
+      // Stores: type, content, direction, staff_uid, created_at, logged_by
+      // Client-facing — staff only, no direct client writes
+      match /communications/{commId} {
+        allow read:   if isAnyStaff() ||
+          (isClient() &&
+            get(/databases/$(database)/documents/cases/$(caseId)).data.client_uid
+              == request.auth.uid);
+        allow create: if isAnyStaff() &&
+          request.resource.data.logged_by == request.auth.uid;
+        allow update: if isSeniorPartner();
+        allow delete: if false;
+      }
+    }
+
+
+    // ════════════════════════════════════════════════════════════════════════
+    // COLLECTION: phi_records
+    // Stores protected health/personal information — junior_partner+ only
+    // Completely invisible to clients and admin_staff/paralegal
+    // ════════════════════════════════════════════════════════════════════════
+    match /phi_records/{uid} {
+      allow read:   if canViewPHI();
+      allow write:  if canViewPHI();
+      allow delete: if isSeniorPartner();
+    }
+
+
+    // ════════════════════════════════════════════════════════════════════════
+    // COLLECTION: audit_log
+    // IMMUTABLE — no client can ever write or delete audit log entries.
+    // The Cloud Functions Admin SDK writes these (bypasses rules).
+    // Only senior_partner can read.
+    // ════════════════════════════════════════════════════════════════════════
+    match /audit_log/{logId} {
+      allow read:   if canViewAuditLog();
+      allow create: if false;   // Admin SDK only (bypasses rules)
+      allow update: if false;   // Immutable — never editable
+      allow delete: if false;   // Immutable — never deleteable
+    }
+
+
+    // ════════════════════════════════════════════════════════════════════════
+    // INTERNAL COLLECTIONS — no client access whatsoever
+    // Written exclusively by Cloud Functions Admin SDK
+    // ════════════════════════════════════════════════════════════════════════
+
+    // Session management (create_session, revoke_session in auth_service.py)
+    match /_sessions/{sessionId} {
+      allow read:   if false;
+      allow write:  if false;
+      allow delete: if false;
+    }
+
+    // Rate limit counters (check_rate_limit in auth_service.py)
+    match /_rate_limits/{limitId} {
+      allow read:   if false;
+      allow write:  if false;
+      allow delete: if false;
+    }
+
+    // Portal invite tokens (generate_portal_invite in auth_service.py)
+    match /_portal_invites/{token} {
+      allow read:   if false;
+      allow write:  if false;
+      allow delete: if false;
+    }
+
+    // Catch-all: deny everything not explicitly matched above
+    match /{document=**} {
+      allow read:   if false;
+      allow write:  if false;
+    }
+  }
+}

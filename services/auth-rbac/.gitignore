@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Python
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Build outputs
+frontend/dist/
+backend/frontend/dist/
+
+# Environment files — NEVER commit these
+.env
+.env.local
+.env.*.local
+frontend/.env.local
+frontend/.env.*.local
+
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
