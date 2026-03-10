@@ -1,0 +1,44 @@
+steps:
+  - name: "python:3.7-slim"
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        pip install -r requirements.txt
+        pytest tests/ -v --tb=short
+
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      - build
+      - "-t"
+      - "gcr.io/$PROJECT_ID/reporting-service:$COMMIT_SHA"
+      - "-t"
+      - "gcr.io/$PROJECT_ID/reporting-service:latest"
+      - "."
+
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "gcr.io/$PROJECT_ID/reporting-service:$COMMIT_SHA"]
+
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "gcr.io/$PROJECT_ID/reporting-service:latest"]
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - reporting-service
+      - "--image=gcr.io/$PROJECT_ID/reporting-service:$COMMIT_SHA"
+      - "--region=us-central1"
+      - "--platform=managed"
+      - "--no-allow-unauthenticated"
+      - "--service-account=reporting-service@$PROJECT_ID.iam.gserviceaccount.com"
+      - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID"
+      - "--memory=512Mi"
+      - "--cpu=1"
+      - "--max-instances=10"
+      - "--min-instances=0"
+
+images:
+  - "gcr.io/$PROJECT_ID/reporting-service:$COMMIT_SHA"
+  - "gcr.io/$PROJECT_ID/reporting-service:latest"

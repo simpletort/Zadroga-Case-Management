@@ -1,0 +1,9 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "shared"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = []  # add e.g. "starlette" if your middlewares need it

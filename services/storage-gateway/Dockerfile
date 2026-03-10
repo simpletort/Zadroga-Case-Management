@@ -1,13 +1,13 @@
-FROM python:3.11-slim AS builder
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+FROM node:18-alpine
 
-FROM python:3.11-slim
 WORKDIR /app
-COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-COPY --from=builder /usr/local/bin/gunicorn /usr/local/bin/gunicorn
-COPY app.py .
+
+# Install production dependencies first (better layer caching)
+COPY package*.json ./
+RUN npm ci --only=production
+
+COPY . .
 
 EXPOSE 8080
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "app:app"]
+
+CMD ["node", "src/index.js"]
