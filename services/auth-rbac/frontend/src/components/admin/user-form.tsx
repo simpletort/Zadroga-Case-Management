@@ -37,10 +37,10 @@ export function UserForm() {
       try {
         const { user } = await getUser(userId!);
         setExistingUser(user);
-        setName(user.display_name);
+        setName(user.displayName);
         setEmail(user.email);
         setRole(user.role);
-        setStatus(user.status === "deleted" ? "inactive" : user.status);
+        setStatus(user.isActive ? "active" : "inactive");
       } catch (err) {
         addToast({ message: err instanceof Error ? err.message : "Failed to load user", type: "error" });
         navigate("/admin/users");
@@ -55,10 +55,10 @@ export function UserForm() {
     setLoading(true);
     try {
       if (isEdit) {
-        await updateUser({ uid: userId!, display_name: name, role, status });
+        await updateUser({ uid: userId!, displayName: name, role, isActive: status === "active" });
         addToast({ message: "User updated successfully", type: "success" });
       } else {
-        await createUser({ email, password, display_name: name, role });
+        await createUser({ email, password, displayName: name, role });
         addToast({ message: "User created successfully", type: "success" });
       }
       navigate("/admin/users");

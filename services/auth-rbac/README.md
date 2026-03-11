@@ -1,83 +1,103 @@
-# Simpletort Legal Portal
+# auth-rbac — Authentication, RBAC & Portal UI
 
-Full-stack legal case management system built with React + Firebase.
+This service owns:
+- **Firebase Auth** — login, signup, session cookies, password reset, portal invites
+- **RBAC** — 5-role permission system (senior_partner → client)
+- **User management API** — create, list, update, soft-delete users
+- **Audit log** — immutable event log (senior_partner only)
+- **React frontend** — case portal UI (login, dashboard, admin panel)
 
-## Project Structure
+## Structure
 
 ```
-simpletort-legal-portal/
+auth-rbac/
+├── backend/                   ← Firebase project root (deploy from here)
+│   ├── firebase.json          ← Hosting + Functions + Firestore config
+│   ├── _firebaserc            ← Project: simple-tort-zadroga-prod
+│   ├── firestore/
+│   │   └── firestore.rules    ← Security rules (mirrors RBAC)
+│   └── functions/             ← Python 3.12 Cloud Functions
+│       ├── main.py
+│       ├── api/               ← HTTP endpoints
+│       ├── auth/              ← RBAC + auth service
+│       └── middleware/        ← JWT + HTTP utils
+│
 ├── frontend/                  ← React + Vite + Tailwind v4
-│   ├── src/
-│   │   ├── components/        ← All UI components
+│   ├── src/                   ← All components, lib, routes
 │   │   ├── lib/
 │   │   │   ├── firebase.ts    ← Firebase SDK init
-│   │   │   ├── api.ts         ← Cloud Function wrappers
-│   │   │   └── AuthContext.tsx← Real Firebase auth
-│   │   ├── App.tsx
-│   │   ├── routes.tsx
+│   │   │   ├── api.ts         ← Typed Cloud Function wrappers
+│   │   │   └── AuthContext.tsx← Auth state + hooks
+│   │   ├── components/
 │   │   └── main.tsx
 │   ├── styles/
-│   ├── .env.example           ← Copy to .env.local and fill in
+│   ├── .env.example           ← Copy to .env.local, fill in Firebase config
 │   ├── package.json
-│   └── vite.config.ts
-│
-├── backend/                   ← Firebase project root
-│   ├── functions/             ← Python 3.12 Cloud Functions
-│   │   ├── api/               ← HTTP endpoints
-│   │   ├── auth/              ← RBAC + auth service
-│   │   ├── middleware/        ← JWT + HTTP utils
-│   │   └── main.py
-│   ├── firestore/
-│   │   └── firestore.rules    ← Security rules
-│   └── firebase.json
+│   └── vite.config.ts         ← Builds into ../backend/frontend/dist
 │
 └── .github/
     └── workflows/
         └── deploy.yml         ← Auto-deploy on push to main
+
 ```
 
-## Quick Start (Local)
+## Local Development
 
 ```bash
 # Terminal 1 — Firebase emulators
 cd backend
 firebase emulators:start
 
-# Terminal 2 — Frontend dev server
+# Terminal 2 — React dev server
 cd frontend
-cp .env.example .env.local     # fill in your Firebase config
+cp .env.example .env.local    # fill in your 3 Firebase values
 npm install
 npm run dev
+# → http://localhost:5173
 ```
 
-## Deploy to Production
+## Deploy
 
 ```bash
-# Build frontend
+# 1. Build frontend (outputs to backend/frontend/dist)
 cd frontend && npm run build
 
-# Deploy everything
+# 2. Deploy everything to Firebase
 cd ../backend && firebase deploy
 ```
 
-See `SETUP.md` for full deployment guide including creating your first admin user.
+## Connecting to Other Services
 
-## Tech Stack
+This service exposes Firebase Auth tokens that other services can verify:
 
-| Layer | Technology |
-|---|---|
-| Frontend | React 18, Vite, Tailwind CSS v4, React Router v7 |
-| Auth | Firebase Authentication + custom JWT claims |
-| Backend | Python 3.12 Firebase Cloud Functions |
-| Database | Firestore with security rules mirroring RBAC |
-| Hosting | Firebase Hosting |
+```python
+# In any other service (Python)
+from firebase_admin import auth
+
+def verify_request(id_token: str) -> dict:
+    decoded = auth.verify_id_token(id_token)
+    return {
+        "uid":  decoded["uid"],
+        "role": decoded.get("role", "client"),
+    }
+```
+
+```typescript
+// In any other frontend service (TypeScript)
+import { auth } from "./lib/firebase";
+
+async function getToken(): Promise<string> {
+  return auth.currentUser?.getIdToken() ?? "";
+}
+// Pass as: Authorization: Bearer <token>
+```
 
 ## Roles
 
-| Role | Access |
-|---|---|
-| Senior Partner | Full system admin |
-| Attorney (Junior Partner) | Approve/reject cases, view PHI |
-| Paralegal | Manage cases, submit for review |
-| Admin Staff | View cases, manage users |
-| Client | Own case + documents only |
+| Role | Value | Key Permissions |
+|---|---|---|
+| Senior Partner | `senior_partner` | Full access including audit log |
+| Attorney | `junior_partner` | Approve cases, view PHI |
+| Paralegal | `paralegal` | Manage cases, submit for review |
+| Admin Staff | `admin_staff` | View cases, manage users |
+| Client | `client` | Own case + documents only |

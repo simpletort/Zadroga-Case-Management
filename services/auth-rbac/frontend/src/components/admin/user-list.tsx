@@ -60,7 +60,7 @@ export function UserList() {
 
   const counts = {
     total:    users.length,
-    active:   users.filter((u) => u.status === "active").length,
+    active:   users.filter((u) => u.isActive === true).length,
     paralegal: users.filter((u) => u.role === "paralegal").length,
     attorney:  users.filter((u) => u.role === "junior_partner").length,
   };
@@ -140,15 +140,15 @@ export function UserList() {
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {users.map((u) => (
-                  <tr key={u.uid} className="hover:bg-slate-50 transition-colors">
+                  <tr key={u.userId} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold text-sm">
-                          {u.display_name.split(" ").map((p) => p[0]).join("").toUpperCase().slice(0, 2)}
+                          {u.displayName.split(" ").map((p) => p[0]).join("").toUpperCase().slice(0, 2)}
                         </div>
                         <div>
-                          <p className="font-medium text-slate-900">{u.display_name}</p>
-                          <p className="text-xs text-slate-500">{u.uid.slice(0, 8)}…</p>
+                          <p className="font-medium text-slate-900">{u.displayName}</p>
+                          <p className="text-xs text-slate-500">{u.userId.slice(0, 8)}…</p>
                         </div>
                       </div>
                     </td>
@@ -164,20 +164,20 @@ export function UserList() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-1">
-                        {u.status === "active"
+                        {u.isActive === true
                           ? <CheckCircle2 className="w-4 h-4 text-green-500" />
                           : <XCircle     className="w-4 h-4 text-red-500" />}
-                        <Badge variant="default" className={`border ${statusBadge(u.status)} capitalize`}>
-                          {u.status}
+                        <Badge variant="default" className={`border ${statusBadge(u.isActive ? "active" : "inactive")} capitalize`}>
+                          {u.isActive ? "active" : "inactive"}
                         </Badge>
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="sm" onClick={() => navigate(`/admin/users/${u.uid}/edit`)}>
+                        <Button variant="ghost" size="sm" onClick={() => navigate(`/admin/users/${u.userId}/edit`)}>
                           <Edit className="w-4 h-4" />
                         </Button>
-                        <Button variant="ghost" size="sm" onClick={() => handleDelete(u.uid, u.display_name)}>
+                        <Button variant="ghost" size="sm" onClick={() => handleDelete(u.userId, u.displayName)}>
                           <Trash2 className="w-4 h-4 text-red-600" />
                         </Button>
                       </div>

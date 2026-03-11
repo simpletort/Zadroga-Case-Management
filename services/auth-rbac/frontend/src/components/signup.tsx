@@ -1,11 +1,10 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router";
 import { CheckCircle, Mail, Lock, User, AlertCircle } from "lucide-react";
-import { registerUser } from "../lib/api";
 import { useAuth } from "../lib/AuthContext";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../lib/firebase";
-import { createSession } from "../lib/api";
+import { registerUser, createSession } from "../lib/api";
 
 export function Signup() {
   const navigate = useNavigate();

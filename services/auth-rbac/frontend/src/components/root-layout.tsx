@@ -67,7 +67,7 @@ export function RootLayout() {
                         <p className="text-xs text-slate-600">{user?.email}</p>
                       </div>
                       <div className="p-2">
-                        {hasPermission("approve_reject_cases") && (
+                        {hasPermission("cases.approve") && (
                           <Link to="/attorney/review" onClick={() => setShowUserMenu(false)}
                             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 rounded transition-colors">
                             <Scale className="w-4 h-4" /> Attorney Review
@@ -77,7 +77,7 @@ export function RootLayout() {
                           className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 rounded transition-colors">
                           <Calculator className="w-4 h-4" /> Settlement Calculator
                         </Link>
-                        {hasPermission("manage_users") && (
+                        {hasPermission("staff.manage") && (
                           <Link to="/admin" onClick={() => setShowUserMenu(false)}
                             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 rounded transition-colors">
                             <Shield className="w-4 h-4" /> Administration

@@ -223,16 +223,25 @@ def create_user(
     )
     auth.set_custom_user_claims(user_record.uid, {"role": role, "active": True})
 
-    # Firestore profile
-    db().collection("users").document(user_record.uid).set({
-        "uid":            user_record.uid,
-        "email":          email,
-        "display_name":   display_name,
-        "role":           role,
-        "status":         "active",
-        "email_verified": False,
-        "created_at":     fs_admin.SERVER_TIMESTAMP,
-        "updated_at":     fs_admin.SERVER_TIMESTAMP,
+    # Role key → human-readable label (matches simpletort-dev staff schema)
+    _ROLE_LABELS = {
+        "client":         "Client",
+        "admin_staff":    "Admin Staff",
+        "paralegal":      "Paralegal",
+        "junior_partner": "Junior Partner",
+        "senior_partner": "Senior Partner",
+        "system_admin":   "System Admin",
+    }
+    # Firestore staff — document ID = userId (Firebase Auth UID)
+    db().collection("staff").document(user_record.uid).set({
+        "userId":            user_record.uid,
+        "email":             email,
+        "displayName":       display_name,
+        "role":              _ROLE_LABELS.get(role, role),
+        "isActive":          True,
+        "googleWorkspaceId": "",
+        "lastLoginAt":       None,
+        "createdAt":         fs_admin.SERVER_TIMESTAMP,
     })
 
     # F-01: generate AND send the verification email
@@ -300,6 +309,12 @@ def create_session(uid: str, id_token: str) -> dict:
         "expires_at":    datetime.now(timezone.utc) + expires_in,
         "active":        True,
     })
+
+    # Update lastLoginAt on the staff profile
+    staff_docs = list(db().collection("staff").where("userId", "==", uid).stream())
+    if staff_docs:
+        staff_docs[0].reference.update({"lastLoginAt": fs_admin.SERVER_TIMESTAMP})
+
     return {
         "session_cookie":     session_cookie,
         "session_id":         session_id,

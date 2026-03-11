@@ -29,18 +29,26 @@ def on_user_created(event: auth_fn.AuthBlockingEvent) -> None:
     that created the user failed partway through.
     """
     user = event.data
-    ref  = db().collection("users").document(user.uid)
-
+    _ROLE_LABELS = {
+        "client":         "Client",
+        "admin_staff":    "Admin Staff",
+        "paralegal":      "Paralegal",
+        "junior_partner": "Junior Partner",
+        "senior_partner": "Senior Partner",
+        "system_admin":   "System Admin",
+    }
+    default_role = "client"
+    ref = db().collection("staff").document(user.uid)
     if not ref.get().exists:
         ref.set({
-            "uid":            user.uid,
-            "email":          user.email or "",
-            "display_name":   user.display_name or "",
-            "role":           "client",   # default — admin promotes via API
-            "status":         "active",
-            "email_verified": user.email_verified,
-            "created_at":     fs_admin.SERVER_TIMESTAMP,
-            "updated_at":     fs_admin.SERVER_TIMESTAMP,
+            "userId":            user.uid,
+            "email":             user.email or "",
+            "displayName":       user.display_name or "",
+            "role":              _ROLE_LABELS.get(default_role, default_role),
+            "isActive":          True,
+            "googleWorkspaceId": "",
+            "lastLoginAt":       None,
+            "createdAt":         fs_admin.SERVER_TIMESTAMP,
         })
         logger.info("Created Firestore profile for uid=%s", user.uid)
 
@@ -54,9 +62,12 @@ def on_user_deleted(event: auth_fn.AuthBlockingEvent) -> None:
     Soft-deletes their Firestore profile to preserve the audit trail.
     """
     user = event.data
-    db().collection("users").document(user.uid).update({
-        "status":     "deleted",
-        "deleted_at": fs_admin.SERVER_TIMESTAMP,
-    })
+    # Soft-delete: find the staff doc by uid field, then mark deleted
+    docs = db().collection("staff").where("userId", "==", user.uid).stream()
+    for doc in docs:
+        doc.reference.update({
+            "isActive":   False,
+            "deletedAt":  fs_admin.SERVER_TIMESTAMP,
+        })
     write_audit_event("user_deleted_from_auth", uid=user.uid)
     logger.info("Soft-deleted Firestore profile for uid=%s", user.uid)

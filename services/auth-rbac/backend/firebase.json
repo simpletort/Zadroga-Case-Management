@@ -16,10 +16,11 @@
     ]
   },
 
-  "firestore": {
-    "rules":   "firestore/firestore.rules",
-    "indexes": "firestore/firestore_indexes.json"
-  },
+"firestore": {
+  "database": "simpletort-dev",
+  "rules":    "firestore/firestore.rules",
+  "indexes":  "firestore/firestore_indexes.json"
+},
 
   "emulators": {
     "auth":      { "port": 9099 },

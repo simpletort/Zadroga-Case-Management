@@ -88,7 +88,7 @@ def list_users_fn(req: https_fn.Request) -> https_fn.Response:
     if guard:
         return guard
 
-    col           = db().collection("users")
+    col           = db().collection("staff")
     role_filter   = req.args.get("role")
     status_filter = req.args.get("status")
     search        = (req.args.get("search") or "").strip().lower()
@@ -99,9 +99,9 @@ def list_users_fn(req: https_fn.Request) -> https_fn.Response:
     if role_filter:
         query = query.where("role", "==", role_filter)
     if status_filter:
-        query = query.where("status", "==", status_filter)
+        query = query.where("isActive", "==", (status_filter == "active"))
 
-    query = query.order_by("created_at", direction=fs_admin.Query.DESCENDING)
+    query = query.order_by("createdAt", direction=fs_admin.Query.DESCENDING)
 
     if cursor_id:
         cursor_doc = col.document(cursor_id).get()
@@ -113,15 +113,23 @@ def list_users_fn(req: https_fn.Request) -> https_fn.Response:
     has_more = len(docs) > page_size
     docs     = docs[:page_size]
 
+    # Fetch maxCaseload once from firmSettings for all users
+    firm_doc = db().collection("firmSettings").document("default").get()
+    default_max_caseload = (firm_doc.to_dict() or {}).get("defaultMaxCaseload", 20) if firm_doc.exists else 20
+
     users = []
     for doc in docs:
-        # serialise_doc strips PHI and converts all timestamp fields in one call
         d = serialise_doc(doc.to_dict(), strip_phi=True)
         if search:
-            name  = (d.get("display_name") or "").lower()
+            name  = (d.get("displayName") or "").lower()
             email = (d.get("email") or "").lower()
             if search not in name and search not in email:
                 continue
+        # Computed: activeCaseCount per user
+        uid = d.get("userId", "")
+        active_cases = db().collection("cases")             .where("assignedTo", "==", uid)             .where("status", "in", ["open", "active", "pending_review"])             .stream()
+        d["activeCaseCount"] = sum(1 for _ in active_cases)
+        d["maxCaseload"]     = default_max_caseload
         users.append(d)
 
     return json_ok({
@@ -154,13 +162,21 @@ def get_user_fn(req: https_fn.Request) -> https_fn.Response:
     if target_uid != caller_uid and not has_permission(caller_role, Permission.MANAGE_USERS):
         return json_err("Forbidden.", 403)
 
-    doc = db().collection("users").document(target_uid).get()
-    if not doc.exists:
+    # staff docs use userId field
+    docs = list(db().collection("staff").where("userId", "==", target_uid).stream())
+    if not docs:
         return json_err("User not found.", 404)
 
-    # Strip PHI unless caller has VIEW_PHI permission
     strip_phi = not has_permission(caller_role, Permission.VIEW_PHI)
-    d = serialise_doc(doc.to_dict(), strip_phi=strip_phi)
+    d = serialise_doc(docs[0].to_dict(), strip_phi=strip_phi)
+
+    # Computed: activeCaseCount — open cases assigned to this user
+    active_cases = db().collection("cases")         .where("assignedTo", "==", target_uid)         .where("status", "in", ["open", "active", "pending_review"])         .stream()
+    d["activeCaseCount"] = sum(1 for _ in active_cases)
+
+    # Computed: maxCaseload — from firmSettings, fallback 20
+    firm_doc = db().collection("firmSettings").document("default").get()
+    d["maxCaseload"] = (firm_doc.to_dict() or {}).get("defaultMaxCaseload", 20) if firm_doc.exists else 20
 
     return json_ok({"user": d})
 
@@ -188,14 +204,15 @@ def update_user_fn(req: https_fn.Request) -> https_fn.Response:
     if target_uid != caller_uid and not has_permission(caller_role, Permission.MANAGE_USERS):
         return json_err("Forbidden.", 403)
 
-    ref = db().collection("users").document(target_uid)
-    doc = ref.get()
-    if not doc.exists:
+    # staff docs use roleId as doc ID — find by uid field
+    staff_docs = list(db().collection("staff").where("userId", "==", target_uid).stream())
+    if not staff_docs:
         return json_err("User not found.", 404)
 
-    current  = doc.to_dict()
+    ref     = staff_docs[0].reference
+    current = staff_docs[0].to_dict()
     is_admin = has_permission(caller_role, Permission.MANAGE_USERS)
-    allowed  = {"display_name", "phone"} | ({"status", "role"} if is_admin else set())
+    allowed  = {"displayName", "googleWorkspaceId"} | ({"role", "isActive"} if is_admin else set())
     updates  = {k: v for k, v in data.items() if k in allowed and k != "uid"}
 
     if not updates:
@@ -210,10 +227,10 @@ def update_user_fn(req: https_fn.Request) -> https_fn.Response:
             auth.set_custom_user_claims(target_uid, {"role": new_role, "active": True})
             log_role_change(caller_uid, target_uid, old_role, new_role)
 
-    if "status" in updates:
-        auth.update_user(target_uid, disabled=(updates["status"] != "active"))
+    if "isActive" in updates:
+        auth.update_user(target_uid, disabled=not updates["isActive"])
 
-    updates["updated_at"] = fs_admin.SERVER_TIMESTAMP
+    # no updatedAt field in schema
     ref.update(updates)
 
     return json_ok({"success": True, "updated_fields": list(updates.keys())})
@@ -239,11 +256,12 @@ def delete_user_fn(req: https_fn.Request) -> https_fn.Response:
     if not target_uid:
         return json_err("uid query param required", 400)
 
-    ref = db().collection("users").document(target_uid)
-    if not ref.get().exists:
+    # staff docs use roleId as doc ID — find by uid field
+    staff_docs = list(db().collection("staff").where("userId", "==", target_uid).stream())
+    if not staff_docs:
         return json_err("User not found.", 404)
 
-    ref.update({
+    staff_docs[0].reference.update({
         "status":     "deleted",
         "deleted_at": fs_admin.SERVER_TIMESTAMP,
         "deleted_by": user.get("uid"),

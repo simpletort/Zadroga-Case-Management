@@ -19,10 +19,12 @@ export type BackendRole =
   | "admin_staff"
   | "paralegal"
   | "junior_partner"
-  | "senior_partner";
+  | "senior_partner"
+  | "system_admin";
 
 export const BACKEND_ROLE_LABELS: Record<BackendRole, string> = {
   client:         "Client",
+  system_admin:   "System Admin",
   admin_staff:    "Admin Staff",
   paralegal:      "Paralegal",
   junior_partner: "Attorney",
@@ -40,14 +42,17 @@ export const UI_ROLE_TO_BACKEND: Record<string, BackendRole> = {
 
 // ── Shared types ──────────────────────────────────────────────────────────
 export interface ApiUser {
-  uid:          string;
-  email:        string;
-  display_name: string;
-  role:         BackendRole;
-  status:       "active" | "inactive" | "deleted";
-  phone?:       string;
-  created_at?:  string;
-  updated_at?:  string;
+  userId:            string;
+  email:             string;
+  displayName:       string;
+  role:              string;          // human-readable: "Admin Staff", "Paralegal", etc.
+  isActive:          boolean;
+  googleWorkspaceId: string;
+  lastLoginAt:       string | null;
+  createdAt:         string;
+  // Computed by backend — not stored in Firestore
+  activeCaseCount:   number;         // count of open cases assigned to this user
+  maxCaseload:       number;         // from firmSettings.defaultMaxCaseload
 }
 
 export interface AuditLogEntry {
@@ -172,7 +177,7 @@ export async function createInvite(
 export async function createUser(payload: {
   email:        string;
   password:     string;
-  display_name: string;
+  display_name: string;   // backend still expects display_name on registration
   role:         BackendRole;
   portal_token?: string;
 }): Promise<{ success: boolean; user: ApiUser }> {
@@ -195,7 +200,7 @@ export async function listUsers(opts?: {
   next_cursor: string | null;
 }> {
   const params: Record<string, string> = {};
-  if (opts?.role)      params.role      = opts.role;
+  if (opts?.role)      params.role      = opts.role;   // human-readable role string
   if (opts?.status)    params.status    = opts.status;
   if (opts?.search)    params.search    = opts.search;
   if (opts?.page_size) params.page_size = String(opts.page_size);
@@ -211,11 +216,11 @@ export async function getUser(uid: string): Promise<{ user: ApiUser }> {
 
 /** PUT /update_user_fn */
 export async function updateUser(payload: {
-  uid:          string;
-  display_name?: string;
-  phone?:        string;
-  role?:         BackendRole;
-  status?:       "active" | "inactive";
+  uid:                string;
+  displayName?:       string;
+  role?:              string;
+  isActive?:          boolean;
+  googleWorkspaceId?: string;
 }): Promise<{ success: boolean; updated_fields: string[] }> {
   return apiFetch("update_user_fn", {
     method: "PUT",

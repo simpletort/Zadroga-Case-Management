@@ -1,14 +1,15 @@
 """
 auth/rbac.py — Role-Based Access Control
 =========================================
-Defines the role/permission enum types and the canonical permission matrix.
-Guards (require_permission, require_any) are used by every API handler.
+Permission strings aligned to the existing `roles` collection in Firestore
+(simpletort-dev database) which uses dot-notation e.g. "cases.read".
 
-Changes from original:
-  F-04 — MANAGE_USERS added to ADMIN_STAFF permission set.
-  Refactor — audit writes now use write_audit_event() from middleware/http.py
-             instead of inline db().collection("audit_log").add({}) blocks.
-             db() shortcut replaces fs_admin.client() for case access check.
+Role documents in Firestore:
+  roles/admin_staff
+  roles/junior_partner
+  roles/paralegal
+  roles/senior_partner
+  roles/system_admin
 """
 
 from __future__ import annotations
@@ -18,7 +19,6 @@ from enum import Enum
 from typing import Set
 
 from firebase_functions import https_fn
-
 from middleware.http import db, json_err, write_audit_event
 
 logger = logging.getLogger(__name__)
@@ -30,77 +30,157 @@ class Role(str, Enum):
     PARALEGAL      = "paralegal"
     JUNIOR_PARTNER = "junior_partner"
     SENIOR_PARTNER = "senior_partner"
+    SYSTEM_ADMIN   = "system_admin"
     CLIENT         = "client"
 
 
-# ── Permissions ───────────────────────────────────────────────────────────────
+# ── Permissions — dot-notation matching your Firestore roles collection ────────
 class Permission(str, Enum):
-    VIEW_ALL_CASES     = "view_all_cases"
-    VIEW_OWN_CASE      = "view_own_case"
-    MANAGE_TASKS       = "manage_tasks"
-    LOG_COMMUNICATIONS = "log_communications"
-    REQUEST_DOCUMENTS  = "request_documents"
-    UPLOAD_DOCUMENTS   = "upload_documents"
-    VIEW_DOCUMENTS     = "view_documents"
-    VIEW_OWN_DOCUMENTS = "view_own_documents"
-    ADD_NOTES          = "add_notes"
-    VIEW_NOTES         = "view_notes"
-    SUBMIT_FOR_REVIEW  = "submit_for_review"
-    APPROVE_REJECT     = "approve_reject_cases"
-    ESCALATE           = "escalate_cases"
-    VIEW_PHI           = "view_phi"
-    MANAGE_USERS       = "manage_users"
-    ASSIGN_ROLES       = "assign_roles"
-    VIEW_REPORTS       = "view_reports"
-    VIEW_AUDIT_LOG     = "view_audit_log"
-    SYSTEM_ADMIN       = "system_admin"
+    # Cases
+    CASES_READ          = "cases.read"
+    CASES_WRITE         = "cases.write"
+    CASES_STATUS_UPDATE = "cases.status.update"
+    CASES_APPROVE       = "cases.approve"
+    CASES_DELETE        = "cases.delete"
+
+    # Clients
+    CLIENTS_READ        = "clients.read"
+    CLIENTS_WRITE       = "clients.write"
+
+    # Documents
+    DOCUMENTS_READ      = "documents.read"
+    DOCUMENTS_UPLOAD    = "documents.upload"
+    DOCUMENTS_VERIFY    = "documents.verify"
+    DOCUMENTS_OVERRIDE  = "documents.override"
+
+    # Tasks
+    TASKS_READ          = "tasks.read"
+    TASKS_WRITE         = "tasks.write"
+    TASKS_COMPLETE      = "tasks.complete"
+
+    # Communications
+    COMMUNICATIONS_READ  = "communications.read"
+    COMMUNICATIONS_WRITE = "communications.write"
+
+    # Timeline
+    TIMELINE_READ       = "timeline.read"
+
+    # Expenses & Disbursements
+    EXPENSES_READ       = "expenses.read"
+    EXPENSES_WRITE      = "expenses.write"
+    DISBURSEMENTS_READ  = "disbursements.read"
+    DISBURSEMENTS_WRITE = "disbursements.write"
+    DISBURSEMENTS_APPROVE = "disbursements.approve"
+
+    # Staff & Users
+    STAFF_READ          = "staff.read"
+    STAFF_WRITE         = "staff.write"
+    STAFF_MANAGE        = "staff.manage"
+
+    # Reports & Analytics
+    REPORTS_READ        = "reports.read"
+    ANALYTICS_READ      = "analytics.read"
+
+    # Settings & System
+    SETTINGS_READ       = "settings.read"
+    SETTINGS_WRITE      = "settings.write"
+    AUDIT_LOG_READ      = "auditLog.read"
+    SYSTEM_ADMIN        = "system.admin"
+
+    # Kept for internal API guards (not stored in Firestore roles)
+    MANAGE_USERS        = "staff.manage"
+    VIEW_AUDIT_LOG      = "auditLog.read"
+    VIEW_PHI            = "documents.verify"
 
 
-# ── Permission matrix ─────────────────────────────────────────────────────────
+# ── Permission matrix (mirrors your Firestore roles collection) ───────────────
 ROLE_PERMISSIONS: dict[Role, Set[Permission]] = {
+
     Role.CLIENT: {
-        Permission.VIEW_OWN_CASE,
-        Permission.VIEW_OWN_DOCUMENTS,
-        Permission.UPLOAD_DOCUMENTS,
+        Permission.CASES_READ,
+        Permission.DOCUMENTS_READ,
+        Permission.DOCUMENTS_UPLOAD,
+        Permission.COMMUNICATIONS_READ,
+        Permission.TIMELINE_READ,
     },
+
     Role.ADMIN_STAFF: {
-        Permission.VIEW_ALL_CASES,
-        Permission.MANAGE_TASKS,
-        Permission.LOG_COMMUNICATIONS,
-        Permission.VIEW_DOCUMENTS,
-        Permission.VIEW_NOTES,
-        Permission.MANAGE_USERS,    # F-04 fix: admin_staff must reach user-management APIs
+        Permission.CASES_READ,
+        Permission.CASES_WRITE,
+        Permission.CASES_STATUS_UPDATE,
+        Permission.CLIENTS_READ,
+        Permission.CLIENTS_WRITE,
+        Permission.DOCUMENTS_READ,
+        Permission.DOCUMENTS_UPLOAD,
+        Permission.TASKS_READ,
+        Permission.TASKS_WRITE,
+        Permission.TASKS_COMPLETE,
+        Permission.COMMUNICATIONS_READ,
+        Permission.COMMUNICATIONS_WRITE,
+        Permission.TIMELINE_READ,
+        Permission.EXPENSES_READ,
+        Permission.EXPENSES_WRITE,
+        Permission.DISBURSEMENTS_READ,
+        Permission.STAFF_READ,
+        Permission.MANAGE_USERS,        # allows user management API
     },
+
     Role.PARALEGAL: {
-        Permission.VIEW_ALL_CASES,
-        Permission.MANAGE_TASKS,
-        Permission.LOG_COMMUNICATIONS,
-        Permission.VIEW_DOCUMENTS,
-        Permission.VIEW_NOTES,
-        Permission.REQUEST_DOCUMENTS,
-        Permission.UPLOAD_DOCUMENTS,
-        Permission.ADD_NOTES,
-        Permission.SUBMIT_FOR_REVIEW,
+        Permission.CASES_READ,
+        Permission.CASES_WRITE,
+        Permission.CASES_STATUS_UPDATE,
+        Permission.CLIENTS_READ,
+        Permission.CLIENTS_WRITE,
+        Permission.DOCUMENTS_READ,
+        Permission.DOCUMENTS_UPLOAD,
+        Permission.DOCUMENTS_VERIFY,
+        Permission.TASKS_READ,
+        Permission.TASKS_WRITE,
+        Permission.TASKS_COMPLETE,
+        Permission.COMMUNICATIONS_READ,
+        Permission.COMMUNICATIONS_WRITE,
+        Permission.TIMELINE_READ,
+        Permission.EXPENSES_READ,
+        Permission.EXPENSES_WRITE,
+        Permission.DISBURSEMENTS_READ,
+        Permission.STAFF_READ,
+        Permission.REPORTS_READ,
     },
+
     Role.JUNIOR_PARTNER: {
-        Permission.VIEW_ALL_CASES,
-        Permission.MANAGE_TASKS,
-        Permission.LOG_COMMUNICATIONS,
-        Permission.VIEW_DOCUMENTS,
-        Permission.VIEW_NOTES,
-        Permission.REQUEST_DOCUMENTS,
-        Permission.UPLOAD_DOCUMENTS,
-        Permission.ADD_NOTES,
-        Permission.SUBMIT_FOR_REVIEW,
-        Permission.APPROVE_REJECT,
-        Permission.ESCALATE,
-        Permission.VIEW_PHI,
+        Permission.CASES_READ,
+        Permission.CASES_WRITE,
+        Permission.CASES_STATUS_UPDATE,
+        Permission.CASES_APPROVE,
+        Permission.CLIENTS_READ,
+        Permission.CLIENTS_WRITE,
+        Permission.DOCUMENTS_READ,
+        Permission.DOCUMENTS_UPLOAD,
+        Permission.DOCUMENTS_VERIFY,
+        Permission.TASKS_READ,
+        Permission.TASKS_WRITE,
+        Permission.TASKS_COMPLETE,
+        Permission.COMMUNICATIONS_READ,
+        Permission.COMMUNICATIONS_WRITE,
+        Permission.TIMELINE_READ,
+        Permission.EXPENSES_READ,
+        Permission.EXPENSES_WRITE,
+        Permission.DISBURSEMENTS_READ,
+        Permission.DISBURSEMENTS_WRITE,
+        Permission.STAFF_READ,
+        Permission.REPORTS_READ,
+        Permission.ANALYTICS_READ,
+        Permission.SETTINGS_READ,
+        Permission.VIEW_AUDIT_LOG,
     },
+
     Role.SENIOR_PARTNER: {p for p in Permission},  # all permissions
+
+    Role.SYSTEM_ADMIN: {p for p in Permission},     # all permissions
 }
 
 
-# ── Core lookup functions ─────────────────────────────────────────────────────
+# ── Core lookup ───────────────────────────────────────────────────────────────
 def has_permission(role: str, permission: Permission) -> bool:
     try:
         r = Role(role)
@@ -117,19 +197,12 @@ def get_role_permissions(role: str) -> list[str]:
     return [p.value for p in ROLE_PERMISSIONS.get(r, set())]
 
 
-# ── Guard helpers — used inside every Cloud Function handler ──────────────────
+# ── Guard helpers ─────────────────────────────────────────────────────────────
 def require_permission(
     user: dict,
     permission: Permission,
     request: https_fn.Request | None = None,
 ) -> https_fn.Response | None:
-    """
-    Return a 403 Response if the user lacks the given permission, else None.
-
-    Usage:
-        guard = require_permission(user, Permission.MANAGE_USERS, req)
-        if guard: return guard
-    """
     if not has_permission(user.get("role", ""), permission):
         write_audit_event(
             "permission_denied",
@@ -147,7 +220,6 @@ def require_any(
     *permissions: Permission,
     request: https_fn.Request | None = None,
 ) -> https_fn.Response | None:
-    """Return 403 unless the user has at least one of the given permissions."""
     if not permissions or not any(
         has_permission(user.get("role", ""), p) for p in permissions
     ):
@@ -164,8 +236,7 @@ def require_any(
 
 # ── Case access check ─────────────────────────────────────────────────────────
 def check_case_access(user: dict, case_id: str) -> bool:
-    """Return True if the user is allowed to view the given case."""
-    if has_permission(user.get("role", ""), Permission.VIEW_ALL_CASES):
+    if has_permission(user.get("role", ""), Permission.CASES_READ):
         return True
     doc = db().collection("cases").document(case_id).get()
     if not doc.exists:
@@ -177,7 +248,6 @@ def check_case_access(user: dict, case_id: str) -> bool:
 def log_role_change(
     changed_by: str, target_uid: str, old_role: str, new_role: str
 ) -> None:
-    """Write a role_change event to the audit log."""
     write_audit_event(
         "role_change",
         changed_by=changed_by,
