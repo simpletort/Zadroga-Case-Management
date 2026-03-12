@@ -1,0 +1,91 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper functions ────────────────────────────────────────────────────
+
+    // Check if request comes from a service account (server-side)
+    // In production, Cloud Run and Cloud Functions use service accounts.
+    function isServiceAccount() {
+      return request.auth != null &&
+             request.auth.token.email.matches('.*@.*\\.iam\\.gserviceaccount\\.com');
+    }
+
+    // Check if user is an authenticated admin (Firebase Auth with admin claim)
+    function isAdmin() {
+      return request.auth != null &&
+             request.auth.token.get('role', '') == 'admin';
+    }
+
+    // Check if user is a read-only staff member
+    function isStaff() {
+      return request.auth != null &&
+             request.auth.token.get('role', '') in ['admin', 'staff', 'paralegal'];
+    }
+
+    // Validate case ID format: ZAD-YYYY-MM-XXXX
+    function isValidCaseId(caseId) {
+      return caseId.matches('^ZAD-[0-9]{4}-[0-9]{2}-[0-9]{4}$');
+    }
+
+
+    // ── /cases/{caseId} ─────────────────────────────────────────────────────
+    match /cases/{caseId} {
+
+      // READ:
+      //   - Service accounts (Cloud Run, Cloud Functions) can always read
+      //   - Admin/Staff users can read via Admin UI
+      //   - Partners CANNOT read cases (they only write via API)
+      allow read: if isServiceAccount() || isStaff();
+
+      // CREATE:
+      //   - Only service accounts can create cases
+      //   - Case ID must follow the ZAD-YYYY-MM-XXXX format
+      //   - Required fields must be present
+      allow create: if isServiceAccount()
+                    && isValidCaseId(caseId)
+                    && request.resource.data.keys().hasAll([
+                         'caseId', 'status', 'email', 'phone',
+                         'firstName', 'lastName', 'createdAt', 'partnerId'
+                       ])
+                    && request.resource.data.status == 'New Lead';
+
+      // UPDATE:
+      //   - Service accounts can update (VCF screener, notification dispatcher)
+      //   - Admins can update status fields via Admin UI
+      //   - caseId, email, phone, createdAt are IMMUTABLE after creation
+      allow update: if (isServiceAccount() || isAdmin())
+                    && request.resource.data.caseId == resource.data.caseId
+                    && request.resource.data.email == resource.data.email
+                    && request.resource.data.phone == resource.data.phone
+                    && request.resource.data.createdAt == resource.data.createdAt;
+
+      // DELETE: Never allowed (legal data retention requirements)
+      allow delete: if false;
+    }
+
+
+    // ── /counters/{counterId} ────────────────────────────────────────────────
+    // Monthly case ID counters (e.g., ZAD-2025-03)
+    // Only service accounts manage counters; no user access
+    match /counters/{counterId} {
+      allow read, write: if isServiceAccount();
+      allow delete: if false;
+    }
+
+
+    // ── /partners/{partnerId} ────────────────────────────────────────────────
+    // Marketing partner configuration documents
+    match /partners/{partnerId} {
+      allow read: if isServiceAccount() || isAdmin();
+      allow write: if isAdmin();
+      allow delete: if false;
+    }
+
+
+    // ── Deny all other paths ─────────────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
