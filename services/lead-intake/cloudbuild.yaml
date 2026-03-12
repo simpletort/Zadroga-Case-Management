@@ -32,7 +32,6 @@ substitutions:
 
 options:
   logging: CLOUD_LOGGING_ONLY
-  machineType: E2_STANDARD_2
   substitutionOption: ALLOW_LOOSE           # Don't fail on unused substitutions
 
 # ── Timeout for the full pipeline ──────────────────────────────────────────────
