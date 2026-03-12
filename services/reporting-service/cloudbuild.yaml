@@ -1,5 +1,6 @@
 steps:
-  - name: "python:3.7-slim"
+  - name: "python:3.11-slim"
+    dir: "services/reporting-service"
     entrypoint: bash
     args:
       - "-c"
@@ -8,40 +9,40 @@ steps:
         pytest tests/ -v --tb=short
 
   - name: "gcr.io/cloud-builders/docker"
+    dir: "services/reporting-service"
     args:
       - build
       - "-t"
-      - "gcr.io/$PROJECT_ID/reporting-service:$COMMIT_SHA"
+      - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
       - "-t"
-      - "gcr.io/$PROJECT_ID/reporting-service:latest"
+      - "$_REPO/$_SERVICE_NAME:latest"
       - "."
 
   - name: "gcr.io/cloud-builders/docker"
-    args: ["push", "gcr.io/$PROJECT_ID/reporting-service:$COMMIT_SHA"]
+    args: ["push", "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"]
 
   - name: "gcr.io/cloud-builders/docker"
-    args: ["push", "gcr.io/$PROJECT_ID/reporting-service:latest"]
+    args: ["push", "$_REPO/$_SERVICE_NAME:latest"]
 
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     entrypoint: gcloud
     args:
       - run
       - deploy
-      - reporting-service
-      - "--image=gcr.io/$PROJECT_ID/reporting-service:$COMMIT_SHA"
-      - "--region=us-central1"
+      - "$_SERVICE_NAME"
+      - "--image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+      - "--region=$_REGION"
       - "--platform=managed"
       - "--no-allow-unauthenticated"
-      - "--service-account=reporting-service@$PROJECT_ID.iam.gserviceaccount.com"
-      - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID"
+      - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,ENV=$_ENV"
       - "--memory=512Mi"
       - "--cpu=1"
       - "--max-instances=10"
       - "--min-instances=0"
 
 images:
-  - "gcr.io/$PROJECT_ID/reporting-service:$COMMIT_SHA"
-  - "gcr.io/$PROJECT_ID/reporting-service:latest"
+  - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+  - "$_REPO/$_SERVICE_NAME:latest"
 
 options:
   logging: CLOUD_LOGGING_ONLY
