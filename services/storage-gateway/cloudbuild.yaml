@@ -3,6 +3,7 @@ substitutions:
 
 steps:
   - name: "python:3.11-slim"
+    dir: "services/storage-gateway"
     entrypoint: bash
     args:
       - "-c"
@@ -11,6 +12,7 @@ steps:
         pytest tests/ -v --tb=short
 
   - name: "gcr.io/cloud-builders/docker"
+    dir: "services/storage-gateway"
     args:
       - build
       - "-t"
