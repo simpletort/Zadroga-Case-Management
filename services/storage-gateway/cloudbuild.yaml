@@ -34,7 +34,6 @@ steps:
       - "--region=$_REGION"
       - "--platform=managed"
       - "--no-allow-unauthenticated"
-      - "--service-account=$_SERVICE_NAME@$PROJECT_ID.iam.gserviceaccount.com"
       - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,ENV=$_ENV"
       - "--memory=512Mi"
       - "--cpu=1"
