@@ -1,55 +1,50 @@
 substitutions:
-  _SERVICE_NAME: storage-gateway
-  _REGION: us-central1
-  _REPO: us-central1-docker.pkg.dev/$PROJECT_ID/simpletort
-  _ENV: dev  # overridden per trigger (dev/staging/prod)
+  _SERVICE_NAME: storage-gateway  # overridden per environment by the Cloud Build trigger
 
 steps:
-  # 1. Install all deps (including devDependencies for lint + tests)
-  - name: 'node:18-alpine'
-    entrypoint: npm
-    args: ['ci']
-    dir: 'services/$_SERVICE_NAME'
+  - name: "python:3.11-slim"
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        pip install -r requirements.txt
+        pytest tests/ -v --tb=short
 
-  # 2. Lint
-  - name: 'node:18-alpine'
-    entrypoint: npm
-    args: ['run', 'lint']
-    dir: 'services/$_SERVICE_NAME'
-
-  # 3. Unit tests
-  - name: 'node:18-alpine'
-    entrypoint: npm
-    args: ['test']
-    dir: 'services/$_SERVICE_NAME'
-
-  # 4. Build Docker image
-  - name: 'gcr.io/cloud-builders/docker'
+  - name: "gcr.io/cloud-builders/docker"
     args:
       - build
-      - '-t'
-      - '$_REPO/$_SERVICE_NAME:$COMMIT_SHA'
-      - '-t'
-      - '$_REPO/$_SERVICE_NAME:$_ENV-latest'
-      - '-f'
-      - 'services/$_SERVICE_NAME/Dockerfile'
-      - 'services/$_SERVICE_NAME'
+      - "-t"
+      - "gcr.io/$PROJECT_ID/$_SERVICE_NAME:$COMMIT_SHA"
+      - "-t"
+      - "gcr.io/$PROJECT_ID/$_SERVICE_NAME:latest"
+      - "."
 
-  # 5. Push to Artifact Registry
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', '--all-tags', '$_REPO/$_SERVICE_NAME']
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "gcr.io/$PROJECT_ID/$_SERVICE_NAME:$COMMIT_SHA"]
 
-  # 6. Deploy to Cloud Run
-  - name: 'gcr.io/cloud-builders/gcloud'
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "gcr.io/$PROJECT_ID/$_SERVICE_NAME:latest"]
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: gcloud
     args:
       - run
       - deploy
-      - '$_SERVICE_NAME-$_ENV'
-      - '--image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA'
-      - '--region=$_REGION'
-      - '--platform=managed'
-      - '--allow-unauthenticated'
-      - '--set-env-vars=GCS_BUCKET_NAME=$_GCS_BUCKET,NODE_ENV=$_ENV'
+      - "$_SERVICE_NAME"
+      - "--image=gcr.io/$PROJECT_ID/$_SERVICE_NAME:$COMMIT_SHA"
+      - "--region=us-central1"
+      - "--platform=managed"
+      - "--no-allow-unauthenticated"
+      - "--service-account=$_SERVICE_NAME@$PROJECT_ID.iam.gserviceaccount.com"
+      - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID"
+      - "--memory=512Mi"
+      - "--cpu=1"
+      - "--max-instances=10"
+      - "--min-instances=0"
+
+images:
+  - "gcr.io/$PROJECT_ID/$_SERVICE_NAME:$COMMIT_SHA"
+  - "gcr.io/$PROJECT_ID/$_SERVICE_NAME:latest"
 
 options:
   logging: CLOUD_LOGGING_ONLY
