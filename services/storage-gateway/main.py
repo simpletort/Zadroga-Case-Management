@@ -43,7 +43,7 @@ app = FastAPI(
     title="SimpleTort Cloud Storage Gateway Service",
     version="1.0.0",
     lifespan=lifespan,
-    docs_url="/docs" if settings.environment != "production" else None,
+    docs_url="/docs" if settings.env != "prod" else None,
     redoc_url=None,
 )
 

@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     gcs_bucket_name: str = "zadroga-case-files-simpletort-prod"
     signed_url_write_expiry_minutes: int = 15
     signed_url_read_expiry_minutes: int = 60
-    environment: str = "production"
+    env: str = "prod"  # dev | test | prod — injected via ENV trigger variable
     log_level: str = "INFO"
 
     model_config = {"env_file": ".env", "case_sensitive": False}
