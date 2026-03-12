@@ -301,26 +301,24 @@ steps:
       - -c
       - |
         echo "▶ Running smoke test..."
-        # Get the Cloud Run service URL
+
         SERVICE_URL=$$(gcloud run services describe ${_SERVICE_NAME} \
           --region=${_REGION} \
           --format='value(status.url)')
+
         echo "Service URL: $$SERVICE_URL"
 
-        # Hit the health endpoint (no auth required)
-        HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$$SERVICE_URL/health")
-        echo "Health check HTTP status: $HTTP_STATUS"
+        HTTP_STATUS=$$(curl -s -o /dev/null -w "%{http_code}" "$$SERVICE_URL/health")
 
-        if [ "$HTTP_STATUS" != "200" ]; then
-          echo "❌ Smoke test FAILED — /health returned $HTTP_STATUS"
+        echo "Health check HTTP status: $$HTTP_STATUS"
+
+        if [ "$$HTTP_STATUS" != "200" ]; then
+          echo "❌ Smoke test FAILED — /health returned $$HTTP_STATUS"
           exit 1
         fi
-        echo "✅ Smoke test passed"
-    waitFor:
-      - deploy-cloud-run-dev
-      - deploy-vcf-screener-dev
-      - deploy-notification-dispatcher-dev
 
+        echo "✅ Smoke test passed"
+        
 # ── Secrets from Secret Manager ───────────────────────────────────────────────
 availableSecrets:
   secretManager:
