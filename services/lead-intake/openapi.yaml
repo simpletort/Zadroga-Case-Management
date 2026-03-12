@@ -1,0 +1,379 @@
+openapi: 3.0.3
+info:
+  title: ZAD Lead Intake API
+  description: |
+    Lead Intake & Automated Screening microservice for 9/11 VCF case management.
+    
+    ## Authentication
+    All endpoints require a Bearer JWT token issued via OAuth2 client credentials flow.
+    The `partner_id` claim within the JWT identifies the marketing partner.
+    
+    ## Rate Limiting
+    100 requests per minute per `partner_id`. Exceeding this returns HTTP 429.
+    
+    ## Versioning Strategy
+    URL-based versioning (`/api/v1/`). Breaking changes increment the major version.
+    Non-breaking additions are made in-place with changelog updates.
+    
+    ## PHI Policy
+    No personally identifiable health information is written to logs.
+    All log entries use masked identifiers only.
+  version: 1.0.0
+  contact:
+    name: ZAD Engineering
+    email: engineering@zad.example.com
+
+servers:
+  - url: https://api.zad.example.com/api/v1
+    description: Production
+  - url: https://api-dev.zad.example.com/api/v1
+    description: Development
+
+security:
+  - BearerAuth: []
+
+paths:
+  /leads:
+    post:
+      operationId: createLead
+      summary: Ingest a new lead from a marketing partner
+      description: |
+        Validates lead data, detects duplicates, creates a Firestore case document
+        with ID format ZAD-YYYY-MM-XXXX, publishes a Pub/Sub event, and triggers
+        automated welcome communications and VCF eligibility screening.
+      tags:
+        - Leads
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeadRequest'
+            examples:
+              valid_lead:
+                summary: Valid lead submission
+                value:
+                  firstName: "John"
+                  lastName: "Doe"
+                  email: "john.doe@example.com"
+                  phone: "+12125551234"
+                  address:
+                    street: "123 Main St"
+                    city: "New York"
+                    state: "NY"
+                    zip: "10001"
+                  exposureLocation: "World Trade Center"
+                  exposureDates:
+                    start: "2001-09-11"
+                    end: "2001-12-31"
+                  wtcHealthProgramStatus: "enrolled"
+                  priorAttorney: false
+                  marketingSource: "google_ads"
+                  referralCode: "PARTNER-ABC-001"
+      responses:
+        '201':
+          description: Lead created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeadCreatedResponse'
+        '400':
+          description: Validation failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missing_field:
+                  value:
+                    error: "VALIDATION_ERROR"
+                    message: "Request validation failed"
+                    details:
+                      - field: "email"
+                        code: "INVALID_FORMAT"
+                        message: "Must be a valid email address"
+                    requestId: "req_abc123"
+                    timestamp: "2025-03-15T10:00:00Z"
+        '409':
+          description: Duplicate lead detected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                duplicate:
+                  value:
+                    error: "DUPLICATE_LEAD"
+                    message: "A lead with this email and phone already exists"
+                    details:
+                      - field: "email+phone"
+                        code: "DUPLICATE"
+                        message: "Case ZAD-2025-03-0042 already exists for this contact"
+                    requestId: "req_xyz789"
+                    timestamp: "2025-03-15T10:00:00Z"
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /leads/{leadId}:
+    get:
+      operationId: getLead
+      summary: Retrieve lead/case by ID
+      tags:
+        - Leads
+      parameters:
+        - name: leadId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^ZAD-\d{4}-\d{2}-\d{4}$'
+            example: "ZAD-2025-03-0001"
+      responses:
+        '200':
+          description: Lead found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaseDocument'
+        '404':
+          description: Lead not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT issued via OAuth2 client credentials. Contains `partner_id` claim.
+
+  schemas:
+    LeadRequest:
+      type: object
+      required:
+        - firstName
+        - lastName
+        - email
+        - phone
+        - exposureLocation
+        - exposureDates
+        - wtcHealthProgramStatus
+        - priorAttorney
+        - marketingSource
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Claimant's legal first name
+          example: "John"
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Claimant's legal last name
+          example: "Doe"
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          description: Primary contact email. Used for duplicate detection.
+          example: "john.doe@example.com"
+        phone:
+          type: string
+          pattern: '^\+?[1-9]\d{1,14}$'
+          description: |
+            Phone number in E.164 format or local US format.
+            Normalized to E.164 on ingestion. Used for duplicate detection.
+          example: "+12125551234"
+        address:
+          $ref: '#/components/schemas/Address'
+        exposureLocation:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Location where claimant was exposed (e.g. "World Trade Center", "Pentagon", "Shanksville")
+          example: "World Trade Center"
+        exposureDates:
+          $ref: '#/components/schemas/ExposureDates'
+        wtcHealthProgramStatus:
+          type: string
+          enum:
+            - enrolled
+            - applied
+            - not_applied
+            - unknown
+          description: Current WTC Health Program enrollment status
+          example: "enrolled"
+        priorAttorney:
+          type: boolean
+          description: Whether the claimant has or had prior legal representation for this claim
+          example: false
+        marketingSource:
+          type: string
+          maxLength: 100
+          description: Marketing channel that generated this lead
+          example: "google_ads"
+        referralCode:
+          type: string
+          maxLength: 100
+          description: Partner-specific referral code for attribution tracking
+          example: "PARTNER-ABC-001"
+
+    Address:
+      type: object
+      properties:
+        street:
+          type: string
+          maxLength: 200
+        city:
+          type: string
+          maxLength: 100
+        state:
+          type: string
+          maxLength: 2
+          pattern: '^[A-Z]{2}$'
+        zip:
+          type: string
+          pattern: '^\d{5}(-\d{4})?$'
+
+    ExposureDates:
+      type: object
+      required:
+        - start
+        - end
+      properties:
+        start:
+          type: string
+          format: date
+          description: |
+            Start date of exposure. Must fall within or overlap the VCF eligibility
+            window: 2001-09-11 through 2011-05-30.
+          example: "2001-09-11"
+        end:
+          type: string
+          format: date
+          description: |
+            End date of exposure. Must be >= start date and overlap VCF window.
+          example: "2001-12-31"
+
+    LeadCreatedResponse:
+      type: object
+      required:
+        - leadId
+        - status
+        - requestId
+        - timestamp
+      properties:
+        leadId:
+          type: string
+          pattern: '^ZAD-\d{4}-\d{2}-\d{4}$'
+          description: Generated case ID
+          example: "ZAD-2025-03-0001"
+        status:
+          type: string
+          enum:
+            - New Lead
+          description: Initial case status
+        vcfScreeningStatus:
+          type: string
+          enum:
+            - pending
+            - eligible
+            - ineligible
+            - needs_review
+          description: VCF eligibility screening result (async, may be 'pending')
+        requestId:
+          type: string
+          description: Unique request trace ID for support
+        timestamp:
+          type: string
+          format: date-time
+
+    CaseDocument:
+      type: object
+      properties:
+        caseId:
+          type: string
+          example: "ZAD-2025-03-0001"
+        status:
+          type: string
+          enum:
+            - New Lead
+            - Screened
+            - Qualified
+            - Disqualified
+            - Active
+            - Closed
+        vcfEligibility:
+          type: string
+          enum:
+            - pending
+            - eligible
+            - ineligible
+            - needs_review
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        marketingSource:
+          type: string
+        partnerId:
+          type: string
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+        - requestId
+        - timestamp
+      properties:
+        error:
+          type: string
+          enum:
+            - VALIDATION_ERROR
+            - DUPLICATE_LEAD
+            - RATE_LIMIT_EXCEEDED
+            - UNAUTHORIZED
+            - INTERNAL_ERROR
+        message:
+          type: string
+          description: Human-readable error summary
+        details:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErrorDetail'
+        requestId:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+    ErrorDetail:
+      type: object
+      properties:
+        field:
+          type: string
+          description: Field name that caused the error
+        code:
+          type: string
+          description: Machine-readable error code
+        message:
+          type: string
+          description: Human-readable field-level error
