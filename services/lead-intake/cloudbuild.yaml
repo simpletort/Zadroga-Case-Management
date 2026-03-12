@@ -305,10 +305,10 @@ steps:
         SERVICE_URL=$$(gcloud run services describe ${_SERVICE_NAME} \
           --region=${_REGION} \
           --format='value(status.url)')
-        echo "Service URL: $SERVICE_URL"
+        echo "Service URL: $$SERVICE_URL"
 
         # Hit the health endpoint (no auth required)
-        HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$SERVICE_URL/health")
+        HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$$SERVICE_URL/health")
         echo "Health check HTTP status: $HTTP_STATUS"
 
         if [ "$HTTP_STATUS" != "200" ]; then
