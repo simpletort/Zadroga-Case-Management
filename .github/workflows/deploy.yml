@@ -1,11 +1,12 @@
 name: Deploy auth-rbac
- 
+
 on:
   push:
     branches:
       - dev
     paths:
-      - "services/auth-rbac/**"
+      - "services/auth-rbac/**"   # only triggers when this service changes
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -18,7 +19,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-        
+          cache: npm
+          cache-dependency-path: services/auth-rbac/frontend/package-lock.json
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -53,7 +55,6 @@ jobs:
 
       - name: Deploy to Firebase
         working-directory: services/auth-rbac/backend
-
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
         run: firebase deploy --non-interactive --project simpletort-zadroga-dev --token "$FIREBASE_TOKEN"

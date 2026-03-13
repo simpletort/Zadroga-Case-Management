@@ -1,9 +1,4 @@
-# api/requirements.txt
-# Dependencies for the Cloud Functions API layer.
-# Cloud Build installs these before deploying functions.
-#
-# These mirror functions/requirements.txt — both must stay in sync.
-
+# Firebase Cloud Functions — Python 3.12 runtime
 firebase-functions==0.4.2
 firebase-admin==6.5.0
 google-cloud-firestore==2.16.1
