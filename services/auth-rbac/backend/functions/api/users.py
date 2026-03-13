@@ -30,9 +30,7 @@ from middleware.jwt_middleware import require_auth
 
 
 # ── POST /createUser ──────────────────────────────────────────────────────────
-@https_fn.on_request(region=REGION, cors=https_fn.options.CorsOptions(
-    cors_origins="*", cors_methods=["POST", "OPTIONS"]
-))
+@https_fn.on_request(region=REGION, cors=True)
 def create_user_fn(req: https_fn.Request) -> https_fn.Response:
     early = handle_options(req)
     if early:
@@ -73,9 +71,7 @@ def create_user_fn(req: https_fn.Request) -> https_fn.Response:
 
 
 # ── GET /listUsers ────────────────────────────────────────────────────────────
-@https_fn.on_request(region=REGION, cors=https_fn.options.CorsOptions(
-    cors_origins="*", cors_methods=["GET", "OPTIONS"]
-))
+@https_fn.on_request(region=REGION, cors=True)
 def list_users_fn(req: https_fn.Request) -> https_fn.Response:
     early = handle_options(req)
     if early:
@@ -141,9 +137,7 @@ def list_users_fn(req: https_fn.Request) -> https_fn.Response:
 
 
 # ── GET /getUser?uid=xxx ──────────────────────────────────────────────────────
-@https_fn.on_request(region=REGION, cors=https_fn.options.CorsOptions(
-    cors_origins="*", cors_methods=["GET", "OPTIONS"]
-))
+@https_fn.on_request(region=REGION, cors=True)
 def get_user_fn(req: https_fn.Request) -> https_fn.Response:
     early = handle_options(req)
     if early:
@@ -182,9 +176,7 @@ def get_user_fn(req: https_fn.Request) -> https_fn.Response:
 
 
 # ── PUT /updateUser ───────────────────────────────────────────────────────────
-@https_fn.on_request(region=REGION, cors=https_fn.options.CorsOptions(
-    cors_origins="*", cors_methods=["PUT", "OPTIONS"]
-))
+@https_fn.on_request(region=REGION, cors=True)
 def update_user_fn(req: https_fn.Request) -> https_fn.Response:
     early = handle_options(req)
     if early:
@@ -237,9 +229,7 @@ def update_user_fn(req: https_fn.Request) -> https_fn.Response:
 
 
 # ── DELETE /deleteUser?uid=xxx ────────────────────────────────────────────────
-@https_fn.on_request(region=REGION, cors=https_fn.options.CorsOptions(
-    cors_origins="*", cors_methods=["DELETE", "OPTIONS"]
-))
+@https_fn.on_request(region=REGION, cors=True)
 def delete_user_fn(req: https_fn.Request) -> https_fn.Response:
     early = handle_options(req)
     if early:

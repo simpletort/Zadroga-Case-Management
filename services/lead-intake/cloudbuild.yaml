@@ -51,7 +51,7 @@ steps:
       - |
         echo "▶ Installing Python dependencies..."
         pip install --no-cache-dir --break-system-packages -q \
-          -r api/requirements.txt \
+          -r services/auth-rbac/backend/functions/requirements.txt \
           pytest pytest-asyncio pytest-mock httpx
         echo "✅ Dependencies installed"
 
