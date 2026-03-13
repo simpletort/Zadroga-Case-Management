@@ -50,4 +50,4 @@ jobs:
         working-directory: services/auth-rbac/backend
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
-        run: firebase deploy --non-interactive --project simple-tort-zadroga-dev --token "$FIREBASE_TOKEN"
+        run: firebase deploy --non-interactive --project simpletort-zadroga-dev --token "$FIREBASE_TOKEN"
