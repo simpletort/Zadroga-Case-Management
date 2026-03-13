@@ -35,9 +35,7 @@ from middleware.jwt_middleware import require_auth, _evict_token
 
 
 # ── POST /register ────────────────────────────────────────────────────────────
-@https_fn.on_request(region=REGION, cors=https_fn.options.CorsOptions(
-    cors_origins="*", cors_methods=["POST", "OPTIONS"]
-))
+@https_fn.on_request(region=REGION, cors=True)
 def register_fn(req: https_fn.Request) -> https_fn.Response:
     early = handle_options(req)
     if early:
@@ -66,9 +64,7 @@ def register_fn(req: https_fn.Request) -> https_fn.Response:
 
 
 # ── POST /createSession ───────────────────────────────────────────────────────
-@https_fn.on_request(region=REGION, cors=https_fn.options.CorsOptions(
-    cors_origins="*", cors_methods=["POST", "OPTIONS"]
-))
+@https_fn.on_request(region=REGION, cors=True)
 def create_session_fn(req: https_fn.Request) -> https_fn.Response:
     early = handle_options(req)
     if early:
@@ -103,9 +99,7 @@ def create_session_fn(req: https_fn.Request) -> https_fn.Response:
 
 
 # ── POST /logout ──────────────────────────────────────────────────────────────
-@https_fn.on_request(region=REGION, cors=https_fn.options.CorsOptions(
-    cors_origins="*", cors_methods=["POST", "OPTIONS"]
-))
+@https_fn.on_request(region=REGION, cors=True)
 def logout_fn(req: https_fn.Request) -> https_fn.Response:
     early = handle_options(req)
     if early:
@@ -134,9 +128,7 @@ def logout_fn(req: https_fn.Request) -> https_fn.Response:
 
 
 # ── POST /passwordReset ───────────────────────────────────────────────────────
-@https_fn.on_request(region=REGION, cors=https_fn.options.CorsOptions(
-    cors_origins="*", cors_methods=["POST", "OPTIONS"]
-))
+@https_fn.on_request(region=REGION, cors=True)
 def password_reset_fn(req: https_fn.Request) -> https_fn.Response:
     early = handle_options(req)
     if early:
@@ -157,9 +149,7 @@ def password_reset_fn(req: https_fn.Request) -> https_fn.Response:
 
 
 # ── POST /createInvite ────────────────────────────────────────────────────────
-@https_fn.on_request(region=REGION, cors=https_fn.options.CorsOptions(
-    cors_origins="*", cors_methods=["POST", "OPTIONS"]
-))
+@https_fn.on_request(region=REGION, cors=True)
 def create_invite_fn(req: https_fn.Request) -> https_fn.Response:
     early = handle_options(req)
     if early:
