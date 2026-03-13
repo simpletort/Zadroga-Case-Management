@@ -16,9 +16,11 @@ ROLE_HIERARCHY = {
 }
 
 ENDPOINT_MIN_ROLES = {
-    "signed_url":       "admin_staff",
-    "metadata_read":    "admin_staff",
-    "lifecycle_update": "system_admin",
+    "signed_url":          "admin_staff",
+    "metadata_read":       "admin_staff",
+    "lifecycle_update":    "system_admin",
+    "upload_register":     "admin_staff",
+    "upload_status_read":  "admin_staff",
 }
 
 

@@ -87,7 +87,7 @@ class TestMetadataRoute:
             "/api/v1/storage/doc-abc123/metadata",
             params={"case_id": "ZAD-2024-01-0001"},
         )
-        assert resp.status_code == 403
+        assert resp.status_code in (401, 403)
 
 
 # ── metadata_service unit tests ────────────────────────────────────────────

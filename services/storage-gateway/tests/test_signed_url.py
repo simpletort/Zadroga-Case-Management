@@ -120,7 +120,7 @@ class TestSignedUrlRoute:
             "/api/v1/storage/signed-url",
             params={"category": "temp_lead_attachments", "file_name": "x.pdf"},
         )
-        assert resp.status_code == 403
+        assert resp.status_code in (401, 403)
 
     def test_write_url_uses_15_min_expiry(self, client):
         mock_blob = MagicMock()

@@ -34,6 +34,14 @@ class VerificationStatus(str, Enum):
     rejected = "Rejected"
 
 
+class ScanStatus(str, Enum):
+    pending = "pending"       # registered, not yet uploaded
+    scanning = "scanning"     # Cloud Function picked it up
+    clean = "clean"           # passed scan, moved to final path
+    infected = "infected"     # malware detected, quarantined
+    error = "error"           # scan failed unexpectedly
+
+
 # ── Request / Response models ──────────────────────────────────────────────
 
 class SignedUrlResponse(BaseModel):
@@ -85,3 +93,37 @@ class LifecycleUpdateResponse(BaseModel):
     bucket: str
     rules_applied: int
     message: str
+
+
+# ── Upload / Virus-scan models ─────────────────────────────────────────────
+
+class UploadRegistrationRequest(BaseModel):
+    file_name: str = Field(..., description="Original file name including extension")
+    category: DocumentCategory
+    content_type: str = Field(..., description="MIME type of the file")
+    case_id: Optional[str] = Field(
+        None, description="Required for case-scoped document categories"
+    )
+    size_bytes: Optional[int] = Field(None, ge=1)
+
+
+class UploadRegistrationResponse(BaseModel):
+    file_id: str = Field(..., description="UUID assigned to this upload — use for status polling")
+    staging_path: str = Field(..., description="GCS staging path where the signed URL points")
+    signed_url: str = Field(..., description="PUT this URL with the file bytes to upload")
+    expires_at: datetime
+    bucket: str
+
+
+class UploadStatusResponse(BaseModel):
+    file_id: str
+    case_id: Optional[str] = None
+    file_name: str
+    category: DocumentCategory
+    scan_status: ScanStatus
+    staging_path: str
+    final_path: Optional[str] = Field(None, description="Permanent GCS path — set after clean scan")
+    quarantine_path: Optional[str] = Field(None, description="Set if file was infected")
+    is_quarantined: bool = False
+    scan_completed_at: Optional[datetime] = None
+    registered_at: datetime

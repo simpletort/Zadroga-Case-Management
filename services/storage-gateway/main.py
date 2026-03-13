@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import get_settings
-from app.routes import signed_url, metadata, lifecycle
+from app.routes import signed_url, metadata, lifecycle, upload
 
 settings = get_settings()
 
@@ -53,7 +53,7 @@ app.add_middleware(
         "https://staff.simpletort.com",
     ],
     allow_credentials=True,
-    allow_methods=["GET", "PUT"],
+    allow_methods=["GET", "PUT", "POST"],
     allow_headers=["Authorization", "Content-Type"],
 )
 
@@ -75,3 +75,4 @@ def health():
 app.include_router(signed_url.router)
 app.include_router(metadata.router)
 app.include_router(lifecycle.router)
+app.include_router(upload.router)

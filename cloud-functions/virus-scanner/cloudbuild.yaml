@@ -1,0 +1,66 @@
+# Cloud Build pipeline for the virus-scanner Cloud Function.
+#
+# Steps:
+#   1. Run unit tests
+#   2. Build & push Docker image (with updated ClamAV definitions baked in)
+#   3. Deploy to Cloud Run (as a Cloud Function Gen 2 backing service)
+#   4. Update the Eventarc trigger to point to the new revision
+#
+# Substitution variables (set in Cloud Build trigger):
+#   _REPO       — Artifact Registry repo URL
+#   _REGION     — GCP region (e.g. us-central1)
+#   _ENV        — dev | test | prod
+#   _BUCKET     — GCS bucket name
+
+steps:
+  # ── Tests ──────────────────────────────────────────────────────────────
+  - name: "python:3.11-slim"
+    dir: "cloud-functions/virus-scanner"
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        pip install -r requirements.txt pytest pytest-mock
+        pytest tests/ -v --tb=short
+
+  # ── Build image ────────────────────────────────────────────────────────
+  - name: "gcr.io/cloud-builders/docker"
+    dir: "cloud-functions/virus-scanner"
+    args:
+      - build
+      - "-t"
+      - "$_REPO/virus-scanner:$COMMIT_SHA"
+      - "-t"
+      - "$_REPO/virus-scanner:latest"
+      - "."
+
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "$_REPO/virus-scanner:$COMMIT_SHA"]
+
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "$_REPO/virus-scanner:latest"]
+
+  # ── Deploy to Cloud Run ────────────────────────────────────────────────
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - virus-scanner
+      - "--image=$_REPO/virus-scanner:$COMMIT_SHA"
+      - "--region=$_REGION"
+      - "--platform=managed"
+      - "--no-allow-unauthenticated"
+      - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,GCS_BUCKET_NAME=$_BUCKET,ENV=$_ENV"
+      - "--memory=1Gi"
+      - "--cpu=1"
+      - "--timeout=300s"
+      - "--max-instances=5"
+      - "--min-instances=0"
+
+images:
+  - "$_REPO/virus-scanner:$COMMIT_SHA"
+  - "$_REPO/virus-scanner:latest"
+
+options:
+  logging: CLOUD_LOGGING_ONLY

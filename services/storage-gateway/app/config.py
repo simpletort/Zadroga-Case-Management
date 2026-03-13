@@ -12,6 +12,13 @@ class Settings(BaseSettings):
     env: str = "prod"  # dev | test | prod — injected via ENV trigger variable
     log_level: str = "INFO"
 
+    # Virus scanning — staging / quarantine prefixes
+    gcs_staging_prefix: str = "staging"
+    gcs_quarantine_prefix: str = "quarantine"
+
+    # Pub/Sub topic for virus-detected notifications
+    pubsub_topic_virus_detected: str = "virus-detected"
+
     model_config = {"env_file": ".env", "case_sensitive": False}
 
 
