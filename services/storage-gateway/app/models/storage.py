@@ -57,15 +57,33 @@ class FileMetadataResponse(BaseModel):
     case_id: str
     file_name: str
     category: DocumentCategory
-    gcs_path: str
+    gcs_path: Optional[str] = Field(None, description="Permanent GCS path — None until clean scan completes")
     mime_type: Optional[str] = None
     size_bytes: Optional[int] = None
     uploaded_by: Optional[str] = None
     uploaded_at: Optional[datetime] = None
     processing_status: ProcessingStatus = ProcessingStatus.pending
     verification_status: VerificationStatus = VerificationStatus.unverified
+    scan_status: ScanStatus = ScanStatus.pending
+    extracted_data: Optional[dict[str, Any]] = Field(None, description="Structured data extracted by the processing pipeline")
     document_ai_results: Optional[dict[str, Any]] = None
     medical_ai_results: Optional[dict[str, Any]] = None
+
+
+class DocumentListResponse(BaseModel):
+    case_id: str
+    documents: list[FileMetadataResponse]
+    page_size: int
+    next_page_token: Optional[str] = Field(
+        None, description="Pass as page_token to fetch the next page; None when this is the last page"
+    )
+    has_more: bool
+
+
+class DocumentMetadataUpdateRequest(BaseModel):
+    processing_status: Optional[ProcessingStatus] = None
+    verification_status: Optional[VerificationStatus] = None
+    extracted_data: Optional[dict[str, Any]] = None
 
 
 class LifecycleCondition(BaseModel):

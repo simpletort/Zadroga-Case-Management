@@ -124,6 +124,7 @@ def register_upload(
             "processingStatus": ProcessingStatus.pending.value,
             "verificationStatus": VerificationStatus.unverified.value,
             "scanStatus": ScanStatus.pending.value,
+            "extractedData": None,
             "documentAiResults": None,
             "medicalAiResults": None,
             "manualOverrides": [],

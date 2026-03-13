@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     # Pub/Sub topic for virus-detected notifications
     pubsub_topic_virus_detected: str = "virus-detected"
 
+    # Service identity — injected as SERVICE_NAME=$_SERVICE_NAME by Cloud Build
+    # so every audit log entry carries the exact Cloud Run service name.
+    service_name: str = "storage-gateway"
+
     model_config = {"env_file": ".env", "case_sensitive": False}
 
 

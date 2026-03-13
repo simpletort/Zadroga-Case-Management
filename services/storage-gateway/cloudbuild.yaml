@@ -34,7 +34,7 @@ steps:
       - "--region=$_REGION"
       - "--platform=managed"
       - "--no-allow-unauthenticated"
-      - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,ENV=$_ENV"
+      - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,ENV=$_ENV,SERVICE_NAME=$_SERVICE_NAME"
       - "--memory=512Mi"
       - "--cpu=1"
       - "--max-instances=10"

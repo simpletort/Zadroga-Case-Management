@@ -17,7 +17,7 @@ All lifecycle endpoints require system_admin role.
 
 import logging
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from app.models.storage import (
     CaseHoldRequest,
@@ -34,6 +34,7 @@ from app.services.gcs_service import (
     set_case_documents_hold,
     update_lifecycle_rules,
 )
+from app.utils.audit import AuditAction, log_audit_event
 from app.utils.auth import require_min_role
 from app.utils.gcs_client import get_gcs_client
 from app.config import get_settings
@@ -180,9 +181,10 @@ def update_soft_delete(
     summary="Set or release temporary hold on all documents in a case (system_admin only)",
 )
 def update_case_hold(
+    request: Request,
     case_id: str,
     body: CaseHoldRequest,
-    _user: dict = Depends(require_min_role("lifecycle_update")),
+    user: dict = Depends(require_min_role("lifecycle_update")),
 ):
     """
     Sets ``temporaryHold`` on every GCS object under ``{caseId}/``.
@@ -196,6 +198,16 @@ def update_case_hold(
     count = set_case_documents_hold(
         gcs_client=gcs_client, case_id=case_id, hold=body.hold
     )
+
+    audit_action = AuditAction.hold_set if body.hold else AuditAction.hold_release
+    log_audit_event(
+        action=audit_action,
+        user=user,
+        request=request,
+        case_id=case_id,
+        metadata={"documents_updated": count},
+    )
+
     action = "applied to" if body.hold else "released from"
     return CaseHoldResponse(
         case_id=case_id,

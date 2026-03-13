@@ -21,6 +21,8 @@ ENDPOINT_MIN_ROLES = {
     "lifecycle_update":    "system_admin",
     "upload_register":     "admin_staff",
     "upload_status_read":  "admin_staff",
+    "documents_read":      "admin_staff",
+    "documents_update":    "admin_staff",
 }
 
 

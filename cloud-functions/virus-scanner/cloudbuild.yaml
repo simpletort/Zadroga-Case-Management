@@ -7,10 +7,11 @@
 #   4. Update the Eventarc trigger to point to the new revision
 #
 # Substitution variables (set in Cloud Build trigger):
-#   _REPO       — Artifact Registry repo URL
-#   _REGION     — GCP region (e.g. us-central1)
-#   _ENV        — dev | test | prod
-#   _BUCKET     — GCS bucket name
+#   _SERVICE_NAME — Cloud Run service / image name (e.g. virus-scanner)
+#   _REPO         — Artifact Registry repo URL
+#   _REGION       — GCP region (e.g. us-central1)
+#   _ENV          — dev | test | prod
+#   _BUCKET       — GCS bucket name
 
 steps:
   # ── Tests ──────────────────────────────────────────────────────────────
@@ -29,16 +30,16 @@ steps:
     args:
       - build
       - "-t"
-      - "$_REPO/virus-scanner:$COMMIT_SHA"
+      - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
       - "-t"
-      - "$_REPO/virus-scanner:latest"
+      - "$_REPO/$_SERVICE_NAME:latest"
       - "."
 
   - name: "gcr.io/cloud-builders/docker"
-    args: ["push", "$_REPO/virus-scanner:$COMMIT_SHA"]
+    args: ["push", "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"]
 
   - name: "gcr.io/cloud-builders/docker"
-    args: ["push", "$_REPO/virus-scanner:latest"]
+    args: ["push", "$_REPO/$_SERVICE_NAME:latest"]
 
   # ── Deploy to Cloud Run ────────────────────────────────────────────────
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
@@ -46,8 +47,8 @@ steps:
     args:
       - run
       - deploy
-      - virus-scanner
-      - "--image=$_REPO/virus-scanner:$COMMIT_SHA"
+      - "$_SERVICE_NAME"
+      - "--image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
       - "--region=$_REGION"
       - "--platform=managed"
       - "--no-allow-unauthenticated"
@@ -59,8 +60,8 @@ steps:
       - "--min-instances=0"
 
 images:
-  - "$_REPO/virus-scanner:$COMMIT_SHA"
-  - "$_REPO/virus-scanner:latest"
+  - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+  - "$_REPO/$_SERVICE_NAME:latest"
 
 options:
   logging: CLOUD_LOGGING_ONLY
