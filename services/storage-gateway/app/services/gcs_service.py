@@ -117,3 +117,80 @@ def update_lifecycle_rules(
         "Lifecycle rules updated on bucket %s: %d rule(s)",
         settings.gcs_bucket_name, len(rules),
     )
+
+
+def get_lifecycle_rules(gcs_client: gcs.Client) -> tuple[list[dict], Optional[int]]:
+    """
+    Read the current bucket lifecycle configuration and soft-delete retention.
+
+    Returns:
+        (rules_list, soft_delete_retention_days)
+        soft_delete_retention_days is None if no soft-delete policy is set.
+    """
+    bucket = gcs_client.get_bucket(settings.gcs_bucket_name)
+    rules = list(bucket.lifecycle_rules)
+
+    retention_days: Optional[int] = None
+    try:
+        secs = bucket.soft_delete_policy.retention_duration_seconds
+        if secs:
+            retention_days = int(secs) // 86400
+    except Exception:
+        pass  # soft_delete_policy may not exist on all SDK versions / bucket types
+
+    logger.info(
+        "Lifecycle rules read from bucket %s: %d rule(s), soft_delete=%s days",
+        settings.gcs_bucket_name, len(rules), retention_days,
+    )
+    return rules, retention_days
+
+
+def configure_soft_delete(gcs_client: gcs.Client, retention_days: int = 30) -> None:
+    """
+    Set the soft-delete retention policy on the bucket.
+
+    Objects deleted while this policy is active are recoverable for
+    `retention_days` days via GCS restore operations.
+    """
+    bucket = gcs_client.bucket(settings.gcs_bucket_name)
+    bucket.soft_delete_policy.retention_duration_seconds = retention_days * 86400
+    bucket.patch()
+    logger.info(
+        "Soft-delete policy set on bucket %s: %d days",
+        settings.gcs_bucket_name, retention_days,
+    )
+
+
+def set_case_documents_hold(
+    gcs_client: gcs.Client,
+    case_id: str,
+    hold: bool,
+) -> int:
+    """
+    Set or release a temporary hold on every object under {caseId}/.
+
+    When hold=True  — objects are exempt from lifecycle transitions and deletion.
+    When hold=False — hold is released; lifecycle rules resume for those objects.
+
+    Also writes custom metadata ``case-status`` = ``active`` / ``archived`` so
+    the hold state is human-readable in the GCS console.
+
+    Returns the number of objects updated.
+    """
+    bucket = gcs_client.bucket(settings.gcs_bucket_name)
+    prefix = "{}/".format(case_id)
+    blobs = list(gcs_client.list_blobs(settings.gcs_bucket_name, prefix=prefix))
+
+    case_status = "active" if hold else "archived"
+    updated = 0
+    for blob in blobs:
+        blob.temporary_hold = hold
+        blob.metadata = {**(blob.metadata or {}), "case-status": case_status}
+        blob.patch()
+        updated += 1
+
+    logger.info(
+        "Case hold updated: case_id=%s hold=%s objects_updated=%d",
+        case_id, hold, updated,
+    )
+    return updated

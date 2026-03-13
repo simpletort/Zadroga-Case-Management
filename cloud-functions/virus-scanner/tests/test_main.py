@@ -100,7 +100,93 @@ class TestVirusScanFunction:
         mock_bucket.copy_blob.assert_called_once()
         mock_blob.delete.assert_called_once()
 
-    def test_infected_scan_quarantines_and_publishes(self):
+    def test_clean_scan_sets_temporary_hold_on_destination(self):
+        """After a clean scan, the permanent blob gets temporaryHold=True and case-status metadata."""
+        from main import virus_scan
+        file_id = "uuid-hold-001"
+        event = _make_event("test-bucket", "staging/{}/records.pdf".format(file_id))
+
+        mock_snap = _make_upload_snap(file_id)
+        # Set up upload_ref so that .get() returns the snap with real caseId / finalPath.
+        mock_upload_ref = MagicMock()
+        mock_upload_ref.get.return_value = mock_snap
+        mock_db = MagicMock()
+        mock_db.collection.return_value.document.return_value = mock_upload_ref
+
+        # Separate mock blobs for staging vs destination
+        mock_staging_blob = MagicMock()
+        mock_dest_blob = MagicMock()
+        mock_bucket = MagicMock()
+
+        # bucket.blob(blob_path) returns staging; bucket.blob(final_path) returns dest
+        def _blob_factory(path):
+            if path.startswith("staging/"):
+                return mock_staging_blob
+            return mock_dest_blob
+
+        mock_bucket.blob.side_effect = _blob_factory
+        mock_gcs_client = MagicMock()
+        mock_gcs_client.bucket.return_value = mock_bucket
+
+        from scanner import ScanResult
+        clean_result = ScanResult(is_clean=True, raw_output="/tmp/f: OK")
+
+        with patch("main._get_db", return_value=mock_db), \
+             patch("main._get_gcs", return_value=mock_gcs_client), \
+             patch("main.scan_file", return_value=clean_result), \
+             patch("main.tempfile.NamedTemporaryFile") as mock_tmp:
+
+            mock_tmp.return_value.__enter__ = MagicMock(return_value=MagicMock(name="/tmp/f.pdf"))
+            mock_tmp.return_value.__exit__ = MagicMock(return_value=False)
+
+            virus_scan(event)
+
+        # Hold must be set on the destination blob, not the staging blob
+        assert mock_dest_blob.temporary_hold is True
+        assert mock_dest_blob.metadata["case-status"] == "active"
+        mock_dest_blob.patch.assert_called_once()
+
+    def test_clean_scan_no_hold_for_non_case_files(self):
+        """Files with no caseId (e.g. temp-lead-attachments) should NOT get a hold."""
+        from main import virus_scan
+        file_id = "uuid-ncase-001"
+        event = _make_event("test-bucket", "staging/{}/lead.pdf".format(file_id))
+
+        # Snap with no caseId
+        mock_snap = _make_upload_snap(file_id, case_id=None)
+        mock_upload_ref = MagicMock()
+        mock_upload_ref.get.return_value = mock_snap
+        mock_db = MagicMock()
+        mock_db.collection.return_value.document.return_value = mock_upload_ref
+
+        mock_dest_blob = MagicMock()
+        mock_staging_blob = MagicMock()
+        mock_bucket = MagicMock()
+
+        def _blob_factory(path):
+            return mock_staging_blob if path.startswith("staging/") else mock_dest_blob
+
+        mock_bucket.blob.side_effect = _blob_factory
+        mock_gcs_client = MagicMock()
+        mock_gcs_client.bucket.return_value = mock_bucket
+
+        from scanner import ScanResult
+        clean_result = ScanResult(is_clean=True, raw_output="/tmp/f: OK")
+
+        with patch("main._get_db", return_value=mock_db), \
+             patch("main._get_gcs", return_value=mock_gcs_client), \
+             patch("main.scan_file", return_value=clean_result), \
+             patch("main.tempfile.NamedTemporaryFile") as mock_tmp:
+
+            mock_tmp.return_value.__enter__ = MagicMock(return_value=MagicMock(name="/tmp/f.pdf"))
+            mock_tmp.return_value.__exit__ = MagicMock(return_value=False)
+
+            virus_scan(event)
+
+        # No hold should be set — destination blob.patch should not be called for hold
+        assert not mock_dest_blob.patch.called or mock_dest_blob.temporary_hold is not True
+
+    def test_infected_scan_does_not_set_hold(self):
         from main import virus_scan
         file_id = "uuid-infected-001"
         event = _make_event("test-bucket", "staging/{}/malware.pdf".format(file_id))
@@ -143,3 +229,5 @@ class TestVirusScanFunction:
         call_kwargs = mock_pub.call_args.kwargs
         assert call_kwargs["threat"] == "Eicar-Signature"
         assert call_kwargs["file_id"] == file_id
+        # Infected files must NOT get a temporary hold
+        assert mock_blob.temporary_hold is not True

@@ -204,6 +204,20 @@ def _handle_clean(
     # Delete staging object
     staging_blob.delete()
 
+    # Protect the permanent file from lifecycle transitions until the case is
+    # closed/settled.  temporaryHold=True means GCS will skip NEARLINE/COLDLINE
+    # transitions and deletion for this object regardless of age.
+    # Custom metadata provides a human-readable label in the GCS console.
+    if case_id:
+        dest_blob = bucket.blob(final_path)
+        dest_blob.temporary_hold = True
+        dest_blob.metadata = {"case-status": "active"}
+        dest_blob.patch()
+        logger.info(
+            "Temporary hold set on permanent file: fileId=%s path=%s",
+            file_id, final_path,
+        )
+
     updates = {
         "scanStatus": "clean",
         "scanCompletedAt": scan_completed_at,

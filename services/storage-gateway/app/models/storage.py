@@ -70,6 +70,9 @@ class FileMetadataResponse(BaseModel):
 
 class LifecycleCondition(BaseModel):
     age_days: int = Field(..., ge=1, description="Object age in days before rule applies")
+    matches_prefix: Optional[list[str]] = Field(
+        None, description="Restrict rule to objects whose name starts with one of these prefixes"
+    )
 
 
 class LifecycleAction(str, Enum):
@@ -80,7 +83,7 @@ class LifecycleAction(str, Enum):
 class LifecycleRule(BaseModel):
     action: LifecycleAction
     storage_class: Optional[str] = Field(
-        None, description="Target storage class for SetStorageClass action (e.g. COLDLINE)"
+        None, description="Target storage class for SetStorageClass action (e.g. NEARLINE, COLDLINE)"
     )
     condition: LifecycleCondition
 
@@ -92,6 +95,38 @@ class LifecycleUpdateRequest(BaseModel):
 class LifecycleUpdateResponse(BaseModel):
     bucket: str
     rules_applied: int
+    message: str
+
+
+class LifecyclePolicyResponse(BaseModel):
+    bucket: str
+    rules: list[dict[str, Any]]
+    soft_delete_retention_days: Optional[int] = Field(
+        None, description="Soft-delete retention window in days; None if not configured"
+    )
+
+
+class SoftDeleteRequest(BaseModel):
+    retention_days: int = Field(
+        30, ge=7, le=90,
+        description="Number of days soft-deleted objects are recoverable (7–90)"
+    )
+
+
+class SoftDeleteResponse(BaseModel):
+    bucket: str
+    retention_days: int
+    message: str
+
+
+class CaseHoldRequest(BaseModel):
+    hold: bool = Field(..., description="True to protect documents from lifecycle; False to release")
+
+
+class CaseHoldResponse(BaseModel):
+    case_id: str
+    hold: bool
+    documents_updated: int
     message: str
 
 
