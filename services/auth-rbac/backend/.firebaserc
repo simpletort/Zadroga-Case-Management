@@ -1,8 +1,0 @@
-{
-  "projects": {
-    "default":    "simple-tort-zadroga-prod",
-    "development":"simple-tort-zadroga-prod",
-    "staging":    "simple-tort-zadroga-prod",
-    "production": "simple-tort-zadroga-prod"
-  }
-}
