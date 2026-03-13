@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 @auth_fn.on_user_created()
-def on_user_created(event: auth_fn.AuthBlockingEvent) -> None:
+def on_user_created(event: auth_fn.AuthEvent) -> None:
     """
     Fires when a new Firebase Auth user is created.
     Ensures a Firestore profile always exists even if the REST API call
@@ -56,7 +56,7 @@ def on_user_created(event: auth_fn.AuthBlockingEvent) -> None:
 
 
 @auth_fn.on_user_deleted()
-def on_user_deleted(event: auth_fn.AuthBlockingEvent) -> None:
+def on_user_deleted(event: auth_fn.AuthEvent) -> None:
     """
     Fires when a Firebase Auth user is deleted.
     Soft-deletes their Firestore profile to preserve the audit trail.
