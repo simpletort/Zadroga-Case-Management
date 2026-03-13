@@ -3,10 +3,11 @@ name: Deploy auth-rbac
 on:
   push:
     branches:
+      - main
       - dev
     paths:
-      - "services/auth-rbac/**"   # only triggers when this service changes
-
+      - "services/auth-rbac/**"
+  workflow_dispatch:
 jobs:
   deploy:
     runs-on: ubuntu-latest
