@@ -25,20 +25,17 @@ steps:
     args: ["push", "$_REPO/$_SERVICE_NAME:latest"]
 
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
-    entrypoint: gcloud
+    entrypoint: bash
     args:
-      - run
-      - deploy
-      - "$_SERVICE_NAME"
-      - "--image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
-      - "--region=$_REGION"
-      - "--platform=managed"
-      - "--no-allow-unauthenticated"
-      - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,ENV=$_ENV,SERVICE_NAME=$_SERVICE_NAME"
-      - "--memory=512Mi"
-      - "--cpu=1"
-      - "--max-instances=10"
-      - "--min-instances=0"
+      - "-c"
+      - |
+        bash scripts/deploy.sh \
+          $_ENV \
+          $_SERVICE_NAME \
+          $_REPO \
+          $COMMIT_SHA \
+          $_REGION \
+          $PROJECT_ID
 
 images:
   - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
@@ -46,3 +43,4 @@ images:
 
 options:
   logging: CLOUD_LOGGING_ONLY
+  timeout: 1800s   # 30 min — canary window (15 min) + build time

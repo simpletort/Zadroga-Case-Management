@@ -24,11 +24,11 @@ REVISION_COUNT=$(gcloud run services describe $SERVICE_NAME \
 
 if [ "$REVISION_COUNT" -gt "1" ]; then
   echo "Active canary detected. Promoting stable revision to 100% before proceeding..."
-  
+
   STABLE_REVISION=$(gcloud run services describe $SERVICE_NAME \
     --region=$REGION \
     --project=$PROJECT_ID \
-    --format="value(status.traffic.revisionName)" | tail -1)
+    --format="value(status.traffic.revisionName)" | head -1)
 
   gcloud run services update-traffic $SERVICE_NAME \
     --region=$REGION \
@@ -39,7 +39,17 @@ if [ "$REVISION_COUNT" -gt "1" ]; then
 fi
 
 # ─────────────────────────────────────────────
-# Step 2: Deploy new revision with no traffic
+# Step 2: Capture current stable revision BEFORE deploying
+# ─────────────────────────────────────────────
+STABLE_REVISION=$(gcloud run services describe $SERVICE_NAME \
+  --region=$REGION \
+  --project=$PROJECT_ID \
+  --format="value(status.traffic.revisionName)" | head -1)
+
+echo "Stable revision: $STABLE_REVISION"
+
+# ─────────────────────────────────────────────
+# Step 3: Deploy new revision with no traffic
 # ─────────────────────────────────────────────
 echo "Deploying new revision with no traffic..."
 
@@ -48,12 +58,10 @@ gcloud run deploy $SERVICE_NAME \
   --region=$REGION \
   --project=$PROJECT_ID \
   --platform=managed \
-  --allow-unauthenticated \
-  --set-env-vars=ENV=prod \
   --no-traffic
 
 # ─────────────────────────────────────────────
-# Step 3: Get the new revision name
+# Step 4: Get the new revision name
 # ─────────────────────────────────────────────
 NEW_REVISION=$(gcloud run revisions list \
   --service=$SERVICE_NAME \
@@ -63,16 +71,6 @@ NEW_REVISION=$(gcloud run revisions list \
   --limit=1)
 
 echo "New revision: $NEW_REVISION"
-
-# ─────────────────────────────────────────────
-# Step 4: Get current stable revision name
-# ─────────────────────────────────────────────
-STABLE_REVISION=$(gcloud run services describe $SERVICE_NAME \
-  --region=$REGION \
-  --project=$PROJECT_ID \
-  --format="value(status.traffic.revisionName)" | head -1)
-
-echo "Stable revision: $STABLE_REVISION"
 
 # ─────────────────────────────────────────────
 # Step 5: Split traffic 10% canary / 90% stable
