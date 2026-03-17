@@ -1,0 +1,74 @@
+# Cloud Build pipeline for the intake-form-dispatcher Cloud Function.
+#
+# Steps:
+#   1. Run unit tests
+#   2. Build & push Docker image
+#   3. Deploy to Cloud Run (HTTP trigger, internal only)
+#
+# Substitution variables (set in Cloud Build trigger):
+#   _SERVICE_NAME      — Cloud Run service / image name (e.g. intake-form-dispatcher)
+#   _REPO              — Artifact Registry repo URL
+#   _REGION            — GCP region (e.g. us-central1)
+#   _ENV               — dev | test | prod
+#   _FROM_EMAIL        — sender address (e.g. noreply@simpletort.com)
+#   _ADMIN_EMAIL       — admin alert address
+#   _GOOGLE_FORM_BASE_URL     — Google Forms pre-fill base URL
+#   _GOOGLE_FORM_ENTRY_TOKEN  — entry ID for Intake Token field
+#   _GOOGLE_FORM_ENTRY_FIRST  — entry ID for First Name field
+#   _GOOGLE_FORM_ENTRY_LAST   — entry ID for Last Name field
+#   _GOOGLE_FORM_ENTRY_EMAIL  — entry ID for Email Address field
+#   _GOOGLE_FORM_ENTRY_PHONE  — entry ID for Phone Number field
+
+steps:
+  # ── Tests ──────────────────────────────────────────────────────────────
+  - name: "python:3.11-slim"
+    dir: "cloud-functions/intake-form-dispatcher"
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        pip install -r requirements.txt pytest pytest-mock
+        pytest tests/ -v --tb=short
+
+  # ── Build image ────────────────────────────────────────────────────────
+  - name: "gcr.io/cloud-builders/docker"
+    dir: "cloud-functions/intake-form-dispatcher"
+    args:
+      - build
+      - "-t"
+      - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+      - "-t"
+      - "$_REPO/$_SERVICE_NAME:latest"
+      - "."
+
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"]
+
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "$_REPO/$_SERVICE_NAME:latest"]
+
+  # ── Deploy to Cloud Run ────────────────────────────────────────────────
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - "$_SERVICE_NAME"
+      - "--image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+      - "--region=$_REGION"
+      - "--platform=managed"
+      - "--no-allow-unauthenticated"
+      - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,ENV=$_ENV,FROM_EMAIL=$_FROM_EMAIL,ADMIN_EMAIL=$_ADMIN_EMAIL,GOOGLE_FORM_BASE_URL=$_GOOGLE_FORM_BASE_URL,GOOGLE_FORM_ENTRY_TOKEN=$_GOOGLE_FORM_ENTRY_TOKEN,GOOGLE_FORM_ENTRY_FIRST=$_GOOGLE_FORM_ENTRY_FIRST,GOOGLE_FORM_ENTRY_LAST=$_GOOGLE_FORM_ENTRY_LAST,GOOGLE_FORM_ENTRY_EMAIL=$_GOOGLE_FORM_ENTRY_EMAIL,GOOGLE_FORM_ENTRY_PHONE=$_GOOGLE_FORM_ENTRY_PHONE"
+      - "--set-secrets=SENDGRID_API_KEY=SENDGRID_API_KEY:latest"
+      - "--memory=256Mi"
+      - "--cpu=1"
+      - "--timeout=60s"
+      - "--max-instances=10"
+      - "--min-instances=0"
+
+images:
+  - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+  - "$_REPO/$_SERVICE_NAME:latest"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
