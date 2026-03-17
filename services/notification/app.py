@@ -1,12 +1,315 @@
-from flask import Flask
+"""
+app.py — FastAPI application for the Notification Service.
 
-app = Flask(__name__)
+Endpoints
+---------
+POST /tasks/sms
+    Cloud Tasks HTTP handler.  Receives the task payload, validates the
+    OIDC token injected by Cloud Tasks, and calls sms_service.send_sms().
+    Must return 2xx for Cloud Tasks to consider the task done; returns 4xx
+    for payload errors (no retry) and 5xx for transient failures (will retry).
+
+POST /webhooks/twilio/status
+    Twilio status callback.  Updates the delivery record with the final
+    message status (delivered, failed, undelivered) from Twilio.
+
+POST /webhooks/twilio/inbound
+    Twilio inbound message webhook.  Handles STOP/START/HELP keywords to
+    manage opt-out status.
+
+GET  /health
+    Cloud Run / load-balancer health probe (no auth).
+
+Authentication
+--------------
+* /tasks/sms     — OIDC token from Cloud Tasks (verified via Google public certs)
+* /webhooks/*    — Twilio request signature (X-Twilio-Signature header)
+* /health        — none
+
+OIDC verification uses google-auth rather than a full JWT library to stay
+aligned with GCP's recommended pattern for authenticating Cloud Tasks callers.
+"""
+from __future__ import annotations
+
+import hashlib
+import hmac
+import os
+from contextlib import asynccontextmanager
+from typing import Optional
+
+import google.auth.transport.requests
+import google.oauth2.id_token
+from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.responses import JSONResponse, PlainTextResponse
+from pydantic import BaseModel, Field
+
+from config import get_settings
+from logging_config import get_logger, setup_logging
+from services.firestore_client import get_db
+from services.opt_out_service import clear_opt_out, record_opt_out
+from services.sms_service import SmsDispatchResult, send_sms
+
+logger = get_logger(__name__)
 
 
-@app.route("/")
-def hello():
-    return "Hello, World!"
+# ── Lifespan ──────────────────────────────────────────────────────────────────
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    setup_logging()
+    settings = get_settings()
+    logger.info(
+        "notification_service_starting",
+        env=settings.app_env,
+        project=settings.gcp_project_id,
+    )
+    # Eagerly init Firestore client so first-request latency is lower
+    get_db()
+    yield
+    logger.info("notification_service_shutdown")
+
+
+app = FastAPI(
+    title="ZAD Notification Service",
+    version="1.0.0",
+    description="Twilio SMS dispatch, opt-out management, and delivery tracking",
+    openapi_url="/openapi.json",
+    docs_url="/docs",
+    lifespan=lifespan,
+)
+
+
+# ── Request models ────────────────────────────────────────────────────────────
+
+class SmsTaskPayload(BaseModel):
+    """Payload sent by Cloud Tasks (and by lead-intake when enqueueing)."""
+    to: str = Field(..., description="E.164 destination phone number")
+    templateId: str = Field(..., description="Firestore SMS template document ID")
+    variables: dict = Field(default_factory=dict)
+    caseId: Optional[str] = Field(None)
+    requestId: Optional[str] = Field(None)
+
+
+# ── OIDC verification helper ──────────────────────────────────────────────────
+
+_google_request = google.auth.transport.requests.Request()
+
+
+def _verify_oidc_token(request: Request) -> None:
+    """
+    Verify the OIDC Bearer token injected by Cloud Tasks.
+
+    Raises HTTP 401 if the token is missing or invalid.
+    Skipped in non-production environments to ease local testing.
+    """
+    settings = get_settings()
+    if not settings.is_production:
+        return  # Skip in dev/staging — allow unauthenticated task calls
+
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing OIDC Bearer token",
+        )
+    token = auth_header[len("Bearer "):]
+
+    try:
+        google.oauth2.id_token.verify_firebase_token(
+            token,
+            _google_request,
+            audience=settings.notification_service_url,
+        )
+    except Exception as exc:
+        logger.warning("oidc_verification_failed", error=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid OIDC token",
+        )
+
+
+# ── Twilio signature verification ─────────────────────────────────────────────
+
+def _verify_twilio_signature(request: Request, body: bytes) -> None:
+    """
+    Validate the X-Twilio-Signature header to ensure the webhook came from
+    Twilio and not an arbitrary caller.
+
+    Uses HMAC-SHA1 as specified in the Twilio security docs.
+    Skipped in non-production environments.
+    """
+    settings = get_settings()
+    if not settings.is_production:
+        return
+
+    twilio_sig = request.headers.get("X-Twilio-Signature", "")
+    url = str(request.url)
+    auth_token = settings.twilio_auth_token.encode("utf-8")
+
+    # Compute expected signature: HMAC-SHA1(auth_token, url + sorted POST params)
+    # For JSON webhooks the body is included directly after the URL.
+    mac = hmac.new(auth_token, (url + body.decode("utf-8")).encode("utf-8"), hashlib.sha1)
+    import base64
+    expected = base64.b64encode(mac.digest()).decode("utf-8")
+
+    if not hmac.compare_digest(expected, twilio_sig):
+        logger.warning("twilio_signature_invalid", url=url)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid Twilio signature",
+        )
+
+
+# ── Task handler ──────────────────────────────────────────────────────────────
+
+@app.post("/tasks/sms", status_code=status.HTTP_200_OK)
+async def handle_sms_task(request: Request, payload: SmsTaskPayload):
+    """
+    Cloud Tasks HTTP handler — dispatch a single SMS.
+
+    Cloud Tasks will retry on any non-2xx response, so:
+    * 400 Bad Request  → payload error; no retry (Cloud Tasks respects this).
+    * 500 Internal     → transient error; Cloud Tasks will retry with backoff.
+    * 200 OK           → task complete (even if SMS failed — we record it).
+    """
+    _verify_oidc_token(request)
+
+    logger.info(
+        "sms_task_received",
+        template_id=payload.templateId,
+        case_id=payload.caseId,
+        request_id=payload.requestId,
+        to_masked="[REDACTED]",
+    )
+
+    db = get_db()
+
+    result: SmsDispatchResult = await send_sms(
+        to=payload.to,
+        template_id=payload.templateId,
+        variables=payload.variables,
+        db=db,
+        case_id=payload.caseId,
+        request_id=payload.requestId,
+    )
+
+    # Return 200 whether or not Twilio succeeded — we've recorded the outcome.
+    # A 5xx here would cause Cloud Tasks to retry, potentially double-sending.
+    return {
+        "deliveryId": result.delivery_id,
+        "status": result.status,
+        "success": result.success,
+        "messageSid": result.message_sid,
+        "segmentCount": result.segment_count,
+    }
+
+
+# ── Twilio status callback ────────────────────────────────────────────────────
+
+@app.post("/webhooks/twilio/status", status_code=status.HTTP_204_NO_CONTENT)
+async def twilio_status_callback(request: Request):
+    """
+    Receive Twilio message status updates (queued → sent → delivered / failed).
+
+    Updates the corresponding delivery record's ``twilioStatus`` field.
+    Returns 204 No Content (Twilio ignores the response body).
+    """
+    body = await request.body()
+    _verify_twilio_signature(request, body)
+
+    form = await request.form()
+    message_sid = form.get("MessageSid")
+    message_status = form.get("MessageStatus")
+    error_code = form.get("ErrorCode")
+
+    logger.info(
+        "twilio_status_callback",
+        sid=message_sid,
+        twilio_status=message_status,
+        error_code=error_code,
+    )
+
+    if message_sid and message_status:
+        from google.cloud import firestore as _fs
+        db = get_db()
+        settings = get_settings()
+        # Find delivery record by Twilio SID (requires a composite index on
+        # twilioMessageSid in the delivery_records collection)
+        query = (
+            db.collection(settings.delivery_records_collection)
+            .where("twilioMessageSid", "==", message_sid)
+            .limit(1)
+        )
+        async for doc in query.stream():
+            await doc.reference.update({
+                "twilioStatus": message_status,
+                "errorCode": int(error_code) if error_code else None,
+                "updatedAt": _fs.SERVER_TIMESTAMP,
+            })
+            logger.info(
+                "delivery_record_status_updated",
+                delivery_id=doc.id,
+                twilio_status=message_status,
+            )
+            break
+
+    return PlainTextResponse("", status_code=204)
+
+
+# ── Twilio inbound message (STOP / START / HELP) ──────────────────────────────
+
+@app.post("/webhooks/twilio/inbound", status_code=status.HTTP_200_OK)
+async def twilio_inbound(request: Request):
+    """
+    Handle inbound SMS messages from Twilio for opt-out management.
+
+    STOP / UNSUBSCRIBE → record opt-out
+    START / UNSTOP     → clear opt-out
+    HELP               → no-op (Twilio handles HELP automatically)
+
+    Returns TwiML (empty <Response>) so Twilio doesn't send an auto-reply.
+    """
+    body = await request.body()
+    _verify_twilio_signature(request, body)
+
+    form = await request.form()
+    from_number: str = form.get("From", "")
+    message_body: str = form.get("Body", "").strip().upper()
+
+    logger.info(
+        "twilio_inbound_received",
+        keyword=message_body,
+        from_masked="[REDACTED]",
+    )
+
+    db = get_db()
+
+    if message_body in {"STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"}:
+        await record_opt_out(from_number, reason=message_body, db=db)
+    elif message_body in {"START", "UNSTOP", "YES"}:
+        await clear_opt_out(from_number, db=db)
+
+    # Return minimal TwiML — no reply message (Twilio handles STOP/START itself)
+    return PlainTextResponse(
+        '<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
+        media_type="text/xml",
+    )
+
+
+# ── Health check ──────────────────────────────────────────────────────────────
+
+@app.get("/health", include_in_schema=False)
+async def health():
+    return {"status": "healthy", "service": "notification", "version": "1.0.0"}
+
+
+@app.get("/", include_in_schema=False)
+async def root():
+    return {"service": "ZAD Notification Service", "version": "1.0.0"}
+
+
+# ── Local dev entrypoint ──────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080)
+    import uvicorn
+    uvicorn.run("app:app", host="0.0.0.0", port=8080, reload=True, log_level="debug")
