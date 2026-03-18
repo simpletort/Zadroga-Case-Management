@@ -73,6 +73,16 @@ BUCKET_NAME = os.environ["GCS_BUCKET_NAME"]
 FIRESTORE_DB = os.environ.get("FIRESTORE_DATABASE_ID", "(default)")
 DRIVE_SYNC_SECRET = os.environ.get("DRIVE_SYNC_SECRET", "")
 
+# File validation constants — mirrored from shared/shared/middlewares/file_validation.py.
+# Keep in sync with that file if limits change.
+ALLOWED_MIME_TYPES: frozenset[str] = frozenset({
+    "application/pdf",
+    "image/jpeg",
+    "image/png",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+})
+MAX_FILE_SIZE_BYTES: int = 25 * 1024 * 1024  # 25 MB
+
 # Valid document categories — used for validation only.
 # The permanent GCS path is determined by the virus-scanner after a clean scan,
 # using the category stored in the Firestore document record.
@@ -236,6 +246,20 @@ def sync_drive_files(request: flask.Request) -> flask.Response:
             errors.append({"driveFileId": drive_file_id, "error": "Missing driveFileId"})
             continue
 
+        # Validate MIME type against allowed list (mirrors shared/middlewares/file_validation.py)
+        if mime_type not in ALLOWED_MIME_TYPES:
+            logger.warning(
+                "Rejected file with unsupported MIME type '%s': case=%s drive=%s",
+                mime_type, case_id, drive_file_id,
+            )
+            errors.append({
+                "driveFileId": drive_file_id,
+                "error": "Unsupported file type '{}'. Allowed: {}".format(
+                    mime_type, ", ".join(sorted(ALLOWED_MIME_TYPES))
+                ),
+            })
+            continue
+
         if category not in VALID_CATEGORIES:
             logger.warning(
                 "Unknown category '%s' for case=%s — falling back to client_uploads",
@@ -290,6 +314,22 @@ def sync_drive_files(request: flask.Request) -> flask.Response:
 
             _download_drive_file(drive_service, drive_file_id, tmp_path)
             size_bytes = Path(tmp_path).stat().st_size
+
+            # Validate file size after download (mirrors shared/middlewares/file_validation.py)
+            if size_bytes > MAX_FILE_SIZE_BYTES:
+                logger.warning(
+                    "Rejected oversized file (%d bytes > %d): case=%s drive=%s",
+                    size_bytes, MAX_FILE_SIZE_BYTES, case_id, drive_file_id,
+                )
+                errors.append({
+                    "driveFileId": drive_file_id,
+                    "error": "File size {} MB exceeds maximum {} MB".format(
+                        round(size_bytes / 1024 / 1024, 1),
+                        MAX_FILE_SIZE_BYTES // 1024 // 1024,
+                    ),
+                })
+                continue
+
             _upload_to_staging(tmp_path, staging_path, mime_type)
 
             # Record file size now; virus-scanner updates gcsPath + processingStatus

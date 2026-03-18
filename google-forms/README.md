@@ -151,16 +151,27 @@ At end of section: **Go to section 8 (Document Uploads)**
 | Phone Number | `entry.XXXXXXXXX` |
 | Intake Token | `entry.XXXXXXXXX` |
 
-6. Set these as Cloud Build trigger substitution variables or Cloud Run env vars for
-   `intake-form-dispatcher`:
+6. Write these to the **Firestore config document** at `config/intake_form` in Firebase
+   Console (Firestore → `config` collection → `intake_form` document):
+   ```json
+   {
+     "formBaseUrl": "https://docs.google.com/forms/d/<FORM_ID>/viewform",
+     "fieldMappings": {
+       "firstName":   "entry.XXXXXXXXX",
+       "lastName":    "entry.XXXXXXXXX",
+       "email":       "entry.XXXXXXXXX",
+       "phone":       "entry.XXXXXXXXX",
+       "intakeToken": "entry.XXXXXXXXX"
+     },
+     "updatedAt": "<today's date>",
+     "updatedBy": "your-email@simpletort.com"
+   }
    ```
-   GOOGLE_FORM_BASE_URL       = https://docs.google.com/forms/d/<FORM_ID>/viewform
-   GOOGLE_FORM_ENTRY_FIRST    = entry.XXXXXXXXX
-   GOOGLE_FORM_ENTRY_LAST     = entry.XXXXXXXXX
-   GOOGLE_FORM_ENTRY_EMAIL    = entry.XXXXXXXXX
-   GOOGLE_FORM_ENTRY_PHONE    = entry.XXXXXXXXX
-   GOOGLE_FORM_ENTRY_TOKEN    = entry.XXXXXXXXX
-   ```
+
+   > **No redeploy needed.** The `intake-form-dispatcher` reads this document on
+   > cold start and caches it per instance. If you recreate the form and get new
+   > entry IDs, just update this Firestore document — the next Cloud Run instance
+   > will pick up the new mapping automatically.
 
 ---
 
