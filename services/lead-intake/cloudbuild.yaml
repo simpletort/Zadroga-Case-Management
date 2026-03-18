@@ -46,18 +46,23 @@ steps:
 
   - name: python:3.12-slim
     id: install-python-deps
+    dir: services/lead-intake                 # FIX 1: run from service root, not repo root
     entrypoint: bash
     args:
       - -c
       - |
         echo "▶ Installing Python dependencies..."
         pip install --no-cache-dir --break-system-packages -q \
-          -r services/auth-rbac/backend/functions/requirements.txt \
-          pytest pytest-asyncio pytest-mock httpx
+          -r api/requirements.txt \
+          -r functions/vcf_screener/requirements.txt \
+          -r functions/notification_dispatcher/requirements.txt \
+          -r functions/followup_monitor/requirements.txt \
+          pytest pytest-asyncio pytest-mock httpx pytest-cov
         echo "✅ Dependencies installed"
 
   - name: python:3.12-slim
     id: lint
+    dir: services/lead-intake                 # FIX 2: correct working dir for ruff paths
     entrypoint: bash
     args:
       - -c
@@ -70,13 +75,13 @@ steps:
 
   - name: python:3.12-slim
     id: unit-tests
+    dir: services/lead-intake                 # FIX 3: correct working dir so tests/, api/, functions/ resolve
     entrypoint: bash
     args:
       - -c
       - |
         echo "▶ Running unit tests..."
         mkdir -p test-results
-        export PYTHONPATH=/workspace/api:/workspace/functions
         pytest tests/unit/ \
           -v \
           --tb=short \
@@ -87,7 +92,7 @@ steps:
         echo "✅ Unit tests passed"
     waitFor: [install-python-deps]
     env:
-      - PYTHONPATH=/workspace/api:/workspace/functions
+      - PYTHONPATH=/workspace/services/lead-intake/api:/workspace/services/lead-intake/functions  # FIX 4: correct absolute PYTHONPATH
       - GCP_PROJECT_ID=test-project
       - APP_ENV=test
       - VCF_WINDOW_START=2001-09-11
@@ -95,12 +100,12 @@ steps:
 
   - name: python:3.12-slim
     id: integration-tests
+    dir: services/lead-intake                 # FIX 3 (continued): correct working dir
     entrypoint: bash
     args:
       - -c
       - |
         echo "▶ Running integration tests (mocked)..."
-        export PYTHONPATH=/workspace/api:/workspace/functions
         pytest tests/integration/ \
           -v \
           --tb=short \
@@ -108,7 +113,7 @@ steps:
         echo "✅ Integration tests passed"
     waitFor: [unit-tests]
     env:
-      - PYTHONPATH=/workspace/api:/workspace/functions
+      - PYTHONPATH=/workspace/services/lead-intake/api:/workspace/services/lead-intake/functions  # FIX 4 (continued)
       - GCP_PROJECT_ID=test-project
       - APP_ENV=test
       - VCF_WINDOW_START=2001-09-11
@@ -127,6 +132,7 @@ steps:
 
   - name: gcr.io/cloud-builders/docker
     id: build-image
+    dir: services/lead-intake                 # FIX 5: build context must be service root so COPY api/ works
     args:
       - build
       - -f
@@ -197,7 +203,7 @@ steps:
       - --gen2
       - --region=${_REGION}
       - --runtime=python312
-      - --source=functions/vcf_screener
+      - --source=services/lead-intake/functions/vcf_screener  # FIX 6: gcloud runs from repo root
       - --entry-point=vcf_screener
       - --trigger-topic=lead-created-dev    # dev topic — separate from prod
       - --service-account=vcf-screener-sa@$PROJECT_ID.iam.gserviceaccount.com
@@ -218,7 +224,7 @@ steps:
       - --gen2
       - --region=${_REGION}
       - --runtime=python312
-      - --source=functions/notification_dispatcher
+      - --source=services/lead-intake/functions/notification_dispatcher  # FIX 6 (continued)
       - --entry-point=notification_dispatcher
       - --trigger-topic=lead-screened-dev
       - --service-account=notification-sa@$PROJECT_ID.iam.gserviceaccount.com
@@ -239,7 +245,7 @@ steps:
       - --gen2
       - --region=${_REGION}
       - --runtime=python312
-      - --source=functions/followup_monitor
+      - --source=services/lead-intake/functions/followup_monitor  # FIX 6 (continued)
       - --entry-point=followup_monitor
       - --trigger-http
       - --no-allow-unauthenticated
@@ -300,24 +306,24 @@ steps:
 
   - name: node:20-slim
     id: install-admin-ui-deps
+    dir: services/lead-intake/admin_ui        # FIX 7: correct path — no cd needed
     entrypoint: bash
     args:
       - -c
       - |
         echo "▶ Installing Admin UI deps..."
-        cd admin_ui
-        npm ci --quiet
+        npm install --quiet                   # FIX 8: npm ci fails without package-lock.json; use npm install
         echo "✅ Admin UI deps installed"
     waitFor: [-]   # start immediately, parallel with everything
 
   - name: node:20-slim
     id: build-admin-ui-dev
+    dir: services/lead-intake/admin_ui        # FIX 7 (continued)
     entrypoint: bash
     args:
       - -c
       - |
         echo "▶ Building Admin UI for dev..."
-        cd admin_ui
         VITE_FIREBASE_API_KEY=$$VITE_FIREBASE_API_KEY \
         VITE_FIREBASE_AUTH_DOMAIN=$$VITE_FIREBASE_AUTH_DOMAIN \
         VITE_FIREBASE_PROJECT_ID=$PROJECT_ID \
@@ -336,13 +342,13 @@ steps:
 
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     id: deploy-firebase-hosting-dev
+    dir: services/lead-intake/admin_ui        # FIX 7 (continued): firebase CLI needs firebase.json in cwd
     entrypoint: bash
     args:
       - -c
       - |
         echo "▶ Deploying to Firebase Hosting dev preview channel..."
         npm install -g firebase-tools --quiet
-        cd admin_ui
         # Deploy to a named preview channel (not live channel)
         # Preview URL: https://zad-admin--dev-XXXXXXXX.web.app
         firebase hosting:channel:deploy ${_FIREBASE_CHANNEL} \
