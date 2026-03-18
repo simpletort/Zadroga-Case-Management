@@ -125,28 +125,30 @@ steps:
       - |
         # Resolve the self-referencing NOTIFICATION_SERVICE_URL
         # (the service URL follows the pattern Cloud Run assigns)
+        # NOTE: bash-local vars (SERVICE_URL, ENV_VARS, SECRETS) use $$ so
+        # Cloud Build does not try to substitute them as build variables.
         SERVICE_URL=$(gcloud run services describe $_SERVICE_NAME-$_ENV \
           --region=$_REGION \
           --project=$PROJECT_ID \
           --format="value(status.url)" 2>/dev/null || echo "")
 
-        if [ -z "$SERVICE_URL" ]; then
-          # First deploy — URL not known yet; we set a placeholder and update
-          # in a second pass after the service is created.
+        if [ -z "$$SERVICE_URL" ]; then
+          # First deploy — URL not known yet; placeholder used and corrected
+          # automatically on the second pipeline run.
           SERVICE_URL="https://$_SERVICE_NAME-$_ENV-uc.a.run.app"
-          echo "First deploy detected — using placeholder URL: $SERVICE_URL"
+          echo "First deploy detected — using placeholder URL: $$SERVICE_URL"
         fi
 
         ENV_VARS="GCP_PROJECT_ID=$PROJECT_ID"
-        ENV_VARS="$ENV_VARS,APP_ENV=$_ENV"
-        ENV_VARS="$ENV_VARS,TWILIO_FROM_NUMBER=$_TWILIO_FROM_NUMBER"
-        ENV_VARS="$ENV_VARS,CLOUD_TASKS_QUEUE=$_CLOUD_TASKS_QUEUE"
-        ENV_VARS="$ENV_VARS,CLOUD_TASKS_QUEUE_REGION=$_CLOUD_TASKS_QUEUE_REGION"
-        ENV_VARS="$ENV_VARS,NOTIFICATION_SA_EMAIL=$_NOTIFICATION_SA_EMAIL"
-        ENV_VARS="$ENV_VARS,NOTIFICATION_SERVICE_URL=$SERVICE_URL"
+        ENV_VARS="$$ENV_VARS,APP_ENV=$_ENV"
+        ENV_VARS="$$ENV_VARS,TWILIO_FROM_NUMBER=$_TWILIO_FROM_NUMBER"
+        ENV_VARS="$$ENV_VARS,CLOUD_TASKS_QUEUE=$_CLOUD_TASKS_QUEUE"
+        ENV_VARS="$$ENV_VARS,CLOUD_TASKS_QUEUE_REGION=$_CLOUD_TASKS_QUEUE_REGION"
+        ENV_VARS="$$ENV_VARS,NOTIFICATION_SA_EMAIL=$_NOTIFICATION_SA_EMAIL"
+        ENV_VARS="$$ENV_VARS,NOTIFICATION_SERVICE_URL=$$SERVICE_URL"
 
         SECRETS="TWILIO_ACCOUNT_SID=TWILIO_ACCOUNT_SID:latest"
-        SECRETS="$SECRETS,TWILIO_AUTH_TOKEN=TWILIO_AUTH_TOKEN:latest"
+        SECRETS="$$SECRETS,TWILIO_AUTH_TOKEN=TWILIO_AUTH_TOKEN:latest"
 
         if [ "$_ENV" = "prod" ]; then
           echo "Production deployment — running canary..."
@@ -164,8 +166,8 @@ steps:
             --memory=512Mi \
             --cpu=1 \
             --concurrency=80 \
-            --set-env-vars="$ENV_VARS" \
-            --set-secrets="$SECRETS"
+            --set-env-vars="$$ENV_VARS" \
+            --set-secrets="$$SECRETS"
 
           bash scripts/canary-deploy.sh \
             $_SERVICE_NAME-$_ENV \
@@ -186,8 +188,8 @@ steps:
             --memory=512Mi \
             --cpu=1 \
             --concurrency=80 \
-            --set-env-vars="$ENV_VARS" \
-            --set-secrets="$SECRETS"
+            --set-env-vars="$$ENV_VARS" \
+            --set-secrets="$$SECRETS"
         fi
     waitFor: ["push-sha", "push-latest"]
 
