@@ -100,7 +100,9 @@ steps:
           -v \
           --tb=short \
           --junit-xml=test-results/unit.xml \
-          --cov=api \
+          --cov=functions \
+          --cov=api/models \
+          --cov=api/services/validation.py \
           --cov-report=term-missing \
           --cov-fail-under=70
         echo "✅ Unit tests passed"
