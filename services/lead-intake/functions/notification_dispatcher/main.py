@@ -56,8 +56,6 @@ def notification_dispatcher(cloud_event: CloudEvent) -> None:
     case_data = case_doc.to_dict()
     assigned_to = case_data.get("assignedTo", "unassigned")
 
-    now = datetime.utcnow().isoformat()
-
     if eligibility == "eligible":
         _create_notification(
             notification_type="CASE_QUALIFIED",

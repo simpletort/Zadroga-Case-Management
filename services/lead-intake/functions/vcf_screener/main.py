@@ -26,7 +26,6 @@ import json
 import os
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Any
 
 import functions_framework
 from google.cloud import firestore
@@ -235,7 +234,7 @@ def rule_conditions_match(case_data: dict) -> RuleResult:
             passed=True,
             severity="soft_flag",
             code="CONDITIONS_UNMATCHED",
-            reason=f"Provided conditions do not clearly match WTC certified categories — clinical review needed",
+            reason="Provided conditions do not clearly match WTC certified categories — clinical review needed",
         )
 
 

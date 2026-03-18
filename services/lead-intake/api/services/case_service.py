@@ -10,7 +10,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import AsyncTransaction
 
 from config import get_settings
-from models.lead import CaseDocument, LeadRequest, CaseStatus, StatusHistoryEntry
+from models.lead import CaseDocument, LeadRequest
 from logging_config import get_logger
 
 logger = get_logger(__name__)

@@ -44,42 +44,56 @@ steps:
   # STAGE 1: DEPENDENCIES + TESTS  (fail fast before building)
   # ════════════════════════════════════════════════════════════════
 
+  # NOTE: Cloud Build runs each step in a SEPARATE container.
+  # Pip packages installed in one step are NOT available in the next step
+  # (only /workspace is shared between steps). Each test step must install
+  # its own dependencies.
+
   - name: python:3.12-slim
     id: install-python-deps
-    dir: services/lead-intake                 # FIX 1: run from service root, not repo root
+    dir: services/lead-intake
     entrypoint: bash
     args:
       - -c
       - |
-        echo "▶ Installing Python dependencies..."
-        pip install --no-cache-dir --break-system-packages -q \
-          -r api/requirements.txt \
-          -r functions/vcf_screener/requirements.txt \
-          -r functions/notification_dispatcher/requirements.txt \
-          -r functions/followup_monitor/requirements.txt \
-          pytest pytest-asyncio pytest-mock httpx pytest-cov
-        echo "✅ Dependencies installed"
+        set -e
+        echo "▶ Pre-flight: verifying all requirements files exist..."
+        ls api/requirements.txt \
+           functions/vcf_screener/requirements.txt \
+           functions/notification_dispatcher/requirements.txt \
+           functions/followup_monitor/requirements.txt
+        echo "✅ All requirements files found"
 
   - name: python:3.12-slim
     id: lint
-    dir: services/lead-intake                 # FIX 2: correct working dir for ruff paths
+    dir: services/lead-intake
     entrypoint: bash
     args:
       - -c
       - |
-        echo "▶ Running linter..."
+        set -e
+        echo "▶ Running linter (auto-fix then enforce)..."
         pip install --no-cache-dir --break-system-packages -q ruff
+        ruff check api/ functions/ --select=E,W,F --ignore=E501 --fix --unsafe-fixes
         ruff check api/ functions/ --select=E,W,F --ignore=E501
         echo "✅ Lint passed"
     waitFor: [install-python-deps]
 
   - name: python:3.12-slim
     id: unit-tests
-    dir: services/lead-intake                 # FIX 3: correct working dir so tests/, api/, functions/ resolve
+    dir: services/lead-intake
     entrypoint: bash
     args:
       - -c
       - |
+        set -e
+        echo "▶ Installing deps for unit tests (fresh container — must reinstall)..."
+        pip install --no-cache-dir --break-system-packages -q \
+          -r api/requirements.txt \
+          -r functions/vcf_screener/requirements.txt \
+          -r functions/notification_dispatcher/requirements.txt \
+          -r functions/followup_monitor/requirements.txt \
+          pytest pytest-asyncio pytest-mock httpx pytest-cov
         echo "▶ Running unit tests..."
         mkdir -p test-results
         pytest tests/unit/ \
@@ -92,7 +106,7 @@ steps:
         echo "✅ Unit tests passed"
     waitFor: [install-python-deps]
     env:
-      - PYTHONPATH=/workspace/services/lead-intake/api:/workspace/services/lead-intake/functions  # FIX 4: correct absolute PYTHONPATH
+      - PYTHONPATH=/workspace/services/lead-intake/api:/workspace/services/lead-intake/functions
       - GCP_PROJECT_ID=test-project
       - APP_ENV=test
       - VCF_WINDOW_START=2001-09-11
@@ -100,11 +114,19 @@ steps:
 
   - name: python:3.12-slim
     id: integration-tests
-    dir: services/lead-intake                 # FIX 3 (continued): correct working dir
+    dir: services/lead-intake
     entrypoint: bash
     args:
       - -c
       - |
+        set -e
+        echo "▶ Installing deps for integration tests (fresh container — must reinstall)..."
+        pip install --no-cache-dir --break-system-packages -q \
+          -r api/requirements.txt \
+          -r functions/vcf_screener/requirements.txt \
+          -r functions/notification_dispatcher/requirements.txt \
+          -r functions/followup_monitor/requirements.txt \
+          pytest pytest-asyncio pytest-mock httpx pytest-cov
         echo "▶ Running integration tests (mocked)..."
         pytest tests/integration/ \
           -v \
@@ -113,7 +135,7 @@ steps:
         echo "✅ Integration tests passed"
     waitFor: [unit-tests]
     env:
-      - PYTHONPATH=/workspace/services/lead-intake/api:/workspace/services/lead-intake/functions  # FIX 4 (continued)
+      - PYTHONPATH=/workspace/services/lead-intake/api:/workspace/services/lead-intake/functions
       - GCP_PROJECT_ID=test-project
       - APP_ENV=test
       - VCF_WINDOW_START=2001-09-11

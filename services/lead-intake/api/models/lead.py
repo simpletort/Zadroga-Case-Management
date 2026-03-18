@@ -9,7 +9,6 @@ from __future__ import annotations
 from datetime import date, datetime
 from enum import Enum
 from typing import Optional
-from uuid import uuid4
 
 import phonenumbers
 from pydantic import (
