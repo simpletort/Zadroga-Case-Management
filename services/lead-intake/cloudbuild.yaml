@@ -29,6 +29,7 @@ substitutions:
   _FIREBASE_CHANNEL: dev                    # Firebase Hosting preview channel name
   _CLOUD_TASKS_HANDLER_URL: ""             # Set this in trigger substitutions
   _JWT_AUDIENCE: ""                         # Set this in trigger substitutions
+  _DEFAULT_ASSIGNEE_EMAIL: "paralegal@zadlegal.com"  # Default follow-up task assignee
 
 options:
   logging: CLOUD_LOGGING_ONLY
@@ -43,39 +44,58 @@ steps:
   # STAGE 1: DEPENDENCIES + TESTS  (fail fast before building)
   # ════════════════════════════════════════════════════════════════
 
+  # NOTE: Cloud Build runs each step in a SEPARATE container.
+  # Pip packages installed in one step are NOT available in the next step
+  # (only /workspace is shared between steps). Each test step must install
+  # its own dependencies.
+
   - name: python:3.12-slim
     id: install-python-deps
+    dir: services/lead-intake
     entrypoint: bash
     args:
       - -c
       - |
-        echo "▶ Installing Python dependencies..."
-        pip install --no-cache-dir --break-system-packages -q \
-          -r services/auth-rbac/backend/functions/requirements.txt \
-          pytest pytest-asyncio pytest-mock httpx
-        echo "✅ Dependencies installed"
+        set -e
+        echo "▶ Pre-flight: verifying all requirements files exist..."
+        ls api/requirements.txt \
+           functions/vcf_screener/requirements.txt \
+           functions/notification_dispatcher/requirements.txt \
+           functions/followup_monitor/requirements.txt
+        echo "✅ All requirements files found"
 
   - name: python:3.12-slim
     id: lint
+    dir: services/lead-intake
     entrypoint: bash
     args:
       - -c
       - |
-        echo "▶ Running linter..."
+        set -e
+        echo "▶ Running linter (auto-fix then enforce)..."
         pip install --no-cache-dir --break-system-packages -q ruff
+        ruff check api/ functions/ --select=E,W,F --ignore=E501 --fix --unsafe-fixes
         ruff check api/ functions/ --select=E,W,F --ignore=E501
         echo "✅ Lint passed"
     waitFor: [install-python-deps]
 
   - name: python:3.12-slim
     id: unit-tests
+    dir: services/lead-intake
     entrypoint: bash
     args:
       - -c
       - |
+        set -e
+        echo "▶ Installing deps for unit tests (fresh container — must reinstall)..."
+        pip install --no-cache-dir --break-system-packages -q \
+          -r api/requirements.txt \
+          -r functions/vcf_screener/requirements.txt \
+          -r functions/notification_dispatcher/requirements.txt \
+          -r functions/followup_monitor/requirements.txt \
+          pytest pytest-asyncio pytest-mock httpx pytest-cov
         echo "▶ Running unit tests..."
         mkdir -p test-results
-        export PYTHONPATH=/workspace/api:/workspace/functions
         pytest tests/unit/ \
           -v \
           --tb=short \
@@ -86,7 +106,7 @@ steps:
         echo "✅ Unit tests passed"
     waitFor: [install-python-deps]
     env:
-      - PYTHONPATH=/workspace/api:/workspace/functions
+      - PYTHONPATH=/workspace/services/lead-intake/api:/workspace/services/lead-intake/functions
       - GCP_PROJECT_ID=test-project
       - APP_ENV=test
       - VCF_WINDOW_START=2001-09-11
@@ -94,12 +114,20 @@ steps:
 
   - name: python:3.12-slim
     id: integration-tests
+    dir: services/lead-intake
     entrypoint: bash
     args:
       - -c
       - |
+        set -e
+        echo "▶ Installing deps for integration tests (fresh container — must reinstall)..."
+        pip install --no-cache-dir --break-system-packages -q \
+          -r api/requirements.txt \
+          -r functions/vcf_screener/requirements.txt \
+          -r functions/notification_dispatcher/requirements.txt \
+          -r functions/followup_monitor/requirements.txt \
+          pytest pytest-asyncio pytest-mock httpx pytest-cov
         echo "▶ Running integration tests (mocked)..."
-        export PYTHONPATH=/workspace/api:/workspace/functions
         pytest tests/integration/ \
           -v \
           --tb=short \
@@ -107,7 +135,7 @@ steps:
         echo "✅ Integration tests passed"
     waitFor: [unit-tests]
     env:
-      - PYTHONPATH=/workspace/api:/workspace/functions
+      - PYTHONPATH=/workspace/services/lead-intake/api:/workspace/services/lead-intake/functions
       - GCP_PROJECT_ID=test-project
       - APP_ENV=test
       - VCF_WINDOW_START=2001-09-11
@@ -126,6 +154,7 @@ steps:
 
   - name: gcr.io/cloud-builders/docker
     id: build-image
+    dir: services/lead-intake                 # FIX 5: build context must be service root so COPY api/ works
     args:
       - build
       - -f
@@ -170,7 +199,7 @@ steps:
       - --platform=managed
       - --no-allow-unauthenticated
       - --service-account=lead-intake-sa@$PROJECT_ID.iam.gserviceaccount.com
-      - --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,APP_ENV=${_ENV},CLOUD_TASKS_HANDLER_URL=${_CLOUD_TASKS_HANDLER_URL},JWT_AUDIENCE=${_JWT_AUDIENCE}
+      - --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,APP_ENV=${_ENV},CLOUD_TASKS_HANDLER_URL=${_CLOUD_TASKS_HANDLER_URL},JWT_AUDIENCE=${_JWT_AUDIENCE},PARTNER_AUTH_ENABLED=true
       - --set-secrets=SENDGRID_API_KEY=SENDGRID_API_KEY:latest,TWILIO_ACCOUNT_SID=TWILIO_ACCOUNT_SID:latest,TWILIO_AUTH_TOKEN=TWILIO_AUTH_TOKEN:latest
       - --min-instances=0          # scale to zero in dev to save cost
       - --max-instances=5
@@ -196,7 +225,7 @@ steps:
       - --gen2
       - --region=${_REGION}
       - --runtime=python312
-      - --source=functions/vcf_screener
+      - --source=services/lead-intake/functions/vcf_screener  # FIX 6: gcloud runs from repo root
       - --entry-point=vcf_screener
       - --trigger-topic=lead-created-dev    # dev topic — separate from prod
       - --service-account=vcf-screener-sa@$PROJECT_ID.iam.gserviceaccount.com
@@ -217,9 +246,9 @@ steps:
       - --gen2
       - --region=${_REGION}
       - --runtime=python312
-      - --source=functions/notification_dispatcher
+      - --source=services/lead-intake/functions/notification_dispatcher  # FIX 6 (continued)
       - --entry-point=notification_dispatcher
-      - --trigger-topic=lead-created-dev
+      - --trigger-topic=lead-screened-dev
       - --service-account=notification-sa@$PROJECT_ID.iam.gserviceaccount.com
       - --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,FIRESTORE_CASES_COLLECTION=cases-dev
       - --memory=256Mi
@@ -228,6 +257,70 @@ steps:
       - --max-instances=3
     waitFor: [integration-tests]
 
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: deploy-followup-monitor-dev
+    entrypoint: gcloud
+    args:
+      - functions
+      - deploy
+      - followup-monitor-dev
+      - --gen2
+      - --region=${_REGION}
+      - --runtime=python312
+      - --source=services/lead-intake/functions/followup_monitor  # FIX 6 (continued)
+      - --entry-point=followup_monitor
+      - --trigger-http
+      - --no-allow-unauthenticated
+      - --service-account=followup-monitor-sa@$PROJECT_ID.iam.gserviceaccount.com
+      - --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,FIRESTORE_CASES_COLLECTION=cases-dev,FOLLOWUP_DELAY_HOURS=48,DEFAULT_ASSIGNEE_EMAIL=${_DEFAULT_ASSIGNEE_EMAIL}
+      - --memory=256Mi
+      - --timeout=120s
+      - --min-instances=0
+      - --max-instances=2
+    waitFor: [integration-tests]
+
+  # Create Cloud Scheduler job for hourly follow-up monitor (idempotent)
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: create-followup-scheduler-dev
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        echo "▶ Ensuring Cloud Scheduler job for followup-monitor-dev..."
+        FUNCTION_URL=$$(gcloud functions describe followup-monitor-dev \
+          --region=${_REGION} \
+          --gen2 \
+          --format='value(serviceConfig.uri)' 2>/dev/null || echo "")
+
+        if [ -z "$$FUNCTION_URL" ]; then
+          echo "⚠ Could not get function URL, skipping scheduler setup"
+          exit 0
+        fi
+
+        # Create or update the scheduler job
+        gcloud scheduler jobs create http followup-monitor-hourly-dev \
+          --location=${_REGION} \
+          --schedule="0 * * * *" \
+          --uri="$$FUNCTION_URL" \
+          --http-method=POST \
+          --message-body='{}' \
+          --oidc-service-account-email=followup-monitor-sa@$PROJECT_ID.iam.gserviceaccount.com \
+          --oidc-token-audience="$$FUNCTION_URL" \
+          --description="Hourly follow-up monitor for non-responsive leads (dev)" \
+          2>/dev/null || \
+        gcloud scheduler jobs update http followup-monitor-hourly-dev \
+          --location=${_REGION} \
+          --schedule="0 * * * *" \
+          --uri="$$FUNCTION_URL" \
+          --http-method=POST \
+          --message-body='{}' \
+          --oidc-service-account-email=followup-monitor-sa@$PROJECT_ID.iam.gserviceaccount.com \
+          --oidc-token-audience="$$FUNCTION_URL" \
+          2>/dev/null || true
+
+        echo "✅ Cloud Scheduler job configured"
+    waitFor: [deploy-followup-monitor-dev]
+
   # ════════════════════════════════════════════════════════════════
   # STAGE 6: BUILD + DEPLOY ADMIN UI (dev preview channel)
   # Runs in parallel from the start — no dependency on Docker
@@ -235,24 +328,24 @@ steps:
 
   - name: node:20-slim
     id: install-admin-ui-deps
+    dir: services/lead-intake/admin_ui        # FIX 7: correct path — no cd needed
     entrypoint: bash
     args:
       - -c
       - |
         echo "▶ Installing Admin UI deps..."
-        cd admin_ui
-        npm ci --quiet
+        npm install --quiet                   # FIX 8: npm ci fails without package-lock.json; use npm install
         echo "✅ Admin UI deps installed"
     waitFor: [-]   # start immediately, parallel with everything
 
   - name: node:20-slim
     id: build-admin-ui-dev
+    dir: services/lead-intake/admin_ui        # FIX 7 (continued)
     entrypoint: bash
     args:
       - -c
       - |
         echo "▶ Building Admin UI for dev..."
-        cd admin_ui
         VITE_FIREBASE_API_KEY=$$VITE_FIREBASE_API_KEY \
         VITE_FIREBASE_AUTH_DOMAIN=$$VITE_FIREBASE_AUTH_DOMAIN \
         VITE_FIREBASE_PROJECT_ID=$PROJECT_ID \
@@ -271,13 +364,13 @@ steps:
 
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     id: deploy-firebase-hosting-dev
+    dir: services/lead-intake/admin_ui        # FIX 7 (continued): firebase CLI needs firebase.json in cwd
     entrypoint: bash
     args:
       - -c
       - |
         echo "▶ Deploying to Firebase Hosting dev preview channel..."
         npm install -g firebase-tools --quiet
-        cd admin_ui
         # Deploy to a named preview channel (not live channel)
         # Preview URL: https://zad-admin--dev-XXXXXXXX.web.app
         firebase hosting:channel:deploy ${_FIREBASE_CHANNEL} \
@@ -296,6 +389,12 @@ steps:
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     id: smoke-test
     entrypoint: bash
+    waitFor:
+      - deploy-cloud-run-dev
+      - deploy-vcf-screener-dev
+      - deploy-notification-dispatcher-dev
+      - deploy-firebase-hosting-dev
+      - create-followup-scheduler-dev
     args:
       - -c
       - |

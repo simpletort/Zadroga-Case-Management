@@ -83,6 +83,43 @@ service cloud.firestore {
     }
 
 
+    // ── /tasks/{taskId} ──────────────────────────────────────────────────────
+    // Follow-up tasks created by Cloud Functions and the tasks handler
+    match /tasks/{taskId} {
+      allow read: if isServiceAccount() || isStaff();
+      allow create: if isServiceAccount();
+      allow update: if isServiceAccount() || isStaff();
+      allow delete: if false;
+    }
+
+
+    // ── /notifications/{notificationId} ──────────────────────────────────────
+    // Notification documents created by notification_dispatcher
+    match /notifications/{notificationId} {
+      allow read: if isServiceAccount() || isStaff();
+      allow create: if isServiceAccount();
+      allow update: if isStaff();  // Mark as read
+      allow delete: if false;
+    }
+
+
+    // ── /api_keys/{keyId} ────────────────────────────────────────────────────
+    // API key index (hashes only — no raw keys stored)
+    match /api_keys/{keyId} {
+      allow read, write: if isServiceAccount() || isAdmin();
+      allow delete: if false;
+    }
+
+
+    // ── /request_logs/{partnerId}/logs/{logId} ───────────────────────────────
+    // Per-partner request logs for billing and analytics
+    match /request_logs/{partnerId}/{document=**} {
+      allow read: if isServiceAccount() || isAdmin();
+      allow write: if isServiceAccount();
+      allow delete: if false;
+    }
+
+
     // ── Deny all other paths ─────────────────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;
