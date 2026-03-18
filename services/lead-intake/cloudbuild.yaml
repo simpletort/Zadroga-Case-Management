@@ -29,6 +29,7 @@ substitutions:
   _FIREBASE_CHANNEL: dev                    # Firebase Hosting preview channel name
   _CLOUD_TASKS_HANDLER_URL: ""             # Set this in trigger substitutions
   _JWT_AUDIENCE: ""                         # Set this in trigger substitutions
+  _DEFAULT_ASSIGNEE_EMAIL: "paralegal@zadlegal.com"  # Default follow-up task assignee
 
 options:
   logging: CLOUD_LOGGING_ONLY
@@ -170,7 +171,7 @@ steps:
       - --platform=managed
       - --no-allow-unauthenticated
       - --service-account=lead-intake-sa@$PROJECT_ID.iam.gserviceaccount.com
-      - --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,APP_ENV=${_ENV},CLOUD_TASKS_HANDLER_URL=${_CLOUD_TASKS_HANDLER_URL},JWT_AUDIENCE=${_JWT_AUDIENCE}
+      - --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,APP_ENV=${_ENV},CLOUD_TASKS_HANDLER_URL=${_CLOUD_TASKS_HANDLER_URL},JWT_AUDIENCE=${_JWT_AUDIENCE},PARTNER_AUTH_ENABLED=true
       - --set-secrets=SENDGRID_API_KEY=SENDGRID_API_KEY:latest,TWILIO_ACCOUNT_SID=TWILIO_ACCOUNT_SID:latest,TWILIO_AUTH_TOKEN=TWILIO_AUTH_TOKEN:latest
       - --min-instances=0          # scale to zero in dev to save cost
       - --max-instances=5
@@ -219,7 +220,7 @@ steps:
       - --runtime=python312
       - --source=functions/notification_dispatcher
       - --entry-point=notification_dispatcher
-      - --trigger-topic=lead-created-dev
+      - --trigger-topic=lead-screened-dev
       - --service-account=notification-sa@$PROJECT_ID.iam.gserviceaccount.com
       - --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,FIRESTORE_CASES_COLLECTION=cases-dev
       - --memory=256Mi
@@ -227,6 +228,70 @@ steps:
       - --min-instances=0
       - --max-instances=3
     waitFor: [integration-tests]
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: deploy-followup-monitor-dev
+    entrypoint: gcloud
+    args:
+      - functions
+      - deploy
+      - followup-monitor-dev
+      - --gen2
+      - --region=${_REGION}
+      - --runtime=python312
+      - --source=functions/followup_monitor
+      - --entry-point=followup_monitor
+      - --trigger-http
+      - --no-allow-unauthenticated
+      - --service-account=followup-monitor-sa@$PROJECT_ID.iam.gserviceaccount.com
+      - --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,FIRESTORE_CASES_COLLECTION=cases-dev,FOLLOWUP_DELAY_HOURS=48,DEFAULT_ASSIGNEE_EMAIL=${_DEFAULT_ASSIGNEE_EMAIL}
+      - --memory=256Mi
+      - --timeout=120s
+      - --min-instances=0
+      - --max-instances=2
+    waitFor: [integration-tests]
+
+  # Create Cloud Scheduler job for hourly follow-up monitor (idempotent)
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: create-followup-scheduler-dev
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        echo "▶ Ensuring Cloud Scheduler job for followup-monitor-dev..."
+        FUNCTION_URL=$$(gcloud functions describe followup-monitor-dev \
+          --region=${_REGION} \
+          --gen2 \
+          --format='value(serviceConfig.uri)' 2>/dev/null || echo "")
+
+        if [ -z "$$FUNCTION_URL" ]; then
+          echo "⚠ Could not get function URL, skipping scheduler setup"
+          exit 0
+        fi
+
+        # Create or update the scheduler job
+        gcloud scheduler jobs create http followup-monitor-hourly-dev \
+          --location=${_REGION} \
+          --schedule="0 * * * *" \
+          --uri="$$FUNCTION_URL" \
+          --http-method=POST \
+          --message-body='{}' \
+          --oidc-service-account-email=followup-monitor-sa@$PROJECT_ID.iam.gserviceaccount.com \
+          --oidc-token-audience="$$FUNCTION_URL" \
+          --description="Hourly follow-up monitor for non-responsive leads (dev)" \
+          2>/dev/null || \
+        gcloud scheduler jobs update http followup-monitor-hourly-dev \
+          --location=${_REGION} \
+          --schedule="0 * * * *" \
+          --uri="$$FUNCTION_URL" \
+          --http-method=POST \
+          --message-body='{}' \
+          --oidc-service-account-email=followup-monitor-sa@$PROJECT_ID.iam.gserviceaccount.com \
+          --oidc-token-audience="$$FUNCTION_URL" \
+          2>/dev/null || true
+
+        echo "✅ Cloud Scheduler job configured"
+    waitFor: [deploy-followup-monitor-dev]
 
   # ════════════════════════════════════════════════════════════════
   # STAGE 6: BUILD + DEPLOY ADMIN UI (dev preview channel)
@@ -296,6 +361,12 @@ steps:
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     id: smoke-test
     entrypoint: bash
+    waitFor:
+      - deploy-cloud-run-dev
+      - deploy-vcf-screener-dev
+      - deploy-notification-dispatcher-dev
+      - deploy-firebase-hosting-dev
+      - create-followup-scheduler-dev
     args:
       - -c
       - |
