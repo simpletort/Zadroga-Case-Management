@@ -317,18 +317,30 @@ async def send_sms(
     )
 
     # ── Step 4: Write delivery record ─────────────────────────────────────
-    await _write_delivery_record(
-        delivery_id=delivery_id,
-        to=to,
-        case_id=case_id,
-        template_id=template_id,
-        request_id=request_id,
-        rendered_body=rendered_body,
-        status=status,
-        twilio_result=twilio_result,
-        attempted_at=attempted_at,
-        db=db,
-    )
+    # Non-fatal: the SMS may already be delivered.  A write failure here must
+    # never surface to the Cloud Tasks caller (which would cause a retry and a
+    # duplicate send).  _write_delivery_record has its own internal guard, but
+    # we also wrap the outer call so a fully-mocked side_effect in tests and
+    # any unexpected propagation from the function itself are both absorbed.
+    try:
+        await _write_delivery_record(
+            delivery_id=delivery_id,
+            to=to,
+            case_id=case_id,
+            template_id=template_id,
+            request_id=request_id,
+            rendered_body=rendered_body,
+            status=status,
+            twilio_result=twilio_result,
+            attempted_at=attempted_at,
+            db=db,
+        )
+    except Exception as exc:
+        logger.error(
+            "delivery_record_outer_write_failed",
+            delivery_id=delivery_id,
+            error=str(exc),
+        )
 
     return SmsDispatchResult(
         success=twilio_result.success,

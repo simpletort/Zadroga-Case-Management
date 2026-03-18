@@ -164,12 +164,14 @@ class TestSmsTaskEndpoint:
             })
 
         mock_fn.assert_awaited_once()
-        call_kwargs = mock_fn.call_args
-        assert call_kwargs.args[0] == "+12125551234"
-        assert call_kwargs.args[1] == "welcome_sms"
-        assert call_kwargs.args[2] == {"first_name": "Alice"}
-        assert call_kwargs.kwargs["case_id"] == "ZAD-2025-03-0099"
-        assert call_kwargs.kwargs["request_id"] == "req-xyz"
+        # app.py calls send_sms with all keyword arguments, so .args is empty.
+        # Use .kwargs to inspect every parameter.
+        call_kwargs = mock_fn.call_args.kwargs
+        assert call_kwargs["to"] == "+12125551234"
+        assert call_kwargs["template_id"] == "welcome_sms"
+        assert call_kwargs["variables"] == {"first_name": "Alice"}
+        assert call_kwargs["case_id"] == "ZAD-2025-03-0099"
+        assert call_kwargs["request_id"] == "req-xyz"
 
 
 # ── POST /webhooks/twilio/inbound ─────────────────────────────────────────────
