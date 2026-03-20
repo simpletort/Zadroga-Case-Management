@@ -20,11 +20,13 @@ FORM_CONFIG = {
 }
 
 CASE_DATA = {
-    "firstName": "John",
-    "lastName":  "Smith",
-    "email":     "john.smith@example.com",
-    "phone":     "+12125550000",
-    "status":    "New Lead",
+    "status": "New Lead",
+    "leadData": {
+        "firstName": "John",
+        "lastName":  "Smith",
+        "email":     "john.smith@example.com",
+        "phone":     "+12125550000",
+    },
 }
 
 
