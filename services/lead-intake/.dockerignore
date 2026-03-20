@@ -1,0 +1,50 @@
+# .dockerignore — scoped to services/lead-intake/ (docker build context)
+# Keeps the build context small — was 177.5MB, should drop to ~1MB
+
+# Git and IDE artifacts
+.git
+.gitignore
+.claude/
+.vscode/
+.idea/
+
+# Large nested dirs not needed in the Docker image
+mnt/
+services/
+tests/
+admin_ui/
+functions/
+infrastructure/
+
+# Docs and config not needed at runtime
+*.md
+README*
+openapi.yaml
+firestore.rules
+cloudbuild.yaml
+*.yaml
+*.yml
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+.eggs/
+htmlcov/
+.coverage
+coverage.xml
+test-results/
+
+# Node artifacts (admin UI — not part of the API image)
+node_modules/
+
+# OS artifacts
+.DS_Store
+Thumbs.db

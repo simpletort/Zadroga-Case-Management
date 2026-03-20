@@ -6,18 +6,18 @@
 #   3. Deploy to Cloud Run (HTTP trigger, internal only)
 #
 # Substitution variables (set in Cloud Build trigger):
-#   _SERVICE_NAME      — Cloud Run service / image name (e.g. intake-form-dispatcher)
-#   _REPO              — Artifact Registry repo URL
-#   _REGION            — GCP region (e.g. us-central1)
-#   _ENV               — dev | test | prod
-#   _FROM_EMAIL        — sender address (e.g. noreply@simpletort.com)
-#   _ADMIN_EMAIL       — admin alert address
-#   _GOOGLE_FORM_BASE_URL     — Google Forms pre-fill base URL
-#   _GOOGLE_FORM_ENTRY_TOKEN  — entry ID for Intake Token field
-#   _GOOGLE_FORM_ENTRY_FIRST  — entry ID for First Name field
-#   _GOOGLE_FORM_ENTRY_LAST   — entry ID for Last Name field
-#   _GOOGLE_FORM_ENTRY_EMAIL  — entry ID for Email Address field
-#   _GOOGLE_FORM_ENTRY_PHONE  — entry ID for Phone Number field
+#   _SERVICE_NAME           — Cloud Run service / image name (e.g. intake-form-dispatcher)
+#   _REPO                   — Artifact Registry repo URL
+#   _REGION                 — GCP region (e.g. us-central1)
+#   _ENV                    — dev | test | prod
+#   _FROM_EMAIL             — sender address (e.g. noreply@simpletort.com)
+#   _ADMIN_EMAIL            — admin alert address
+#   _FIRESTORE_DATABASE_ID  — Firestore database ID (default: (default))
+#   _TOKEN_EXPIRY_DAYS      — intake token validity in days (default: 30)
+#
+# Google Form field mapping (formBaseUrl + fieldMappings) is stored in Firestore
+# at config/intake_form and is editable at runtime via Firebase Console — no
+# redeploy needed when form entry IDs change.
 
 steps:
   # ── Tests ──────────────────────────────────────────────────────────────
@@ -58,7 +58,7 @@ steps:
       - "--region=$_REGION"
       - "--platform=managed"
       - "--no-allow-unauthenticated"
-      - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,ENV=$_ENV,FROM_EMAIL=$_FROM_EMAIL,ADMIN_EMAIL=$_ADMIN_EMAIL,GOOGLE_FORM_BASE_URL=$_GOOGLE_FORM_BASE_URL,GOOGLE_FORM_ENTRY_TOKEN=$_GOOGLE_FORM_ENTRY_TOKEN,GOOGLE_FORM_ENTRY_FIRST=$_GOOGLE_FORM_ENTRY_FIRST,GOOGLE_FORM_ENTRY_LAST=$_GOOGLE_FORM_ENTRY_LAST,GOOGLE_FORM_ENTRY_EMAIL=$_GOOGLE_FORM_ENTRY_EMAIL,GOOGLE_FORM_ENTRY_PHONE=$_GOOGLE_FORM_ENTRY_PHONE"
+      - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,ENV=$_ENV,FROM_EMAIL=$_FROM_EMAIL,ADMIN_EMAIL=$_ADMIN_EMAIL,FIRESTORE_DATABASE_ID=$_FIRESTORE_DATABASE_ID,TOKEN_EXPIRY_DAYS=$_TOKEN_EXPIRY_DAYS"
       - "--set-secrets=SENDGRID_API_KEY=SENDGRID_API_KEY:latest"
       - "--memory=256Mi"
       - "--cpu=1"

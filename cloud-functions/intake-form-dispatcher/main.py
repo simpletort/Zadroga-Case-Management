@@ -12,26 +12,36 @@ Flow:
   1. Validate request body — caseId present and matches ZAD-YYYY-MM-XXXX
   2. Fetch case document from Firestore — confirm it exists and is in a
      status that allows intake dispatch ("New Lead" or "Pending Client Info")
-  3. Generate UUID v4 token; write intake_tokens/{tokenId}
-  4. Build Google Forms pre-fill URL with firstName, lastName, email, phone, token
-  5. Send email via SendGrid with the pre-fill link
-  6. Update token with emailSent outcome
-  7. Advance case status "New Lead" → "Pending Client Info" if applicable
-  8. Return { tokenId, previewUrl, emailSent }
+  3. Load form field mapping from Firestore config/intake_form (cached per instance)
+  4. Generate UUID v4 token; write intake_tokens/{tokenId}
+  5. Build Google Forms pre-fill URL from the Firestore field mapping
+  6. Send email via SendGrid with the pre-fill link
+  7. Update token with emailSent outcome
+  8. Advance case status "New Lead" → "Pending Client Info" if applicable
+  9. Return { tokenId, previewUrl, emailSent }
+
+Form field mapping (JotForm-style — configurable without redeploy):
+  Stored in Firestore at config/intake_form:
+    {
+      "formBaseUrl":    "https://docs.google.com/forms/d/<FORM_ID>/viewform",
+      "fieldMappings": {
+        "firstName":   "entry.1111111111",
+        "lastName":    "entry.2222222222",
+        "email":       "entry.3333333333",
+        "phone":       "entry.4444444444",
+        "intakeToken": "entry.5555555555"
+      }
+    }
+  To update form entry IDs: edit the Firestore document in Firebase Console.
+  The change takes effect on the next Cloud Run instance cold start — no redeploy.
 
 Environment variables (set via Cloud Run --set-env-vars / Secret Manager):
-  GCP_PROJECT_ID             — GCP project ID
-  FIRESTORE_DATABASE_ID      — default: (default)
-  SENDGRID_API_KEY           — injected from Secret Manager
-  FROM_EMAIL                 — sender address, e.g. noreply@simpletort.com
-  ADMIN_EMAIL                — alert recipient, e.g. admin@simpletort.com
-  GOOGLE_FORM_BASE_URL       — https://docs.google.com/forms/d/<FORM_ID>/viewform
-  GOOGLE_FORM_ENTRY_TOKEN    — entry ID for the hidden token field, e.g. entry.111111111
-  GOOGLE_FORM_ENTRY_FIRST    — entry ID for First Name field
-  GOOGLE_FORM_ENTRY_LAST     — entry ID for Last Name field
-  GOOGLE_FORM_ENTRY_EMAIL    — entry ID for Email Address field
-  GOOGLE_FORM_ENTRY_PHONE    — entry ID for Phone Number field
-  TOKEN_EXPIRY_DAYS          — default: 30
+  GCP_PROJECT_ID         — GCP project ID
+  FIRESTORE_DATABASE_ID  — default: (default)
+  SENDGRID_API_KEY       — injected from Secret Manager
+  FROM_EMAIL             — sender address, e.g. noreply@simpletort.com
+  ADMIN_EMAIL            — alert recipient, e.g. admin@simpletort.com
+  TOKEN_EXPIRY_DAYS      — default: 30
 """
 
 import logging
@@ -67,19 +77,14 @@ FIRESTORE_DB = os.environ.get("FIRESTORE_DATABASE_ID", "(default)")
 SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
 FROM_EMAIL = os.environ.get("FROM_EMAIL", "noreply@simpletort.com")
 ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@simpletort.com")
-FORM_BASE_URL = os.environ.get("GOOGLE_FORM_BASE_URL", "")
-FORM_ENTRY_TOKEN = os.environ.get("GOOGLE_FORM_ENTRY_TOKEN", "entry.0")
-FORM_ENTRY_FIRST = os.environ.get("GOOGLE_FORM_ENTRY_FIRST", "entry.1")
-FORM_ENTRY_LAST = os.environ.get("GOOGLE_FORM_ENTRY_LAST", "entry.2")
-FORM_ENTRY_EMAIL = os.environ.get("GOOGLE_FORM_ENTRY_EMAIL", "entry.3")
-FORM_ENTRY_PHONE = os.environ.get("GOOGLE_FORM_ENTRY_PHONE", "entry.4")
 TOKEN_EXPIRY_DAYS = int(os.environ.get("TOKEN_EXPIRY_DAYS", "30"))
 
 CASE_ID_RE = re.compile(r"^ZAD-\d{4}-\d{2}-\d{4}$")
 ALLOWED_STATUSES = {"New Lead", "Pending Client Info"}
 
-# Module-level Firestore singleton (reused across warm invocations)
+# Module-level singletons (reused across warm invocations)
 _db: firestore.Client | None = None
+_form_config: dict | None = None   # cached after first Firestore read
 
 
 def _get_db() -> firestore.Client:
@@ -89,22 +94,75 @@ def _get_db() -> firestore.Client:
     return _db
 
 
+def _get_form_config() -> dict:
+    """
+    Load form field mapping from Firestore config/intake_form.
+
+    Cached per Cloud Run instance — editing the Firestore document takes effect
+    on the next cold start without requiring a redeploy. This mirrors JotForm's
+    field-mapping configuration: the mapping of case data fields to Google Form
+    entry IDs is stored centrally and is editable at runtime via Firebase Console.
+
+    Expected document shape:
+      {
+        "formBaseUrl":    "https://docs.google.com/forms/d/<FORM_ID>/viewform",
+        "fieldMappings": {
+          "firstName":   "entry.1111111111",
+          "lastName":    "entry.2222222222",
+          "email":       "entry.3333333333",
+          "phone":       "entry.4444444444",
+          "intakeToken": "entry.5555555555"
+        }
+      }
+    """
+    global _form_config
+    if _form_config is None:
+        snap = _get_db().collection("config").document("intake_form").get()
+        if not snap.exists:
+            raise RuntimeError(
+                "Firestore document 'config/intake_form' not found. "
+                "Create it with 'formBaseUrl' and 'fieldMappings' before using this function."
+            )
+        data = snap.to_dict()
+        if not data.get("formBaseUrl") or not data.get("fieldMappings"):
+            raise RuntimeError(
+                "config/intake_form is missing 'formBaseUrl' or 'fieldMappings'."
+            )
+        _form_config = data
+        logger.info("Form config loaded: formBaseUrl=%s", _form_config["formBaseUrl"])
+    return _form_config
+
+
 def _build_prefill_url(
+    *,
+    form_config: dict,
     first_name: str,
     last_name: str,
     email: str,
     phone: str,
     token_id: str,
 ) -> str:
-    """Construct a Google Forms pre-fill URL by appending entry parameters."""
-    params = {
-        FORM_ENTRY_FIRST: first_name,
-        FORM_ENTRY_LAST: last_name,
-        FORM_ENTRY_EMAIL: email,
-        FORM_ENTRY_PHONE: phone,
-        FORM_ENTRY_TOKEN: token_id,
+    """
+    Construct a Google Forms pre-fill URL using the field mapping stored in
+    Firestore (config/intake_form.fieldMappings). Only maps fields that have
+    a corresponding entry ID configured — missing mappings are skipped silently.
+    """
+    mappings: dict = form_config["fieldMappings"]
+    params: dict[str, str] = {}
+
+    field_values = {
+        "firstName":   first_name,
+        "lastName":    last_name,
+        "email":       email,
+        "phone":       phone,
+        "intakeToken": token_id,
     }
-    return "{}?{}".format(FORM_BASE_URL, urlencode(params, quote_via=quote))
+    for field_key, value in field_values.items():
+        entry_id = mappings.get(field_key, "")
+        if entry_id and value:
+            params[entry_id] = value
+
+    return "{}?{}".format(form_config["formBaseUrl"], urlencode(params, quote_via=quote))
 
 
 def _send_intake_email(to_email: str, client_name: str, prefill_url: str) -> bool:
@@ -245,15 +303,27 @@ def send_intake_form(request: flask.Request) -> flask.Response:
             cors_headers,
         )
 
-    first_name: str = case_data.get("firstName", "")
-    last_name: str = case_data.get("lastName", "")
-    email: str = case_data.get("email", "")
-    phone: str = case_data.get("phone", "")
+    lead_data: dict = case_data.get("leadData", {})
+    first_name: str = lead_data.get("firstName", "")
+    last_name: str = lead_data.get("lastName", "")
+    email: str = lead_data.get("email", "")
+    phone: str = lead_data.get("phone", "")
 
     if not email:
         return flask.make_response(
             flask.jsonify({"error": "Case has no email address — cannot send intake form"}),
             422,
+            cors_headers,
+        )
+
+    # Load form field mapping from Firestore config/intake_form
+    try:
+        form_config = _get_form_config()
+    except RuntimeError as exc:
+        logger.error("Form config error: %s", exc)
+        return flask.make_response(
+            flask.jsonify({"error": "Form configuration error", "detail": str(exc)}),
+            500,
             cors_headers,
         )
 
@@ -264,6 +334,7 @@ def send_intake_form(request: flask.Request) -> flask.Response:
     client_name = "{} {}".format(first_name, last_name).strip() or email
 
     prefill_url = _build_prefill_url(
+        form_config=form_config,
         first_name=first_name,
         last_name=last_name,
         email=email,

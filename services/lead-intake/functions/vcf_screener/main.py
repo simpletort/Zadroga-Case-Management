@@ -26,7 +26,6 @@ import json
 import os
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Any
 
 import functions_framework
 from google.cloud import firestore
@@ -129,6 +128,18 @@ def rule_minimum_data_completeness(case_data: dict) -> RuleResult:
 def rule_exposure_site(case_data: dict) -> RuleResult:
     """R01: Exposure location must be a recognised VCF site."""
     location = (case_data.get("exposureLocation") or "").lower().strip()
+
+    # Guard: empty string is a substring of every string in Python ("" in "wtc" → True)
+    # so we must reject missing/empty location before the membership test.
+    if not location:
+        return RuleResult(
+            rule_id="R01_EXPOSURE_SITE",
+            passed=False,
+            severity="hard_fail",
+            code="INELIGIBLE_SITE",
+            reason="Exposure location is missing or empty",
+        )
+
     is_eligible = any(site in location or location in site for site in VCF_ELIGIBLE_SITES)
     return RuleResult(
         rule_id="R01_EXPOSURE_SITE",
@@ -235,7 +246,7 @@ def rule_conditions_match(case_data: dict) -> RuleResult:
             passed=True,
             severity="soft_flag",
             code="CONDITIONS_UNMATCHED",
-            reason=f"Provided conditions do not clearly match WTC certified categories — clinical review needed",
+            reason="Provided conditions do not clearly match WTC certified categories — clinical review needed",
         )
 
 

@@ -24,9 +24,8 @@ from models.lead import (
     LeadRequest,
     VCFEligibility,
     CaseDocument,
-    StatusHistoryEntry,
 )
-from services.case_service import create_case, get_case, update_case_status, list_cases
+from services.case_service import create_case, get_case, update_case_status
 from services.duplicate_detection import detect_duplicate, is_idempotent_retry
 from services.firestore_client import get_db
 from services.notification_service import send_welcome_notifications

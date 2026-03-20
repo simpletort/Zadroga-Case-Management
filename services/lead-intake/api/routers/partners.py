@@ -8,9 +8,8 @@ import hashlib
 import secrets
 import uuid
 from datetime import datetime
-from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from google.cloud import firestore
 
 from config import get_settings

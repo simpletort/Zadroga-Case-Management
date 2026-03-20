@@ -1,63 +1,43 @@
 steps:
-  # 1. Lint
+  # 1. Test
   - name: 'python:3.11-slim'
+    id: test
+    dir: 'services/evidence-management'
     entrypoint: bash
-    dir: 'services/client-portal'
     args:
       - '-c'
       - |
-        pip install black flake8 --quiet
-        black --check .
-        flake8 . --max-line-length=88
+        pip install -r requirements.txt pytest --quiet
+        pytest tests/ -v --tb=short
 
-  # 2. Test
-  # - name: 'python:3.11-slim'
-  #   entrypoint: bash
-  #   dir: 'services/client-portal'
-  #   args:
-  #     - '-c'
-  #     - |
-  #       pip install -r requirements.txt pytest --quiet
-  #       pytest tests/ -v
-
-  # 3. Build image
+  # 2. Build image
   - name: 'gcr.io/cloud-builders/docker'
+    id: build
+    dir: 'services/evidence-management'
+    waitFor: ['test']
     args:
       - build
       - '-t'
       - '$_REPO/$_SERVICE_NAME:$COMMIT_SHA'
       - '-t'
       - '$_REPO/$_SERVICE_NAME:$_ENV-latest'
-      - '-f'
-      - 'services/client-portal/Dockerfile'
-      - 'services/client-portal'
+      - '.'
 
-  # 4. Push image
+  # 3. Push image
   - name: 'gcr.io/cloud-builders/docker'
+    id: push
+    waitFor: ['build']
     args: ['push', '--all-tags', '$_REPO/$_SERVICE_NAME']
 
-  # 5. Deploy to Cloud Run
+  # 4. Deploy (dev -> direct via deploy.sh; prod -> canary via deploy.sh -> canary-deploy.sh)
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: deploy
+    waitFor: ['push']
     entrypoint: bash
     args:
       - '-c'
       - |
-        if [ "$_ENV" = "prod" ]; then
-          echo "Production deployment - running canary..."
-          bash scripts/canary-deploy.sh \
-            $_SERVICE_NAME-$_ENV \
-            $_REPO/$_SERVICE_NAME:$COMMIT_SHA \
-            $_REGION \
-            $PROJECT_ID
-        else
-          echo "Staging deployment - deploying directly..."
-          gcloud run deploy $_SERVICE_NAME-$_ENV \
-            --image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA \
-            --region=$_REGION \
-            --platform=managed \
-            --allow-unauthenticated \
-            --set-env-vars=ENV=$_ENV
-        fi
+        bash scripts/deploy.sh           $_ENV           $_SERVICE_NAME           $_REPO           $COMMIT_SHA           $_REGION           $PROJECT_ID
 
 images:
   - '$_REPO/$_SERVICE_NAME:$COMMIT_SHA'
@@ -66,4 +46,4 @@ images:
 options:
   logging: CLOUD_LOGGING_ONLY
 
-timeout: '600s'
+timeout: '1800s'

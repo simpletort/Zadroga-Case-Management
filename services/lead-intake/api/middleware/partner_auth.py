@@ -216,7 +216,6 @@ async def verify_api_key(request: Request, api_key: str) -> PartnerContext:
 
     partner_doc_data = None
     partner_id = None
-    matched_key = None
 
     async for doc in query.stream():
         data = doc.to_dict()
@@ -236,7 +235,6 @@ async def verify_api_key(request: Request, api_key: str) -> PartnerContext:
 
                 partner_doc_data = data
                 partner_id = doc.id
-                matched_key = key_entry
                 break
         if partner_id:
             break

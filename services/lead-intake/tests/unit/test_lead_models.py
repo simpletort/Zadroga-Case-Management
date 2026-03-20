@@ -95,7 +95,7 @@ class TestLeadRequest:
 
 class TestCaseDocument:
     def test_default_status_is_new_lead(self):
-        from datetime import datetime
+        from datetime import datetime, timezone
         case = CaseDocument(
             caseId="ZAD-2025-03-0001",
             firstName="John", lastName="Doe",
@@ -107,8 +107,8 @@ class TestCaseDocument:
             priorAttorney=False,
             marketingSource="test",
             partnerId="partner_abc",
-            createdAt=datetime.utcnow(),
-            updatedAt=datetime.utcnow(),
+            createdAt=datetime.now(timezone.utc),
+            updatedAt=datetime.now(timezone.utc),
             requestId="req-123",
         )
         assert case.status == CaseStatus.NEW_LEAD
