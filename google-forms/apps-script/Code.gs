@@ -250,6 +250,129 @@ function _sendReminderEmail_(toEmail, clientName, previewUrl) {
 
 
 // ════════════════════════════════════════════════════════════════════════════
+//  One-time setup: syncFormEntryIds
+//  Run ONCE from the Apps Script editor after creating or recreating the form.
+//  Reads item IDs directly from the linked Google Form (no URL copy-pasting)
+//  and writes the complete config/intake_form document to Firestore.
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Reads the pre-fill entry IDs for the 5 pre-filled fields directly from the
+ * linked Google Form and writes them to Firestore at config/intake_form.
+ *
+ * HOW TO RUN:
+ *   1. Open the Apps Script editor (Extensions > Apps Script from the linked Sheet)
+ *   2. Select "syncFormEntryIds" from the function dropdown
+ *   3. Click ▶ Run
+ *   4. Approve the OAuth prompt on first run (forms.body.readonly scope)
+ *   5. Check the Execution Log — all 5 entry IDs will be listed
+ *
+ * SAFE TO RE-RUN: replaces the full Firestore document, so running again after
+ * recreating the form will pick up new entry IDs automatically.
+ *
+ * Requires the forms.body.readonly OAuth scope in appsscript.json.
+ */
+function syncFormEntryIds() {
+  // ── 1. Get the linked form ─────────────────────────────────────────────
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var formUrl = ss.getFormUrl();
+  if (!formUrl) {
+    throw new Error(
+      "This spreadsheet has no linked form. " +
+      "Link the form first: Form editor > Responses tab > spreadsheet icon."
+    );
+  }
+  var form = FormApp.openByUrl(formUrl);
+
+  // ── 2. Map question titles → Firestore fieldMapping keys ───────────────
+  // Uses the same title constants declared at the top of this file so any
+  // future rename only needs to be changed in one place.
+  var TITLE_TO_KEY = {};
+  TITLE_TO_KEY[Q_FIRST_NAME] = "firstName";
+  TITLE_TO_KEY[Q_LAST_NAME]  = "lastName";
+  TITLE_TO_KEY[Q_EMAIL]      = "email";
+  TITLE_TO_KEY[Q_PHONE]      = "phone";
+  TITLE_TO_KEY[Q_TOKEN]      = "intakeToken";
+
+  // ── 3. Iterate items and collect entry IDs ─────────────────────────────
+  var items = form.getItems();
+  var fieldMappings = {};
+
+  for (var i = 0; i < items.length; i++) {
+    var title = items[i].getTitle();
+    if (TITLE_TO_KEY.hasOwnProperty(title)) {
+      // item.getId() returns the exact number used in entry.XXXXXXXXX pre-fill params
+      fieldMappings[TITLE_TO_KEY[title]] = "entry." + items[i].getId();
+    }
+  }
+
+  // ── 4. Guard: all 5 fields must be found before writing ───────────────
+  var missing = [];
+  for (var expectedTitle in TITLE_TO_KEY) {
+    if (TITLE_TO_KEY.hasOwnProperty(expectedTitle)) {
+      var key = TITLE_TO_KEY[expectedTitle];
+      if (!fieldMappings[key]) {
+        missing.push('"' + expectedTitle + '"');
+      }
+    }
+  }
+  if (missing.length > 0) {
+    throw new Error(
+      "Could not find form questions: " + missing.join(", ") + ". " +
+      "Check that the question titles match exactly (case-sensitive)."
+    );
+  }
+
+  // ── 5. Write to Firestore config/intake_form ───────────────────────────
+  // _toFsFields_ does not support nested maps (it would stringify the object).
+  // Build the Firestore REST document body manually using mapValue encoding.
+  var mappingFields = {};
+  for (var fkey in fieldMappings) {
+    if (fieldMappings.hasOwnProperty(fkey)) {
+      mappingFields[fkey] = { stringValue: fieldMappings[fkey] };
+    }
+  }
+
+  var docBody = {
+    fields: {
+      formBaseUrl:   { stringValue: form.getPublishedUrl() },
+      fieldMappings: { mapValue: { fields: mappingFields } },
+      updatedAt:     { timestampValue: new Date().toISOString() },
+      updatedBy:     { stringValue: Session.getActiveUser().getEmail() }
+    }
+  };
+
+  // PATCH with no updateMask = replace the full document
+  var url = FIRESTORE_REST_BASE + "/config/intake_form";
+  var response = UrlFetchApp.fetch(url, {
+    method: "patch",
+    contentType: "application/json",
+    headers: { Authorization: "Bearer " + _getToken_() },
+    payload: JSON.stringify(docBody),
+    muteHttpExceptions: true
+  });
+
+  var code = response.getResponseCode();
+  if (code < 200 || code >= 300) {
+    throw new Error(
+      "Firestore write failed (HTTP " + code + "): " +
+      response.getContentText().substring(0, 300)
+    );
+  }
+
+  // ── 6. Log results for verification ───────────────────────────────────
+  Logger.log("syncFormEntryIds complete — config/intake_form updated.");
+  Logger.log("  formBaseUrl : " + form.getPublishedUrl());
+  for (var lkey in fieldMappings) {
+    if (fieldMappings.hasOwnProperty(lkey)) {
+      Logger.log("  " + lkey + " : " + fieldMappings[lkey]);
+    }
+  }
+  Logger.log("intake-form-dispatcher will use these IDs on next cold start.");
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
 //  Main trigger: onIntakeFormSubmit
 //  Install via: Triggers > Add trigger > onIntakeFormSubmit > From form > On form submit
 // ════════════════════════════════════════════════════════════════════════════

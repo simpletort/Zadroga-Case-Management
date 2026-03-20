@@ -129,49 +129,36 @@ At end of section: **Go to section 8 (Document Uploads)**
 
 ---
 
-## Step 3 — Get the Entry IDs for Pre-fill
+## Step 3 — Sync Entry IDs to Firestore (automated)
 
-1. Open the form in the editor
-2. Click the three-dot menu → **"Get pre-filled link"**
-3. Fill in a dummy value in every field and click **"Get link"**
-4. Copy the generated URL — it looks like:
+After completing Steps 4–5 (Apps Script setup), run the one-click sync function
+instead of extracting entry IDs manually:
+
+1. In the Apps Script editor, select **`syncFormEntryIds`** from the function dropdown
+2. Click **▶ Run**
+3. Approve the OAuth consent prompt on first run (grants `forms.body.readonly`)
+4. Check the **Execution Log** — you should see all 5 entry IDs confirmed:
    ```
-   https://docs.google.com/forms/d/FORM_ID/viewform?usp=pp_url
-     &entry.111111111=Test
-     &entry.222222222=User
-     ...
-   ```
-5. Extract the `entry.XXXXXXXXX` value for each field and record them:
-
-| Field | entry ID |
-|-------|----------|
-| First Name | `entry.XXXXXXXXX` |
-| Last Name | `entry.XXXXXXXXX` |
-| Email Address | `entry.XXXXXXXXX` |
-| Phone Number | `entry.XXXXXXXXX` |
-| Intake Token | `entry.XXXXXXXXX` |
-
-6. Write these to the **Firestore config document** at `config/intake_form` in Firebase
-   Console (Firestore → `config` collection → `intake_form` document):
-   ```json
-   {
-     "formBaseUrl": "https://docs.google.com/forms/d/<FORM_ID>/viewform",
-     "fieldMappings": {
-       "firstName":   "entry.XXXXXXXXX",
-       "lastName":    "entry.XXXXXXXXX",
-       "email":       "entry.XXXXXXXXX",
-       "phone":       "entry.XXXXXXXXX",
-       "intakeToken": "entry.XXXXXXXXX"
-     },
-     "updatedAt": "<today's date>",
-     "updatedBy": "your-email@simpletort.com"
-   }
+   syncFormEntryIds complete — config/intake_form updated.
+     formBaseUrl  : https://docs.google.com/forms/d/FORM_ID/viewform
+     firstName    : entry.1111111111
+     lastName     : entry.2222222222
+     email        : entry.3333333333
+     phone        : entry.4444444444
+     intakeToken  : entry.5555555555
+   intake-form-dispatcher will use these IDs on next cold start.
    ```
 
-   > **No redeploy needed.** The `intake-form-dispatcher` reads this document on
-   > cold start and caches it per instance. If you recreate the form and get new
-   > entry IDs, just update this Firestore document — the next Cloud Run instance
-   > will pick up the new mapping automatically.
+The function writes `config/intake_form` to Firestore automatically — no Firebase
+Console, no URL copy-pasting, no manual extraction required.
+
+> **Re-run any time** you recreate the form. The function does a full document
+> replace, so new entry IDs are picked up immediately on the next
+> `intake-form-dispatcher` cold start — no redeploy needed.
+
+> **If the function throws** `"Could not find form questions: ..."`, one of the
+> question titles in Section 1 doesn't match exactly. Check that the titles are
+> spelled and capitalised as specified in Step 2 above.
 
 ---
 
@@ -203,11 +190,17 @@ Optionally, set `SENDGRID_API_KEY` if you prefer SendGrid for reminder emails
 
 ---
 
-## Step 6 — Enable Drive Advanced Service
+## Step 6 — Drive Advanced Service (already declared in manifest)
 
-1. In Apps Script, click **Services** (+ icon in left panel)
-2. Find **Drive API** → select **v2** → click **Add**
-3. Confirm `Drive` appears in the Services list
+The `appsscript.json` you pasted in Step 5 already declares the Drive API
+in `enabledAdvancedServices` — Apps Script enables it automatically from the manifest.
+
+> ⚠️ **Do NOT add Drive via the Services panel.** Adding it manually when it is
+> already in the manifest causes this error on save:
+> `"Found a service identifier used more than once: Drive"`
+>
+> If you already added it via the panel, go to **Services → three-dot menu next
+> to Drive API → Remove** to resolve the conflict, then save again.
 
 ---
 

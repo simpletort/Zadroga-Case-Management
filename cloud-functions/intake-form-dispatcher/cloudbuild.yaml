@@ -6,12 +6,14 @@
 #   3. Deploy to Cloud Run (HTTP trigger, internal only)
 #
 # Substitution variables (set in Cloud Build trigger):
-#   _SERVICE_NAME  — Cloud Run service / image name (e.g. intake-form-dispatcher)
-#   _REPO          — Artifact Registry repo URL
-#   _REGION        — GCP region (e.g. us-central1)
-#   _ENV           — dev | test | prod
-#   _FROM_EMAIL    — sender address (e.g. noreply@simpletort.com)
-#   _ADMIN_EMAIL   — admin alert address
+#   _SERVICE_NAME           — Cloud Run service / image name (e.g. intake-form-dispatcher)
+#   _REPO                   — Artifact Registry repo URL
+#   _REGION                 — GCP region (e.g. us-central1)
+#   _ENV                    — dev | test | prod
+#   _FROM_EMAIL             — sender address (e.g. noreply@simpletort.com)
+#   _ADMIN_EMAIL            — admin alert address
+#   _FIRESTORE_DATABASE_ID  — Firestore database ID (default: (default))
+#   _TOKEN_EXPIRY_DAYS      — intake token validity in days (default: 30)
 #
 # Google Form field mapping (formBaseUrl + fieldMappings) is stored in Firestore
 # at config/intake_form and is editable at runtime via Firebase Console — no
@@ -56,7 +58,7 @@ steps:
       - "--region=$_REGION"
       - "--platform=managed"
       - "--no-allow-unauthenticated"
-      - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,ENV=$_ENV,FROM_EMAIL=$_FROM_EMAIL,ADMIN_EMAIL=$_ADMIN_EMAIL"
+      - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,ENV=$_ENV,FROM_EMAIL=$_FROM_EMAIL,ADMIN_EMAIL=$_ADMIN_EMAIL,FIRESTORE_DATABASE_ID=$_FIRESTORE_DATABASE_ID,TOKEN_EXPIRY_DAYS=$_TOKEN_EXPIRY_DAYS"
       - "--set-secrets=SENDGRID_API_KEY=SENDGRID_API_KEY:latest"
       - "--memory=256Mi"
       - "--cpu=1"
