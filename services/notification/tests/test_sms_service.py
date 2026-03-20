@@ -14,19 +14,20 @@ Opt-out paths
   [C] Opt-out check raises → hard stop, status "failed", no Twilio call
 
 Template error paths
-  [D] Template not found → status "template_error", no Twilio call
-  [E] Template disabled  → status "template_error", no Twilio call
-  [F] Template render raises unexpected error → status "failed"
+  [D] Template not found    → status "template_error", no Twilio call
+  [E] Template disabled     → status "template_error", no Twilio call
+  [F] Missing variable      → status "template_error", no Twilio call
+  [G] Template render raises unexpected error → status "failed"
 
 Twilio failure path
-  [G] Twilio returns success=False → status "failed", delivery record written
+  [H] Twilio returns success=False → status "failed", delivery record written
 
 Delivery record paths
-  [H] Delivery record is always written (even on opt-out / failure)
-  [I] Delivery record write failure is non-fatal (does not raise)
+  [I] Delivery record is always written (even on opt-out / failure)
+  [J] Delivery record write failure is non-fatal (does not raise)
 
 Return value shape
-  [J] SmsDispatchResult fields are set correctly on success
+  [K] SmsDispatchResult fields are set correctly on success
 """
 from __future__ import annotations
 
@@ -34,17 +35,27 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch, call
 
 from services.sms_service import SmsDispatchResult, send_sms
-from services.template_service import TemplateDisabledError, TemplateNotFoundError
+from services.template_service import (
+    MissingVariableError,
+    RenderedTemplate,
+    TemplateDisabledError,
+    TemplateNotFoundError,
+)
 from services.twilio_client import SmsResult
 
 PHONE = "+12125551234"
 TEMPLATE_ID = "welcome_sms"
-VARIABLES = {"first_name": "Jane", "case_id": "ZAD-2025-03-0001"}
+VARIABLES = {"clientName": "Jane Doe", "caseId": "ZAD-2025-03-0001"}
 CASE_ID = "ZAD-2025-03-0001"
 REQUEST_ID = "req-abc-123"
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _rendered(sms_safe: str = "Hi Jane Doe, your case ZAD-2025-03-0001 received.") -> RenderedTemplate:
+    """Return a minimal RenderedTemplate for mocking render_template."""
+    return RenderedTemplate(subject="", html_body=sms_safe, sms_safe=sms_safe)
+
 
 def _success_twilio_result() -> SmsResult:
     return SmsResult(
@@ -74,7 +85,7 @@ class TestHappyPath:
     async def test_returns_success_result(self, mock_db):
         with (
             patch("services.sms_service.is_opted_out", new=AsyncMock(return_value=False)),
-            patch("services.sms_service.fetch_and_render", new=AsyncMock(return_value="Hi Jane")),
+            patch("services.sms_service.render_template", new=AsyncMock(return_value=_rendered())),
             patch("services.sms_service.send_sms_via_twilio", return_value=_success_twilio_result()),
             patch("services.sms_service._write_delivery_record", new=AsyncMock()),
         ):
@@ -89,7 +100,7 @@ class TestHappyPath:
     async def test_delivery_record_written_with_sent_status(self, mock_db):
         with (
             patch("services.sms_service.is_opted_out", new=AsyncMock(return_value=False)),
-            patch("services.sms_service.fetch_and_render", new=AsyncMock(return_value="Hi Jane")),
+            patch("services.sms_service.render_template", new=AsyncMock(return_value=_rendered())),
             patch("services.sms_service.send_sms_via_twilio", return_value=_success_twilio_result()),
             patch("services.sms_service._write_delivery_record", new=AsyncMock()) as mock_write,
         ):
@@ -100,12 +111,29 @@ class TestHappyPath:
         assert kwargs["status"] == "sent"
 
     @pytest.mark.asyncio
+    async def test_sms_safe_body_sent_to_twilio(self, mock_db):
+        """render_template().sms_safe must be passed to send_sms_via_twilio."""
+        sms_body = "Hi Jane, ZAD-2025-001 confirmed."
+        with (
+            patch("services.sms_service.is_opted_out", new=AsyncMock(return_value=False)),
+            patch("services.sms_service.render_template",
+                  new=AsyncMock(return_value=_rendered(sms_body))),
+            patch("services.sms_service.send_sms_via_twilio",
+                  return_value=_success_twilio_result()) as mock_twilio,
+            patch("services.sms_service._write_delivery_record", new=AsyncMock()),
+        ):
+            await send_sms(PHONE, TEMPLATE_ID, VARIABLES, mock_db)
+
+        mock_twilio.assert_called_once_with(to=PHONE, body=sms_body)
+
+    @pytest.mark.asyncio
     async def test_result_has_correct_segment_count(self, mock_db):
         twilio_result = SmsResult(success=True, message_sid="SMx", status="queued",
                                   char_count=320, segment_count=3)
         with (
             patch("services.sms_service.is_opted_out", new=AsyncMock(return_value=False)),
-            patch("services.sms_service.fetch_and_render", new=AsyncMock(return_value="X" * 320)),
+            patch("services.sms_service.render_template",
+                  new=AsyncMock(return_value=_rendered("X" * 320))),
             patch("services.sms_service.send_sms_via_twilio", return_value=twilio_result),
             patch("services.sms_service._write_delivery_record", new=AsyncMock()),
         ):
@@ -165,7 +193,7 @@ class TestOptOutCheckError:
         mock_twilio.assert_not_called()
 
 
-# ── [D/E] Template errors ─────────────────────────────────────────────────────
+# ── [D/E/F] Template errors ───────────────────────────────────────────────────
 
 class TestTemplateErrors:
 
@@ -173,7 +201,7 @@ class TestTemplateErrors:
     async def test_template_not_found_returns_template_error(self, mock_db):
         with (
             patch("services.sms_service.is_opted_out", new=AsyncMock(return_value=False)),
-            patch("services.sms_service.fetch_and_render",
+            patch("services.sms_service.render_template",
                   new=AsyncMock(side_effect=TemplateNotFoundError("missing"))),
             patch("services.sms_service.send_sms_via_twilio") as mock_twilio,
             patch("services.sms_service._write_delivery_record", new=AsyncMock()),
@@ -188,7 +216,7 @@ class TestTemplateErrors:
     async def test_template_disabled_returns_template_error(self, mock_db):
         with (
             patch("services.sms_service.is_opted_out", new=AsyncMock(return_value=False)),
-            patch("services.sms_service.fetch_and_render",
+            patch("services.sms_service.render_template",
                   new=AsyncMock(side_effect=TemplateDisabledError("disabled"))),
             patch("services.sms_service.send_sms_via_twilio") as mock_twilio,
             patch("services.sms_service._write_delivery_record", new=AsyncMock()),
@@ -200,10 +228,27 @@ class TestTemplateErrors:
         mock_twilio.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_missing_variable_returns_template_error(self, mock_db):
+        """MissingVariableError must yield template_error status, not crash."""
+        exc = MissingVariableError("welcome_sms", ["clientName", "caseId"])
+        with (
+            patch("services.sms_service.is_opted_out", new=AsyncMock(return_value=False)),
+            patch("services.sms_service.render_template", new=AsyncMock(side_effect=exc)),
+            patch("services.sms_service.send_sms_via_twilio") as mock_twilio,
+            patch("services.sms_service._write_delivery_record", new=AsyncMock()),
+        ):
+            result = await send_sms(PHONE, TEMPLATE_ID, {}, mock_db)
+
+        assert result.success is False
+        assert result.status == "template_error"
+        assert "clientName" in result.error_message or "caseId" in result.error_message
+        mock_twilio.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_template_errors_write_delivery_record(self, mock_db):
         with (
             patch("services.sms_service.is_opted_out", new=AsyncMock(return_value=False)),
-            patch("services.sms_service.fetch_and_render",
+            patch("services.sms_service.render_template",
                   new=AsyncMock(side_effect=TemplateNotFoundError("missing"))),
             patch("services.sms_service.send_sms_via_twilio"),
             patch("services.sms_service._write_delivery_record", new=AsyncMock()) as mock_write,
@@ -214,7 +259,27 @@ class TestTemplateErrors:
         assert mock_write.call_args.kwargs["status"] == "template_error"
 
 
-# ── [G] Twilio failure ────────────────────────────────────────────────────────
+# ── [G] Unexpected render error ───────────────────────────────────────────────
+
+class TestUnexpectedRenderError:
+
+    @pytest.mark.asyncio
+    async def test_unexpected_render_error_returns_failed(self, mock_db):
+        with (
+            patch("services.sms_service.is_opted_out", new=AsyncMock(return_value=False)),
+            patch("services.sms_service.render_template",
+                  new=AsyncMock(side_effect=RuntimeError("unexpected"))),
+            patch("services.sms_service.send_sms_via_twilio") as mock_twilio,
+            patch("services.sms_service._write_delivery_record", new=AsyncMock()),
+        ):
+            result = await send_sms(PHONE, TEMPLATE_ID, VARIABLES, mock_db)
+
+        assert result.success is False
+        assert result.status == "failed"
+        mock_twilio.assert_not_called()
+
+
+# ── [H] Twilio failure ────────────────────────────────────────────────────────
 
 class TestTwilioFailure:
 
@@ -222,7 +287,7 @@ class TestTwilioFailure:
     async def test_twilio_failure_returns_failed_status(self, mock_db):
         with (
             patch("services.sms_service.is_opted_out", new=AsyncMock(return_value=False)),
-            patch("services.sms_service.fetch_and_render", new=AsyncMock(return_value="Hi")),
+            patch("services.sms_service.render_template", new=AsyncMock(return_value=_rendered())),
             patch("services.sms_service.send_sms_via_twilio", return_value=_failure_twilio_result()),
             patch("services.sms_service._write_delivery_record", new=AsyncMock()),
         ):
@@ -236,7 +301,7 @@ class TestTwilioFailure:
     async def test_twilio_failure_still_writes_delivery_record(self, mock_db):
         with (
             patch("services.sms_service.is_opted_out", new=AsyncMock(return_value=False)),
-            patch("services.sms_service.fetch_and_render", new=AsyncMock(return_value="Hi")),
+            patch("services.sms_service.render_template", new=AsyncMock(return_value=_rendered())),
             patch("services.sms_service.send_sms_via_twilio", return_value=_failure_twilio_result()),
             patch("services.sms_service._write_delivery_record", new=AsyncMock()) as mock_write,
         ):
@@ -246,7 +311,7 @@ class TestTwilioFailure:
         assert mock_write.call_args.kwargs["status"] == "failed"
 
 
-# ── [H/I] Delivery record robustness ─────────────────────────────────────────
+# ── [I/J] Delivery record robustness ─────────────────────────────────────────
 
 class TestDeliveryRecordRobustness:
 
@@ -258,7 +323,7 @@ class TestDeliveryRecordRobustness:
         """
         with (
             patch("services.sms_service.is_opted_out", new=AsyncMock(return_value=False)),
-            patch("services.sms_service.fetch_and_render", new=AsyncMock(return_value="Hi")),
+            patch("services.sms_service.render_template", new=AsyncMock(return_value=_rendered())),
             patch("services.sms_service.send_sms_via_twilio", return_value=_success_twilio_result()),
             patch("services.sms_service._write_delivery_record",
                   new=AsyncMock(side_effect=Exception("Firestore write timeout"))),
@@ -277,7 +342,7 @@ class TestDeliveryRecordRobustness:
         )
         with (
             patch("services.sms_service.is_opted_out", new=AsyncMock(return_value=False)),
-            patch("services.sms_service.fetch_and_render", new=AsyncMock(return_value="Hi")),
+            patch("services.sms_service.render_template", new=AsyncMock(return_value=_rendered())),
             patch("services.sms_service.send_sms_via_twilio", return_value=_success_twilio_result()),
             patch("services.sms_service._write_delivery_record", new=AsyncMock()),
         ):
@@ -286,7 +351,7 @@ class TestDeliveryRecordRobustness:
         assert uuid_re.match(result.delivery_id)
 
 
-# ── [J] Return value shape ────────────────────────────────────────────────────
+# ── [K] Return value shape ────────────────────────────────────────────────────
 
 class TestReturnValueShape:
 
@@ -294,7 +359,7 @@ class TestReturnValueShape:
     async def test_all_fields_present_on_success(self, mock_db):
         with (
             patch("services.sms_service.is_opted_out", new=AsyncMock(return_value=False)),
-            patch("services.sms_service.fetch_and_render", new=AsyncMock(return_value="Hi")),
+            patch("services.sms_service.render_template", new=AsyncMock(return_value=_rendered())),
             patch("services.sms_service.send_sms_via_twilio", return_value=_success_twilio_result()),
             patch("services.sms_service._write_delivery_record", new=AsyncMock()),
         ):

@@ -53,9 +53,11 @@ from config import get_settings
 from logging_config import get_logger
 from services.opt_out_service import is_opted_out
 from services.template_service import (
+    MissingVariableError,
+    RenderedTemplate,
     TemplateDisabledError,
     TemplateNotFoundError,
-    fetch_and_render,
+    render_template,
 )
 from services.twilio_client import SmsResult, send_sms_via_twilio
 
@@ -244,8 +246,9 @@ async def send_sms(
     # ── Step 2: Fetch template and render body ────────────────────────────
     rendered_body: Optional[str] = None
     try:
-        rendered_body = await fetch_and_render(template_id, variables, db)
-    except (TemplateNotFoundError, TemplateDisabledError) as exc:
+        rendered: RenderedTemplate = await render_template(template_id, variables, db)
+        rendered_body = rendered.sms_safe
+    except (TemplateNotFoundError, TemplateDisabledError, MissingVariableError) as exc:
         logger.error(
             "sms_template_error",
             delivery_id=delivery_id,
