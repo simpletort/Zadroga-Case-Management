@@ -303,10 +303,11 @@ def send_intake_form(request: flask.Request) -> flask.Response:
             cors_headers,
         )
 
-    first_name: str = case_data.get("firstName", "")
-    last_name: str = case_data.get("lastName", "")
-    email: str = case_data.get("email", "")
-    phone: str = case_data.get("phone", "")
+    lead_data: dict = case_data.get("leadData", {})
+    first_name: str = lead_data.get("firstName", "")
+    last_name: str = lead_data.get("lastName", "")
+    email: str = lead_data.get("email", "")
+    phone: str = lead_data.get("phone", "")
 
     if not email:
         return flask.make_response(
