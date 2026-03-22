@@ -38,6 +38,7 @@ Public API
 """
 from __future__ import annotations
 
+import html as _html
 import re
 from dataclasses import dataclass
 from typing import Optional
@@ -52,6 +53,9 @@ logger = get_logger(__name__)
 # Matches {{variableName}} — the double-brace placeholder syntax used in
 # Firestore template documents.
 _PLACEHOLDER_RE = re.compile(r"\{\{(\w+)\}\}")
+
+# Matches any HTML tag — used to strip HTML from SMS-safe bodies.
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
 
 
 # ── Custom exceptions ──────────────────────────────────────────────────────────
@@ -136,6 +140,21 @@ def _substitute(text: str, variables: dict) -> str:
         return str(value) if value is not None else match.group(0)
 
     return _PLACEHOLDER_RE.sub(_replace, text)
+
+
+def _strip_html_tags(text: str) -> str:
+    """
+    Remove HTML tags from *text* and decode HTML entities for SMS delivery.
+
+    Examples
+    --------
+    >>> _strip_html_tags("<p>Hello &amp; welcome</p>")
+    'Hello & welcome'
+    >>> _strip_html_tags("Plain text — no change")
+    'Plain text — no change'
+    """
+    stripped = _HTML_TAG_RE.sub("", text)
+    return _html.unescape(stripped)
 
 
 class _SafeFormatMap(dict):
@@ -265,7 +284,9 @@ async def render_template(
         raise MissingVariableError(template_id, list(missing))
 
     # ── Render each field ─────────────────────────────────────────────────
-    sms_safe = _substitute(body_tmpl, variables)
+    # Strip HTML tags and decode entities so the SMS body is always plain text
+    # (guards against body fields that share HTML with email templates).
+    sms_safe = _strip_html_tags(_substitute(body_tmpl, variables))
     subject = _substitute(subject_tmpl, variables)
 
     # Use dedicated htmlBody field when present; otherwise auto-generate
