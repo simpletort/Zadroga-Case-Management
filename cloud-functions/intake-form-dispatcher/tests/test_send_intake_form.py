@@ -117,8 +117,9 @@ class TestValidation:
         assert resp.status_code == 409
 
     def test_missing_email_returns_422(self, app, mock_db, mock_form_config):
+        no_email = {**CASE_DATA, "leadData": {**CASE_DATA["leadData"], "email": ""}}
         mock_db.collection.return_value.document.return_value.get.return_value = \
-            _make_case_snap(data={**CASE_DATA, "email": ""})
+            _make_case_snap(data=no_email)
         resp = _post(app, {"caseId": "ZAD-2026-03-0001"})
         assert resp.status_code == 422
 
