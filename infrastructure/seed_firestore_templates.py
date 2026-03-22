@@ -64,15 +64,18 @@ from datetime import datetime, timezone
 
 TEMPLATES: list[dict] = [
     # ── Welcome SMS ────────────────────────────────────────────────────────────
+    # Variables: clientName, caseId, portalUrl
+    # Char count (with typical values): ~155 — stays within 1 GSM-7 segment (160)
     {
         "templateId": "welcome-sms",
         "name": "Welcome SMS",
         "channel": "SMS",
         "triggerEvent": "new_lead_created",
+        "variables": ["clientName", "caseId", "portalUrl"],
         "body": (
-            "Hi {{clientName}}, thank you for contacting us about your Zadroga "
-            "Act claim. Your case {{caseId}} has been received. A team member "
-            "will contact you within 24 hours. Reply STOP to opt out."
+            "Hi {{clientName}}, your Zadroga Act claim {{caseId}} has been "
+            "received. View your portal: {{portalUrl}} "
+            "Reply STOP to opt out."
         ),
         "subject": "",
         "htmlBody": "",
@@ -80,34 +83,54 @@ TEMPLATES: list[dict] = [
     },
 
     # ── Welcome Email ──────────────────────────────────────────────────────────
+    # Variables: clientName, caseId, portalUrl
     {
         "templateId": "welcome-email",
         "name": "Welcome Email",
         "channel": "EMAIL",
         "triggerEvent": "new_lead_created",
+        "variables": ["clientName", "caseId", "portalUrl"],
         "body": (
             "Hi {{clientName}},\n\n"
             "Thank you for reaching out about your Zadroga Act claim. "
-            "We have received your information and assigned case number {{caseId}} "
-            "to your file.\n\n"
-            "One of our team members will contact you within 24 business hours "
-            "to discuss the next steps.\n\n"
-            "If you have immediate questions, please reply to this email or call "
-            "our office.\n\n"
+            "We have received your information and assigned case number "
+            "{{caseId}} to your file.\n\n"
+            "You can track your case and upload documents through your "
+            "secure client portal:\n"
+            "{{portalUrl}}\n\n"
+            "One of our team members will contact you within 24 business "
+            "hours to discuss the next steps.\n\n"
+            "If you have immediate questions, please reply to this email "
+            "or call our office.\n\n"
             "Sincerely,\n"
             "The Zadroga Case Management Team"
         ),
         "subject": "Your Zadroga Act Claim — Case {{caseId}} Received",
         "htmlBody": (
+            "<!DOCTYPE html>"
+            "<html><body style='font-family:Arial,sans-serif;color:#333;max-width:600px;margin:auto;padding:20px'>"
+            "<h2 style='color:#1a3c6b'>Your Zadroga Act Claim Has Been Received</h2>"
             "<p>Hi {{clientName}},</p>"
             "<p>Thank you for reaching out about your Zadroga Act claim. "
             "We have received your information and assigned case number "
             "<strong>{{caseId}}</strong> to your file.</p>"
-            "<p>One of our team members will contact you within 24 business hours "
-            "to discuss the next steps.</p>"
-            "<p>If you have immediate questions, please reply to this email or "
-            "call our office.</p>"
-            "<p>Sincerely,<br>The Zadroga Case Management Team</p>"
+            "<p>You can track your case status and securely upload documents "
+            "through your client portal:</p>"
+            "<p style='text-align:center;margin:24px 0'>"
+            "<a href='{{portalUrl}}' "
+            "style='background:#1a3c6b;color:#fff;padding:12px 28px;"
+            "border-radius:4px;text-decoration:none;font-weight:bold'>"
+            "Access Your Portal</a></p>"
+            "<p>One of our team members will contact you within "
+            "<strong>24 business hours</strong> to discuss the next steps.</p>"
+            "<p>If you have immediate questions, please reply to this email "
+            "or call our office.</p>"
+            "<hr style='border:none;border-top:1px solid #eee;margin:24px 0'>"
+            "<p style='font-size:12px;color:#888'>"
+            "The Zadroga Case Management Team<br>"
+            "This message was sent regarding case {{caseId}}. "
+            "If you did not submit a claim, please disregard this email.</p>"
+            "</body></html>"
         ),
         "isActive": True,
     },
