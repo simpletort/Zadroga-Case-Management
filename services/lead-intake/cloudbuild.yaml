@@ -160,7 +160,7 @@ steps:
     args:
       - build
       - -f
-      - infrastructure/Dockerfile
+      - Dockerfile
       - --build-arg
       - BUILD_ENV=development
       - -t
