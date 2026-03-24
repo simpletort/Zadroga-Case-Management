@@ -7,9 +7,11 @@ import logging
 import sys
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+
+from shared.middlewares.error_handler import ErrorHandlerMiddleware
+from shared.middlewares.logging import LoggingMiddleware
 
 from app.config import get_settings
 from app.routes import assignment, dashboard
@@ -48,15 +50,8 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PATCH"],
     allow_headers=["Authorization", "Content-Type"],
 )
-
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    logger.error("Unhandled error on %s: %s", request.url, exc, exc_info=True)
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "An internal error occurred. Please try again."},
-    )
+app.add_middleware(LoggingMiddleware)
+app.add_middleware(ErrorHandlerMiddleware)
 
 
 @app.get("/health", include_in_schema=False)

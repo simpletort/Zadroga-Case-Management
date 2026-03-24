@@ -111,7 +111,10 @@ def get_dashboard(
 
     # ── 3. Post-filter ────────────────────────────────────────────────────
     def _passes(c: dict) -> bool:
-        if statuses and not use_fs_status and c["status"] not in statuses:
+        # Always apply Python-side status filter even when Firestore also
+        # filtered (redundant in production, but required for test correctness
+        # because mocked Firestore .where() calls return all docs unchanged).
+        if statuses and c["status"] not in statuses:
             return False
         if deadline_from and c["vcf_deadline"] and c["vcf_deadline"] < deadline_from:
             return False
