@@ -1,8 +1,8 @@
 """
-models/lead.py — Pydantic v2 models.
+api/models/lead.py — Pydantic v2 models for the Lead Intake API.
 
-PHI NOTE: These models hold PII. Never log full model instances.
-Use .model_dump(include={'caseId', 'status'}) for safe log payloads.
+PHI NOTE: These models hold PII/PHI. Never log full model instances.
+          Use .model_dump(include={"caseId", "status"}) for safe log payloads.
 """
 from __future__ import annotations
 
@@ -11,38 +11,32 @@ from enum import Enum
 from typing import Optional
 
 import phonenumbers
-from pydantic import (
-    BaseModel,
-    EmailStr,
-    Field,
-    field_validator,
-    model_validator,
-)
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 
 # ── Enums ─────────────────────────────────────────────────────────────────────
 
 class WTCHealthProgramStatus(str, Enum):
-    ENROLLED = "enrolled"
-    APPLIED = "applied"
+    ENROLLED    = "enrolled"
+    APPLIED     = "applied"
     NOT_APPLIED = "not_applied"
-    UNKNOWN = "unknown"
+    UNKNOWN     = "unknown"
 
 
 class CaseStatus(str, Enum):
-    NEW_LEAD = "New Lead"
-    SCREENED = "Screened"
-    QUALIFIED = "Qualified"
+    NEW_LEAD     = "New Lead"
+    SCREENED     = "Screened"
+    QUALIFIED    = "Qualified"
     DISQUALIFIED = "Disqualified"
     NEEDS_REVIEW = "Needs Review"
-    ACTIVE = "Active"
-    CLOSED = "Closed"
+    ACTIVE       = "Active"
+    CLOSED       = "Closed"
 
 
 class VCFEligibility(str, Enum):
-    PENDING = "pending"
-    ELIGIBLE = "eligible"
-    INELIGIBLE = "ineligible"
+    PENDING      = "pending"
+    ELIGIBLE     = "eligible"
+    INELIGIBLE   = "ineligible"
     NEEDS_REVIEW = "needs_review"
 
 
@@ -50,71 +44,58 @@ class VCFEligibility(str, Enum):
 
 class Address(BaseModel):
     street: Optional[str] = Field(None, max_length=200)
-    city: Optional[str] = Field(None, max_length=100)
-    state: Optional[str] = Field(
-        None,
-        max_length=2,
-        pattern=r'^[A-Z]{2}$',
-    )
-    zip: Optional[str] = Field(
-        None,
-        pattern=r'^\d{5}(-\d{4})?$',
-    )
+    city:   Optional[str] = Field(None, max_length=100)
+    state:  Optional[str] = Field(None, max_length=2, pattern=r'^[A-Z]{2}$')
+    zip:    Optional[str] = Field(None, pattern=r'^\d{5}(-\d{4})?$')
 
 
 class ExposureDates(BaseModel):
     start: date = Field(..., description="Exposure start date")
-    end: date = Field(..., description="Exposure end date")
+    end:   date = Field(..., description="Exposure end date")
 
     @model_validator(mode="after")
-    def end_must_be_gte_start(self) -> "ExposureDates":
+    def end_not_before_start(self) -> "ExposureDates":
         if self.end < self.start:
             raise ValueError("exposureDates.end must be >= exposureDates.start")
         return self
 
 
 class StatusHistoryEntry(BaseModel):
-    status: CaseStatus
+    status:    CaseStatus
     timestamp: datetime
     updatedBy: str = "system"
-    note: Optional[str] = None
+    note:      Optional[str] = None
 
 
-# ── VCF Covered Conditions (subset used for intake screening) ─────────────────
-# Full list defined in infrastructure/vcf_rules.md
-VCF_COVERED_CONDITION_CATEGORIES = {
-    "aerodigestive",
-    "cancer",
-    "mental health",
-    "musculoskeletal",
-    "sleep disorder",
-    "respiratory",
-    "gastrointestinal",
-    "neurological",
-}
+# ── VCF covered condition categories (full list in docs/vcf_rules.md) ─────────
+
+VCF_COVERED_CONDITION_CATEGORIES: frozenset[str] = frozenset({
+    "aerodigestive", "cancer", "mental health", "musculoskeletal",
+    "sleep disorder", "respiratory", "gastrointestinal", "neurological",
+})
 
 
-# ── Request ───────────────────────────────────────────────────────────────────
+# ── Request model ─────────────────────────────────────────────────────────────
 
 class LeadRequest(BaseModel):
-    """Inbound lead from a marketing partner."""
+    """Inbound lead submitted by a marketing partner."""
 
-    firstName: str = Field(..., min_length=1, max_length=100)
-    lastName: str = Field(..., min_length=1, max_length=100)
-    email: EmailStr
-    phone: str = Field(..., examples=["+12125551234"])
-    address: Optional[Address] = None
-    exposureLocation: str = Field(..., min_length=1, max_length=500)
-    exposureDates: ExposureDates
+    firstName:             str                    = Field(..., min_length=1, max_length=100)
+    lastName:              str                    = Field(..., min_length=1, max_length=100)
+    email:                 EmailStr
+    phone:                 str                    = Field(..., examples=["+12125551234"])
+    address:               Optional[Address]      = None
+    exposureLocation:      str                    = Field(..., min_length=1, max_length=500)
+    exposureDates:         ExposureDates
     wtcHealthProgramStatus: WTCHealthProgramStatus
-    priorAttorney: bool
-    conditions: list[str] = Field(
+    priorAttorney:         bool
+    conditions:            list[str]              = Field(
         default_factory=list,
-        description="List of claimed medical conditions (free text, matched against VCF categories)",
+        description="Claimed medical conditions — matched against VCF covered categories.",
         max_length=20,
     )
-    marketingSource: str = Field(..., max_length=100)
-    referralCode: Optional[str] = Field(None, max_length=100)
+    marketingSource:       str                    = Field(..., max_length=100)
+    referralCode:          Optional[str]          = Field(None, max_length=100)
 
     @field_validator("firstName", "lastName", "exposureLocation", "marketingSource", mode="before")
     @classmethod
@@ -130,14 +111,14 @@ class LeadRequest(BaseModel):
     @classmethod
     def normalise_phone(cls, v: str) -> str:
         if not isinstance(v, str):
-            raise ValueError("Phone must be a string")
+            raise ValueError("phone must be a string")
         raw = v.strip()
         try:
             parsed = phonenumbers.parse(raw, "US")
         except phonenumbers.NumberParseException:
-            raise ValueError(f"Invalid phone number: {raw!r}")
+            raise ValueError(f"invalid phone number: {raw!r}")
         if not phonenumbers.is_valid_number(parsed):
-            raise ValueError(f"Phone number is not valid: {raw!r}")
+            raise ValueError(f"phone number not valid: {raw!r}")
         return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
 
     @field_validator("conditions", mode="before")
@@ -148,85 +129,98 @@ class LeadRequest(BaseModel):
         return [c.strip().lower() for c in v if isinstance(c, str) and c.strip()]
 
 
+# ── Request body for status updates ──────────────────────────────────────────
+
+class UpdateStatusRequest(BaseModel):
+    """Body for PATCH /leads/{lead_id}/status."""
+    status:    CaseStatus
+    note:      str = ""
+    updatedBy: Optional[str] = None
+
+
 # ── Response models ───────────────────────────────────────────────────────────
 
 class LeadCreatedResponse(BaseModel):
-    leadId: str = Field(..., pattern=r'^ZAD-\d{4}-\d{2}-\d{4}$')
-    status: CaseStatus
+    leadId:             str           = Field(..., pattern=r'^ZAD-\d{4}-\d{2}-\d{4}$')
+    status:             CaseStatus
     vcfScreeningStatus: VCFEligibility
-    requestId: str
-    timestamp: datetime
+    requestId:          str
+    timestamp:          datetime
 
 
 class ErrorDetail(BaseModel):
-    field: str
-    code: str
+    field:   str
+    code:    str
     message: str
 
 
 class ErrorResponse(BaseModel):
-    error: str
-    message: str
-    details: list[ErrorDetail] = []
+    error:     str
+    message:   str
+    details:   list[ErrorDetail] = []
     requestId: str
     timestamp: datetime
 
 
-# ── Firestore case document ───────────────────────────────────────────────────
+# ── Firestore document model ──────────────────────────────────────────────────
 
 class CaseDocument(BaseModel):
-    caseId: str
-    status: CaseStatus = CaseStatus.NEW_LEAD
+    """
+    Mirrors a Firestore /cases/{caseId} document.
+    Created by case_service.create_case(); read back by get_case().
+    """
+    caseId:       str
+    status:       CaseStatus    = CaseStatus.NEW_LEAD
     vcfEligibility: VCFEligibility = VCFEligibility.PENDING
 
-    # Claimant data
-    firstName: str
-    lastName: str
-    email: str
-    phone: str
-    address: Optional[Address] = None
-    exposureLocation: str
-    exposureDateStart: date
-    exposureDateEnd: date
+    # Claimant
+    firstName:             str
+    lastName:              str
+    email:                 str
+    phone:                 str
+    address:               Optional[Address] = None
+    exposureLocation:      str
+    exposureDateStart:     date
+    exposureDateEnd:       date
     wtcHealthProgramStatus: WTCHealthProgramStatus
-    priorAttorney: bool
-    conditions: list[str] = Field(default_factory=list)
+    priorAttorney:         bool
+    conditions:            list[str] = Field(default_factory=list)
 
-    # Source tracking
+    # Source
     marketingSource: str
-    referralCode: Optional[str] = None
-    partnerId: str
+    referralCode:    Optional[str] = None
+    partnerId:       str
 
-    # Assignment & workflow
-    assignedTo: Optional[str] = None
-    portalLoginAt: Optional[datetime] = None
-    followupTaskCreated: bool = False
-    followupTaskId: Optional[str] = None
+    # Workflow
+    assignedTo:          Optional[str]      = None
+    portalLoginAt:       Optional[datetime] = None
+    followupTaskCreated: bool               = False
+    followupTaskId:      Optional[str]      = None
 
-    # Status history timeline
+    # History
     statusHistory: list[StatusHistoryEntry] = Field(default_factory=list)
 
-    # System fields
+    # Audit
     createdAt: datetime
     updatedAt: datetime
     requestId: str
 
-    # VCF screening
+    # VCF screening output (written by vcf_screener Cloud Function)
     vcfScreeningDetails: Optional[dict] = None
 
     def to_firestore_dict(self) -> dict:
+        """Serialize to a Firestore-safe plain dict (dates/enums → strings)."""
         data = self.model_dump()
         for key, val in data.items():
             if isinstance(val, (date, datetime)):
                 data[key] = val.isoformat()
             elif isinstance(val, Enum):
                 data[key] = val.value
-        if "statusHistory" in data:
-            for entry in data["statusHistory"]:
-                if isinstance(entry.get("timestamp"), datetime):
-                    entry["timestamp"] = entry["timestamp"].isoformat()
-                if isinstance(entry.get("status"), Enum):
-                    entry["status"] = entry["status"].value
+        for entry in data.get("statusHistory", []):
+            if isinstance(entry.get("timestamp"), datetime):
+                entry["timestamp"] = entry["timestamp"].isoformat()
+            if isinstance(entry.get("status"), Enum):
+                entry["status"] = entry["status"].value
         return data
 
     @classmethod

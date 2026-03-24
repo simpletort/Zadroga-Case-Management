@@ -1,6 +1,6 @@
 """
 api/config.py — Application settings via pydantic-settings.
-All config loaded from environment variables / Secret Manager.
+All config loaded from environment variables / Secret Manager mounts.
 """
 from __future__ import annotations
 from functools import lru_cache
@@ -17,13 +17,12 @@ class Settings(BaseSettings):
 
     # ── GCP ──────────────────────────────────────────────────────────────────
     gcp_project_id: str = "zad-lead-intake"
-    app_env: str = "development"  # development | staging | production
+    app_env: str = "development"           # development | staging | production
 
     # ── Firestore ─────────────────────────────────────────────────────────────
     firestore_cases_collection: str = "cases"
     firestore_counters_collection: str = "counters"
     firestore_partners_collection: str = "partners"
-    firestore_api_keys_collection: str = "api_keys"
     firestore_request_logs_collection: str = "request_logs"
 
     # ── JWT Auth ──────────────────────────────────────────────────────────────
@@ -32,12 +31,7 @@ class Settings(BaseSettings):
     jwt_issuer: str = ""
 
     # ── API Key Auth ──────────────────────────────────────────────────────────
-    partner_auth_enabled: bool = True
-    hmac_signature_max_age_seconds: int = 300  # 5 minutes
-
-    # ── VCF Window ────────────────────────────────────────────────────────────
-    vcf_window_start: str = "2001-09-11"
-    vcf_window_end: str = "2011-05-30"
+    hmac_signature_max_age_seconds: int = 300   # 5 minutes
 
     # ── Rate Limiting ─────────────────────────────────────────────────────────
     rate_limit_requests: int = 100
@@ -46,11 +40,16 @@ class Settings(BaseSettings):
     # ── Cloud Tasks ───────────────────────────────────────────────────────────
     cloud_tasks_queue: str = "lead-followup-queue"
     cloud_tasks_location: str = "us-central1"
-    cloud_tasks_handler_url: str = ""
+    cloud_tasks_handler_url: str = ""       # Cloud Run service URL (no trailing slash)
     cloud_tasks_sa_email: str = ""
+    cloud_tasks_sms_queue: str = "sms-dispatch"
+    cloud_tasks_email_queue: str = "email-dispatch"
     followup_delay_hours: int = 48
 
     # ── Notifications ─────────────────────────────────────────────────────────
+    # When set, notifications are enqueued to the notification service via Cloud Tasks.
+    # When unset (dev), direct SendGrid/Twilio calls are used as fallback.
+    notification_service_url: str = ""
     sendgrid_api_key: str = ""
     sendgrid_from_email: str = "noreply@zadlegal.com"
     twilio_account_sid: str = ""
