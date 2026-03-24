@@ -23,13 +23,13 @@
 
 substitutions:
   _REGION: us-central1
-  _SERVICE_NAME: zad-lead-intake-dev        # dev-suffixed service name
-  _REPO: zad-docker-repo
+  _SERVICE_NAME: lead-intake        # dev-suffixed service name
+  _REPO: Zadroga-Case-Management
   _ENV: development
   _FIREBASE_CHANNEL: dev                    # Firebase Hosting preview channel name
   _CLOUD_TASKS_HANDLER_URL: ""             # Set this in trigger substitutions
   _JWT_AUDIENCE: ""                         # Set this in trigger substitutions
-  _DEFAULT_ASSIGNEE_EMAIL: "paralegal@zadlegal.com"  # Default follow-up task assignee
+  _DEFAULT_ASSIGNEE_EMAIL: "aditya@plutusllp.com"  # Default follow-up task assignee
 
 options:
   logging: CLOUD_LOGGING_ONLY
@@ -200,7 +200,7 @@ steps:
       - --region=${_REGION}
       - --platform=managed
       - --no-allow-unauthenticated
-      - --service-account=lead-intake-sa@$PROJECT_ID.iam.gserviceaccount.com
+      - --service-account=lead-intake-service-account@$PROJECT_ID.iam.gserviceaccount.com
       - --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,APP_ENV=${_ENV},CLOUD_TASKS_HANDLER_URL=${_CLOUD_TASKS_HANDLER_URL},JWT_AUDIENCE=${_JWT_AUDIENCE},PARTNER_AUTH_ENABLED=true
       - --set-secrets=SENDGRID_API_KEY=SENDGRID_API_KEY:latest,TWILIO_ACCOUNT_SID=TWILIO_ACCOUNT_SID:latest,TWILIO_AUTH_TOKEN=TWILIO_AUTH_TOKEN:latest
       - --min-instances=0          # scale to zero in dev to save cost
@@ -230,7 +230,7 @@ steps:
       - --source=services/lead-intake/functions/vcf_screener  # FIX 6: gcloud runs from repo root
       - --entry-point=vcf_screener
       - --trigger-topic=lead-created-dev    # dev topic — separate from prod
-      - --service-account=vcf-screener-sa@$PROJECT_ID.iam.gserviceaccount.com
+      - --service-account=lead-intake-service-account@$PROJECT_ID.iam.gserviceaccount.com
       - --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,FIRESTORE_CASES_COLLECTION=cases-dev,PUBSUB_LEAD_SCREENED_TOPIC=lead-screened-dev
       - --memory=256Mi
       - --timeout=60s
@@ -251,7 +251,7 @@ steps:
       - --source=services/lead-intake/functions/notification_dispatcher  # FIX 6 (continued)
       - --entry-point=notification_dispatcher
       - --trigger-topic=lead-screened-dev
-      - --service-account=notification-sa@$PROJECT_ID.iam.gserviceaccount.com
+      - --service-account=lead-intake-service-account@$PROJECT_ID.iam.gserviceaccount.com
       - --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,FIRESTORE_CASES_COLLECTION=cases-dev
       - --memory=256Mi
       - --timeout=60s
@@ -306,7 +306,7 @@ steps:
           --uri="$$FUNCTION_URL" \
           --http-method=POST \
           --message-body='{}' \
-          --oidc-service-account-email=followup-monitor-sa@$PROJECT_ID.iam.gserviceaccount.com \
+          --oidc-service-account-email=lead-intake-service-account@$PROJECT_ID.iam.gserviceaccount.com \
           --oidc-token-audience="$$FUNCTION_URL" \
           --description="Hourly follow-up monitor for non-responsive leads (dev)" \
           2>/dev/null || \
@@ -316,7 +316,7 @@ steps:
           --uri="$$FUNCTION_URL" \
           --http-method=POST \
           --message-body='{}' \
-          --oidc-service-account-email=followup-monitor-sa@$PROJECT_ID.iam.gserviceaccount.com \
+          --oidc-service-account-email=lead-intake-service-account@$PROJECT_ID.iam.gserviceaccount.com \
           --oidc-token-audience="$$FUNCTION_URL" \
           2>/dev/null || true
 

@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     )
 
     # ── GCP ──────────────────────────────────────────────────────────────────
-    gcp_project_id: str = "zad-lead-intake"
+    gcp_project_id: str = "simpletort-zadroga-dev"
     app_env: str = "development"           # development | staging | production
 
     # ── Firestore ─────────────────────────────────────────────────────────────
@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     # When unset (dev), direct SendGrid/Twilio calls are used as fallback.
     notification_service_url: str = ""
     sendgrid_api_key: str = ""
-    sendgrid_from_email: str = "noreply@zadlegal.com"
+    sendgrid_from_email: str = "noreply@simpletort-zadroga-dev.firebaseapp.com"
     twilio_account_sid: str = ""
     twilio_auth_token: str = ""
     twilio_from_number: str = ""
