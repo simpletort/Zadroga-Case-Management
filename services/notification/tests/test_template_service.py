@@ -46,6 +46,7 @@ from services.template_service import (
     RenderedTemplate,
     TemplateDisabledError,
     TemplateNotFoundError,
+    _strip_html_tags,
     fetch_and_render,
     fetch_template,
     render_template,
@@ -398,6 +399,239 @@ class TestFetchTemplate:
         expected_col = get_settings().sms_templates_collection
         db.collection.assert_called_once_with(expected_col)
         db.collection.return_value.document.assert_called_once_with("my_template")
+
+
+# ── HTML entity handling ──────────────────────────────────────────────────────
+
+class TestHtmlEntityHandling:
+    """HTML entities must not be double-encoded in rendered output."""
+
+    @pytest.mark.asyncio
+    async def test_html_entities_not_double_encoded_in_html_body(self):
+        """&amp; in template htmlBody must stay &amp;, not become &amp;amp;."""
+        tmpl = _active_template(
+            htmlBody="<p>Your case &amp; claim: {{caseId}}</p>",
+        )
+        db = _make_db(tmpl)
+        result = await render_template(
+            "welcome_sms",
+            {"clientName": "X", "caseId": "ZAD-2026-001"},
+            db,
+        )
+        assert "&amp;" in result.html_body
+        assert "&amp;amp;" not in result.html_body
+
+    @pytest.mark.asyncio
+    async def test_lt_gt_entities_not_double_encoded(self):
+        """&lt; and &gt; in htmlBody must survive rendering unchanged."""
+        tmpl = _active_template(
+            htmlBody="<p>Value &lt; 100 &amp; status &gt; 0: {{caseId}}</p>",
+        )
+        db = _make_db(tmpl)
+        result = await render_template(
+            "welcome_sms",
+            {"clientName": "X", "caseId": "ZAD-001"},
+            db,
+        )
+        assert "&lt;" in result.html_body
+        assert "&gt;" in result.html_body
+        assert "&lt;&lt;" not in result.html_body  # not double-encoded
+
+    @pytest.mark.asyncio
+    async def test_variable_substituted_without_html_escaping(self):
+        """Variable values injected into htmlBody are not HTML-escaped by us."""
+        tmpl = _active_template(htmlBody="<p>Dear {{clientName}}</p>")
+        db = _make_db(tmpl)
+        result = await render_template(
+            "welcome_sms",
+            {"clientName": "Smith", "caseId": "ZAD-001"},
+            db,
+        )
+        assert "Smith" in result.html_body
+
+    @pytest.mark.asyncio
+    async def test_html_entities_decoded_in_sms_safe(self):
+        """HTML entities like &amp; must be decoded to plain text in sms_safe."""
+        tmpl = _active_template(body="Hello {{clientName}} &amp; team, case {{caseId}}.")
+        db = _make_db(tmpl)
+        result = await render_template(
+            "welcome_sms",
+            {"clientName": "Jo", "caseId": "ZAD-001"},
+            db,
+        )
+        assert "&" in result.sms_safe
+        assert "&amp;" not in result.sms_safe
+
+    @pytest.mark.asyncio
+    async def test_nbsp_decoded_in_sms_safe(self):
+        """Non-breaking space entity decoded to regular space in sms_safe."""
+        tmpl = _active_template(body="Case&nbsp;{{caseId}}")
+        db = _make_db(tmpl)
+        result = await render_template(
+            "welcome_sms",
+            {"clientName": "X", "caseId": "ZAD-001"},
+            db,
+        )
+        assert "&nbsp;" not in result.sms_safe
+        # decoded non-breaking space is present (as unicode \xa0 or space)
+        assert "ZAD-001" in result.sms_safe
+
+
+# ── HTML stripping from SMS body ──────────────────────────────────────────────
+
+class TestHtmlStrippedFromSmsSafe:
+    """sms_safe must be stripped of any HTML tags from the body field."""
+
+    @pytest.mark.asyncio
+    async def test_html_tags_stripped_from_sms_safe(self):
+        """`<p>` tags in body are removed for sms_safe output."""
+        tmpl = _active_template(body="<p>Hi {{clientName}}, case {{caseId}}.</p>")
+        db = _make_db(tmpl)
+        result = await render_template(
+            "welcome_sms",
+            {"clientName": "Jane", "caseId": "ZAD-001"},
+            db,
+        )
+        assert result.sms_safe == "Hi Jane, case ZAD-001."
+        assert "<p>" not in result.sms_safe
+
+    @pytest.mark.asyncio
+    async def test_nested_html_stripped(self):
+        """Nested HTML tags all removed from sms_safe."""
+        tmpl = _active_template(
+            body="<div><p><strong>Hello {{clientName}}</strong>, case {{caseId}}.</p></div>"
+        )
+        db = _make_db(tmpl)
+        result = await render_template(
+            "welcome_sms",
+            {"clientName": "Bob", "caseId": "ZAD-002"},
+            db,
+        )
+        assert result.sms_safe == "Hello Bob, case ZAD-002."
+        assert "<" not in result.sms_safe
+        assert ">" not in result.sms_safe
+
+    @pytest.mark.asyncio
+    async def test_plain_text_body_unchanged_by_strip(self):
+        """Plain-text body (no HTML tags) passes through stripping unchanged."""
+        body = "Hi {{clientName}}, your Zadroga case {{caseId}} has been received."
+        tmpl = _active_template(body=body)
+        db = _make_db(tmpl)
+        result = await render_template(
+            "welcome_sms",
+            {"clientName": "Alice", "caseId": "ZAD-003"},
+            db,
+        )
+        assert result.sms_safe == (
+            "Hi Alice, your Zadroga case ZAD-003 has been received."
+        )
+
+    @pytest.mark.asyncio
+    async def test_anchor_tag_stripped_text_preserved(self):
+        """Anchor tag stripped but link text preserved in sms_safe."""
+        tmpl = _active_template(
+            body="Visit <a href='https://example.com'>our site</a> for details, {{clientName}}."
+        )
+        db = _make_db(tmpl)
+        result = await render_template(
+            "welcome_sms",
+            {"clientName": "Sam", "caseId": "ZAD-004"},
+            db,
+        )
+        assert "our site" in result.sms_safe
+        assert "<a" not in result.sms_safe
+        assert "href" not in result.sms_safe
+
+    @pytest.mark.asyncio
+    async def test_html_stripped_from_sms_safe_but_not_html_body(self):
+        """Stripping only affects sms_safe; dedicated htmlBody keeps its tags."""
+        tmpl = _active_template(
+            body="<p>Hello {{clientName}}, case {{caseId}}.</p>",
+            htmlBody="<p>Hello {{clientName}}, case {{caseId}}.</p>",
+        )
+        db = _make_db(tmpl)
+        result = await render_template(
+            "welcome_sms",
+            {"clientName": "Lee", "caseId": "ZAD-005"},
+            db,
+        )
+        # sms_safe: tags stripped
+        assert "<p>" not in result.sms_safe
+        assert result.sms_safe == "Hello Lee, case ZAD-005."
+        # html_body: tags preserved
+        assert "<p>" in result.html_body
+
+
+# ── _strip_html_tags unit tests ───────────────────────────────────────────────
+
+class TestStripHtmlTags:
+    """Low-level tests for the _strip_html_tags helper."""
+
+    def test_strips_paragraph_tag(self):
+        assert _strip_html_tags("<p>Hello</p>") == "Hello"
+
+    def test_strips_self_closing_tag(self):
+        assert _strip_html_tags("Line one<br/>Line two") == "Line oneLine two"
+
+    def test_decodes_amp_entity(self):
+        assert _strip_html_tags("A &amp; B") == "A & B"
+
+    def test_decodes_lt_gt_entities(self):
+        assert _strip_html_tags("&lt;div&gt;") == "<div>"
+
+    def test_decodes_nbsp(self):
+        result = _strip_html_tags("Hello&nbsp;World")
+        assert "Hello" in result and "World" in result
+        assert "&nbsp;" not in result
+
+    def test_plain_text_unchanged(self):
+        assert _strip_html_tags("Hello World") == "Hello World"
+
+    def test_empty_string(self):
+        assert _strip_html_tags("") == ""
+
+    def test_strips_tag_with_attributes(self):
+        assert _strip_html_tags('<a href="https://example.com">click</a>') == "click"
+
+    def test_strips_nested_tags(self):
+        assert _strip_html_tags("<div><p>Hi</p></div>") == "Hi"
+
+
+# ── TemplateNotFoundError — descriptive message ───────────────────────────────
+
+class TestTemplateNotFoundDescriptive:
+    """TemplateNotFoundError must carry enough detail to surface as HTTP 404."""
+
+    @pytest.mark.asyncio
+    async def test_error_message_contains_template_id(self):
+        db = _make_db(doc_exists=False)
+        with pytest.raises(TemplateNotFoundError) as exc_info:
+            await render_template("nonexistent_template_id", {}, db)
+        assert "nonexistent_template_id" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_error_is_template_not_found_type(self):
+        """Correct exception type raised so callers can map it to HTTP 404."""
+        db = _make_db(doc_exists=False)
+        with pytest.raises(TemplateNotFoundError):
+            await render_template("ghost_template", {}, db)
+
+    @pytest.mark.asyncio
+    async def test_error_not_swallowed_by_generic_except(self):
+        """TemplateNotFoundError is NOT a subclass of MissingVariableError."""
+        assert not issubclass(TemplateNotFoundError, MissingVariableError)
+
+    @pytest.mark.asyncio
+    async def test_disabled_template_raises_different_error(self):
+        """TemplateDisabledError is distinct from TemplateNotFoundError."""
+        tmpl = _active_template(isActive=False)
+        db = _make_db(tmpl)
+        with pytest.raises(TemplateDisabledError):
+            await render_template("welcome_sms", {"clientName": "X", "caseId": "Y"}, db)
+        # Must NOT raise TemplateNotFoundError
+        with pytest.raises(TemplateDisabledError):
+            db2 = _make_db(tmpl)
+            await fetch_template("welcome_sms", db2)
 
 
 # ── fetch_and_render (legacy) ─────────────────────────────────────────────────
