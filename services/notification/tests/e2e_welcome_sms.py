@@ -143,7 +143,7 @@ def _list_cases(project: str, database: str, limit: int = 10) -> None:
     print(f"  {'CASE ID':<25} {'NAME':<25} {'PHONE':<18} {'STATUS'}")
     print(f"  {'-'*25} {'-'*25} {'-'*18} {'-'*15}")
 
-    docs = db.collection(CASES_COLLECTION).limit(limit).stream()
+    docs = list(db.collection(CASES_COLLECTION).limit(limit).get())
     count = 0
     for doc in docs:
         d = doc.to_dict()
