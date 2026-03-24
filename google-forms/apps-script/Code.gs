@@ -274,7 +274,7 @@ function _sendReminderEmail_(toEmail, clientName, previewUrl) {
  */
 function syncFormEntryIds() {
   // ── 1. Get the linked form ─────────────────────────────────────────────
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss      = SpreadsheetApp.getActiveSpreadsheet();
   var formUrl = ss.getFormUrl();
   if (!formUrl) {
     throw new Error(
@@ -294,16 +294,38 @@ function syncFormEntryIds() {
   TITLE_TO_KEY[Q_PHONE]      = "phone";
   TITLE_TO_KEY[Q_TOKEN]      = "intakeToken";
 
-  // ── 3. Iterate items and collect entry IDs ─────────────────────────────
-  var items = form.getItems();
-  var fieldMappings = {};
+  // Unique placeholder per field so we can identify which entry.XXXXXXXXX
+  // maps to which field after parsing the pre-fill URL.
+  var TITLE_TO_MARKER = {};
+  TITLE_TO_MARKER[Q_FIRST_NAME] = "__MARKER_FIRST_NAME__";
+  TITLE_TO_MARKER[Q_LAST_NAME]  = "__MARKER_LAST_NAME__";
+  TITLE_TO_MARKER[Q_EMAIL]      = "__MARKER_EMAIL__";
+  TITLE_TO_MARKER[Q_PHONE]      = "__MARKER_PHONE__";
+  TITLE_TO_MARKER[Q_TOKEN]      = "__MARKER_INTAKE_TOKEN__";
 
+  // ── 3. Derive entry IDs via toPrefilledUrl() ───────────────────────────
+  // item.getId()            → Apps Script internal item ID  ❌ (wrong number)
+  // Forms REST API v1       → requires enabling forms.googleapis.com in GCP ❌
+  // toPrefilledUrl()        → built-in FormApp method, generates a real
+  //                           Google Forms pre-fill URL with correct entry IDs ✅
+  var formResp = form.createResponse();
+  var items    = form.getItems();
   for (var i = 0; i < items.length; i++) {
-    var title = items[i].getTitle();
-    if (TITLE_TO_KEY.hasOwnProperty(title)) {
-      // item.getId() returns the exact number used in entry.XXXXXXXXX pre-fill params
-      fieldMappings[TITLE_TO_KEY[title]] = "entry." + items[i].getId();
+    var item  = items[i];
+    var title = item.getTitle();
+    if (TITLE_TO_MARKER.hasOwnProperty(title) && item.getType() === FormApp.ItemType.TEXT) {
+      formResp.withItemResponse(item.asTextItem().createResponse(TITLE_TO_MARKER[title]));
     }
+  }
+
+  var prefillUrl    = formResp.toPrefilledUrl();
+  var fieldMappings = {};
+  for (var t in TITLE_TO_MARKER) {
+    if (!TITLE_TO_MARKER.hasOwnProperty(t)) continue;
+    var marker = TITLE_TO_MARKER[t];
+    var re     = new RegExp("[?&](entry\\.\\d+)=" + marker);
+    var match  = prefillUrl.match(re);
+    if (match) fieldMappings[TITLE_TO_KEY[t]] = match[1];  // e.g. "entry.318541363"
   }
 
   // ── 4. Guard: all 5 fields must be found before writing ───────────────

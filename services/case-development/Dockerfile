@@ -1,13 +1,21 @@
-FROM python:3.11-slim AS builder
+FROM python:3.11-slim
+
 WORKDIR /app
-COPY requirements.txt .
+
+# Install shared package first (available because build context is repo root)
+COPY shared/ ./shared/
+RUN pip install --no-cache-dir ./shared/
+
+# Install service dependencies
+COPY services/case-development/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-FROM python:3.11-slim
-WORKDIR /app
-COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-COPY --from=builder /usr/local/bin/gunicorn /usr/local/bin/gunicorn
-COPY app.py .
+# Copy service source
+COPY services/case-development/ .
+
+RUN adduser --disabled-password --gecos "" appuser
+USER appuser
 
 EXPOSE 8080
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "app:app"]
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
