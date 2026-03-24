@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     )
 
     # ── GCP ──────────────────────────────────────────────────────────────────
-    gcp_project_id: str = "simpletort-zadroga-dev"
+    gcp_project_id: str = "zad-lead-intake"
     app_env: str = "development"           # development | staging | production
 
     # ── Firestore ─────────────────────────────────────────────────────────────
@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     jwks_uri: str = "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"
     jwt_audience: str = ""
     jwt_issuer: str = ""
+
+    # ── VCF eligibility window ────────────────────────────────────────────────
+    # Do not change these without legal review (Zadroga Act / Never Forget the Heroes Act).
+    vcf_window_start: str = "2001-09-11"
+    vcf_window_end: str = "2011-05-30"
 
     # ── API Key Auth ──────────────────────────────────────────────────────────
     hmac_signature_max_age_seconds: int = 300   # 5 minutes
@@ -51,7 +56,7 @@ class Settings(BaseSettings):
     # When unset (dev), direct SendGrid/Twilio calls are used as fallback.
     notification_service_url: str = ""
     sendgrid_api_key: str = ""
-    sendgrid_from_email: str = "noreply@simpletort-zadroga-dev.firebaseapp.com"
+    sendgrid_from_email: str = "noreply@zadlegal.com"
     twilio_account_sid: str = ""
     twilio_auth_token: str = ""
     twilio_from_number: str = ""
