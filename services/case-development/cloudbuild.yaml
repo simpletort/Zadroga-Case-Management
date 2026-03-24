@@ -1,49 +1,48 @@
 steps:
-  # 1. Test
-  - name: 'python:3.11-slim'
-    id: test
-    dir: 'services/case-development'
+  - name: "python:3.11-slim"
+    dir: "services/case-development"
     entrypoint: bash
     args:
-      - '-c'
+      - "-c"
       - |
-        pip install -r requirements.txt pytest --quiet
+        pip install -r requirements.txt
         pytest tests/ -v --tb=short
 
-  # 2. Build image
-  - name: 'gcr.io/cloud-builders/docker'
-    id: build
-    dir: 'services/case-development'
-    waitFor: ['test']
+  - name: "gcr.io/cloud-builders/docker"
+    dir: "services/case-development"
     args:
       - build
-      - '-t'
-      - '$_REPO/$_SERVICE_NAME:$COMMIT_SHA'
-      - '-t'
-      - '$_REPO/$_SERVICE_NAME:$_ENV-latest'
-      - '.'
+      - "-t"
+      - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+      - "-t"
+      - "$_REPO/$_SERVICE_NAME:latest"
+      - "."
 
-  # 3. Push image
-  - name: 'gcr.io/cloud-builders/docker'
-    id: push
-    waitFor: ['build']
-    args: ['push', '--all-tags', '$_REPO/$_SERVICE_NAME']
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"]
 
-  # 4. Deploy (dev -> direct via deploy.sh; prod -> canary via deploy.sh -> canary-deploy.sh)
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: deploy
-    waitFor: ['push']
-    entrypoint: bash
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "$_REPO/$_SERVICE_NAME:latest"]
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: gcloud
     args:
-      - '-c'
-      - |
-        bash scripts/deploy.sh           $_ENV           $_SERVICE_NAME           $_REPO           $COMMIT_SHA           $_REGION           $PROJECT_ID
+      - run
+      - deploy
+      - "$_SERVICE_NAME"
+      - "--image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+      - "--region=$_REGION"
+      - "--platform=managed"
+      - "--no-allow-unauthenticated"
+      - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,ENV=$_ENV"
+      - "--memory=512Mi"
+      - "--cpu=1"
+      - "--max-instances=10"
+      - "--min-instances=0"
 
 images:
-  - '$_REPO/$_SERVICE_NAME:$COMMIT_SHA'
-  - '$_REPO/$_SERVICE_NAME:$_ENV-latest'
+  - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+  - "$_REPO/$_SERVICE_NAME:latest"
 
 options:
   logging: CLOUD_LOGGING_ONLY
-
-timeout: '1800s'

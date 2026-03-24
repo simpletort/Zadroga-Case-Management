@@ -1,0 +1,65 @@
+# Cloud Build pipeline for the case-assignment Cloud Function.
+#
+# Steps:
+#   1. Run unit tests
+#   2. Build & push Docker image
+#   3. Deploy to Cloud Run (Cloud Function Gen 2 backing service)
+#
+# Substitution variables (set in Cloud Build trigger):
+#   _SERVICE_NAME — Cloud Run service / image name (case-assignment)
+#   _REPO         — Artifact Registry repo URL
+#   _REGION       — GCP region (e.g. us-central1)
+#   _ENV          — dev | test | prod
+
+steps:
+  # ── Tests ──────────────────────────────────────────────────────────────
+  - name: "python:3.11-slim"
+    dir: "cloud-functions/case-assignment"
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        pip install -r requirements.txt
+        pytest tests/ -v --tb=short
+
+  # ── Build image ────────────────────────────────────────────────────────
+  - name: "gcr.io/cloud-builders/docker"
+    dir: "cloud-functions/case-assignment"
+    args:
+      - build
+      - "-t"
+      - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+      - "-t"
+      - "$_REPO/$_SERVICE_NAME:latest"
+      - "."
+
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"]
+
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "$_REPO/$_SERVICE_NAME:latest"]
+
+  # ── Deploy to Cloud Run ────────────────────────────────────────────────
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - "$_SERVICE_NAME"
+      - "--image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+      - "--region=$_REGION"
+      - "--platform=managed"
+      - "--no-allow-unauthenticated"
+      - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,ENV=$_ENV,PUBSUB_TOPIC_ASSIGNMENT=assignment-notifications"
+      - "--memory=256Mi"
+      - "--cpu=1"
+      - "--timeout=60s"
+      - "--max-instances=5"
+      - "--min-instances=0"
+
+images:
+  - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+  - "$_REPO/$_SERVICE_NAME:latest"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
