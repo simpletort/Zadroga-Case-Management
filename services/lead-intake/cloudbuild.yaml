@@ -18,8 +18,57 @@ options:
 timeout: 1800s
 
 steps:
+ 
+  # ── 1. UNIT TESTS ─────────────────────────────────────────────────────────
 
-  # ── 1. BUILD + PUSH DOCKER IMAGE ──────────────────────────────────────────
+  - name: python:3.12-slim
+    id: unit-tests
+    dir: services/lead-intake
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -e
+        pip install --no-cache-dir --break-system-packages -q \
+          -r api/requirements.txt \
+          pytest pytest-asyncio pytest-mock httpx pytest-cov
+        pytest tests/unit/ -v --tb=short --cov=api/models --cov-fail-under=70
+        echo "✅ Unit tests passed"
+    env:
+      - PYTHONPATH=/workspace/services/lead-intake/api
+      - GCP_PROJECT_ID=test-project
+      - APP_ENV=test
+      - VCF_WINDOW_START=2001-09-11
+      - VCF_WINDOW_END=2011-05-30
+
+  # ── 2. INTEGRATION TESTS ──────────────────────────────────────────────────
+
+  - name: python:3.12-slim
+    id: integration-tests
+    dir: services/lead-intake
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -e
+        pip install --no-cache-dir --break-system-packages -q \
+          -r api/requirements.txt \
+          pytest pytest-asyncio pytest-mock httpx
+        pytest tests/integration/ -v --tb=short
+        echo "✅ Integration tests passed"
+    waitFor: [unit-tests]
+    env:
+      - PYTHONPATH=/workspace/services/lead-intake/api
+      - GCP_PROJECT_ID=test-project
+      - APP_ENV=test
+      - VCF_WINDOW_START=2001-09-11
+      - VCF_WINDOW_END=2011-05-30
+      - JWT_AUDIENCE=test-audience
+      - JWT_ISSUER=https://test-issuer.example.com
+      - JWKS_URI=https://test.example.com/.well-known/jwks.json
+      - CLOUD_TASKS_HANDLER_URL=https://test.example.com
+  
+  # ── 3. BUILD + PUSH DOCKER IMAGE ──────────────────────────────────────────
 
   - name: gcr.io/cloud-builders/docker
     id: build-image
@@ -41,7 +90,7 @@ steps:
       - $_REPO/$_SERVICE_NAME
     waitFor: [build-image]
 
-  # ── 2. DEPLOY CLOUD RUN ───────────────────────────────────────────────────
+  # ── 4. DEPLOY CLOUD RUN ───────────────────────────────────────────────────
 
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     id: deploy-cloud-run
@@ -64,7 +113,7 @@ steps:
       - --timeout=30
     waitFor: [push-image]
 
-  # ── 3. DEPLOY CLOUD FUNCTIONS (parallel) ──────────────────────────────────
+  # ── 5. DEPLOY CLOUD FUNCTIONS (parallel) ──────────────────────────────────
 
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     id: deploy-vcf-screener
@@ -130,7 +179,7 @@ steps:
       - --max-instances=2
     waitFor: [integration-tests]
 
-  # ── 4. CLOUD SCHEDULER for followup monitor ───────────────────────────────
+  # ── 6. CLOUD SCHEDULER for followup monitor ───────────────────────────────
 
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     id: setup-scheduler
@@ -163,7 +212,7 @@ steps:
         echo "✅ Scheduler configured"
     waitFor: [deploy-followup-monitor]
 
-  # ── 5. BUILD + DEPLOY ADMIN UI ────────────────────────────────────────────
+  # ── 7. BUILD + DEPLOY ADMIN UI ────────────────────────────────────────────
 
   - name: node:20-slim
     id: install-admin-ui-deps
