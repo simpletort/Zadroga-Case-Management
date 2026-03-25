@@ -27,9 +27,9 @@ steps:
     args:
       - build
       - -t
-      - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA
+      - $_REPO/$_SERVICE_NAME:$COMMIT_SHA
       - -t
-      - "$_REPO/$_SERVICE_NAME:latest
+      - $_REPO/$_SERVICE_NAME:latest
       - .
     waitFor: [integration-tests]
 
@@ -38,7 +38,7 @@ steps:
     args:
       - push
       - --all-tags
-      - "$_REPO/$_SERVICE_NAME
+      - $_REPO/$_SERVICE_NAME
     waitFor: [build-image]
 
   # ── 2. DEPLOY CLOUD RUN ───────────────────────────────────────────────────
@@ -50,7 +50,7 @@ steps:
       - run
       - deploy
       - ${_SERVICE_NAME}
-      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE_NAME}:$COMMIT_SHA
+      - --image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA
       - --region=${_REGION}
       - --platform=managed
       - --no-allow-unauthenticated
@@ -234,5 +234,5 @@ availableSecrets:
       env: VITE_FIREBASE_APP_ID
 
 images:
-  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE_NAME}:$COMMIT_SHA
-  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE_NAME}:latest
+  - $_REPO/$_SERVICE_NAME:$COMMIT_SHA
+  - $_REPO/$_SERVICE_NAME:latest
