@@ -8,6 +8,11 @@ Covers:
   - Missing fields (hard fail)
   - Status transitions (eligible/ineligible/needs_review)
 """
+import sys
+from unittest.mock import MagicMock
+
+sys.modules['functions_framework'] = MagicMock()
+
 from __future__ import annotations
 import sys
 import os
