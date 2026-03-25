@@ -77,9 +77,28 @@ steps:
       - |
         set -e
 
-        # Fix __future__ import order (SyntaxError: must be first statement)
-        sed -i '/^from __future__ import annotations$/d' \
-          tests/unit/test_vcf_screener.py
+        # Fix __future__ import SyntaxError across ALL Python files.
+        # Handles two cases:
+        #   1. "from __future__ import annotations" appears mid-file (not line 1)
+        #   2. It appears multiple times (duplicate)
+        # Strategy: for every .py file, if the line exists anywhere past line 1,
+        # remove all mid-file occurrences and ensure line 1 has exactly one.
+        find . -name "*.py" | while read f; do
+          FIRST_LINE=$(head -1 "$$f")
+          MID_COUNT=$(tail -n +2 "$$f" | grep -c '^from __future__ import annotations$$' 2>/dev/null || true)
+          if [ "$$MID_COUNT" -gt 0 ]; then
+            echo "Fixing __future__ in $$f ($$MID_COUNT mid-file occurrence(s))"
+            # Remove all occurrences from line 2 onwards
+            HEAD=$(head -1 "$$f")
+            BODY=$(tail -n +2 "$$f" | grep -v '^from __future__ import annotations$$')
+            # Ensure line 1 is the __future__ import (add it if it wasn't already there)
+            if echo "$$HEAD" | grep -q '^from __future__ import annotations$$'; then
+              printf '%s\n%s\n' "$$HEAD" "$$BODY" > "$$f"
+            else
+              printf 'from __future__ import annotations\n%s\n%s\n' "$$HEAD" "$$BODY" > "$$f"
+            fi
+          fi
+        done
 
         # Install API deps + test deps + functions-framework (needed by vcf_screener)
         pip install --no-cache-dir --break-system-packages -q \
