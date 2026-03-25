@@ -354,16 +354,17 @@ steps:
     dir: services/lead-intake/admin_ui
     entrypoint: bash
     args:
-      - -c
-      - |
-        set -e
-        npm install -g firebase-tools --quiet
-        firebase deploy --only hosting \
-          --project=${_FIREBASE_PROJECT_ID} \
-          --non-interactive
-        echo "✅ Admin UI deployed to Firebase Hosting"
+    - -c
+    - |
+      set -e
+      # Install firebase-tools via standalone binary (no npm needed)
+      curl -sL https://firebase.tools | bash
+      firebase deploy --only hosting \
+        --project=${_FIREBASE_PROJECT_ID} \
+        --non-interactive
+      echo "✅ Admin UI deployed to Firebase Hosting"
     waitFor: [build-admin-ui]
-
+    
 # ── SECRETS FROM SECRET MANAGER ─────────────────────────────────────────────
 # All secrets must be created in Secret Manager BEFORE the first build runs.
 
