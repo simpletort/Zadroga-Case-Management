@@ -159,16 +159,12 @@ steps:
     dir: services/lead-intake                 # FIX 5: build context must be service root so COPY api/ works
     args:
       - build
-      - -f
-      - Dockerfile
-      - --build-arg
-      - BUILD_ENV=development
+      - "-t"
+      - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
       - -t
-      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE_NAME}:$COMMIT_SHA
+      - "$_REPO/$_SERVICE_NAME:dev-latest"
       - -t
-      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE_NAME}:dev-latest
-      - -t
-      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE_NAME}:dev-$BRANCH_NAME
+      - "$_REPO/$_SERVICE_NAME:dev-$BRANCH_NAME"
       - .
     waitFor: [integration-tests]
 
@@ -181,7 +177,7 @@ steps:
     args:
       - push
       - --all-tags
-      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE_NAME}
+      - $_REPO/$_SERVICE_NAME
     waitFor: [build-image]
 
   # ════════════════════════════════════════════════════════════════
@@ -196,7 +192,7 @@ steps:
       - run
       - deploy
       - ${_SERVICE_NAME}
-      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE_NAME}:$COMMIT_SHA
+      - --image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA
       - --region=${_REGION}
       - --platform=managed
       - --no-allow-unauthenticated
