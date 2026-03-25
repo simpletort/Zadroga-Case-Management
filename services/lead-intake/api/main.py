@@ -48,7 +48,7 @@ app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
 # CORS
-ALLOWED_ORIGINS = ["https://zad-admin.web.app", "https://zad-admin.firebaseapp.com"]
+ALLOWED_ORIGINS = ["https://simpletort-zadroga-dev.web.app", "https://simpletort-zadroga-dev.firebaseapp.com"]
 if not settings.is_production:
     ALLOWED_ORIGINS += ["http://localhost:3000", "http://localhost:5173"]
 

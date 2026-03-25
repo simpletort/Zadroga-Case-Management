@@ -1,29 +1,42 @@
 """
 api/routers/leads.py — Lead ingestion and management endpoints.
+
+Route order matters in FastAPI — static paths must come before /{lead_id}:
+  POST   /leads
+  GET    /leads
+  POST   /leads/bulk-assign               ← before /{lead_id}
+  GET    /leads/export/csv                ← before /{lead_id}
+  POST   /leads/internal/tasks/followup   ← before /{lead_id}
+  GET    /leads/{lead_id}
+  PATCH  /leads/{lead_id}/status
 """
 from __future__ import annotations
 
 import csv
 import io
 import uuid
-from datetime import datetime, date
+from datetime import date, datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
+from google.auth.transport import requests as google_requests
 from google.cloud import firestore
+from google.oauth2 import id_token
 
 from config import get_settings
+from logging_config import get_logger
 from middleware.auth import PartnerContext, get_partner
 from middleware.rate_limiter import limiter
 from models.lead import (
+    CaseDocument,
     CaseStatus,
     ErrorDetail,
     ErrorResponse,
     LeadCreatedResponse,
     LeadRequest,
+    UpdateStatusRequest,
     VCFEligibility,
-    CaseDocument,
 )
 from services.case_service import create_case, get_case, update_case_status
 from services.duplicate_detection import detect_duplicate, is_idempotent_retry
@@ -32,21 +45,20 @@ from services.notification_service import send_welcome_notifications
 from services.pubsub_service import publish_lead_created
 from services.tasks_service import create_followup_task
 from services.validation import validate_lead
-from logging_config import get_logger
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/leads", tags=["Leads"])
-settings = get_settings()
+_settings = get_settings()
 
-TASKS_SA_EMAIL = (
-    settings.cloud_tasks_sa_email
-    or f"lead-intake-sa@{settings.gcp_project_id}.iam.gserviceaccount.com"
+_TASKS_SA_EMAIL = (
+    _settings.cloud_tasks_sa_email
+    or f"lead-intake-sa@{_settings.gcp_project_id}.iam.gserviceaccount.com"
 )
 
 
-def _error_response(request_id, error_code, message, details=None):
+def _err(request_id: str, code: str, message: str, details=None) -> dict:
     return ErrorResponse(
-        error=error_code,
+        error=code,
         message=message,
         details=details or [],
         requestId=request_id,
@@ -54,7 +66,7 @@ def _error_response(request_id, error_code, message, details=None):
     ).model_dump()
 
 
-# ── POST /leads — Ingest a new lead ──────────────────────────────────────────
+# ── POST /leads ───────────────────────────────────────────────────────────────
 
 @router.post(
     "",
@@ -62,7 +74,7 @@ def _error_response(request_id, error_code, message, details=None):
     response_model=LeadCreatedResponse,
     summary="Ingest a new lead",
 )
-@limiter.limit(f"{settings.rate_limit_requests}/minute")
+@limiter.limit(f"{_settings.rate_limit_requests}/minute")
 async def create_lead(
     request: Request,
     lead: LeadRequest,
@@ -72,15 +84,15 @@ async def create_lead(
     request_id = str(uuid.uuid4())
     logger.info("lead_intake_started", request_id=request_id, partner_id=partner.partner_id)
 
-    # Domain validation
+    # Domain validation (cross-field rules beyond Pydantic)
     validation_result = validate_lead(lead)
     if not validation_result.is_valid:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=_error_response(request_id, "VALIDATION_ERROR", "Request validation failed", validation_result.errors),
+            detail=_err(request_id, "VALIDATION_ERROR", "Request validation failed", validation_result.errors),
         )
 
-    # Idempotency
+    # Idempotency — same X-Request-ID returns the original case
     client_request_id = request.headers.get("X-Request-ID")
     if client_request_id:
         existing_id = await is_idempotent_retry(client_request_id, db)
@@ -94,39 +106,51 @@ async def create_lead(
                 timestamp=datetime.utcnow(),
             )
 
-    # Duplicate detection
+    # Duplicate detection — email AND phone must both be new
     existing_case_id = await detect_duplicate(email=str(lead.email), phone=lead.phone, db=db)
     if existing_case_id:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=_error_response(
+            detail=_err(
                 request_id, "DUPLICATE_LEAD",
                 "A lead with this email and phone already exists",
-                [ErrorDetail(field="email+phone", code="DUPLICATE", message=f"Case {existing_case_id} already exists")],
+                [ErrorDetail(field="email+phone", code="DUPLICATE",
+                             message=f"Case {existing_case_id} already exists")],
             ),
         )
 
-    # Create case
+    # Create case (atomic Firestore transaction)
     try:
-        case: CaseDocument = await create_case(lead=lead, partner_id=partner.partner_id, request_id=request_id, db=db)
+        case: CaseDocument = await create_case(
+            lead=lead, partner_id=partner.partner_id,
+            request_id=request_id, db=db,
+        )
     except Exception as exc:
         logger.error("case_creation_failed", request_id=request_id, error=str(exc))
-        raise HTTPException(status_code=500, detail=_error_response(request_id, "INTERNAL_ERROR", "Failed to create case."))
+        raise HTTPException(
+            status_code=500,
+            detail=_err(request_id, "INTERNAL_ERROR", "Failed to create case."),
+        )
 
-    # Publish Pub/Sub
+    # Publish lead-created event → triggers vcf_screener Cloud Function
     try:
-        await publish_lead_created(case_id=case.caseId, partner_id=partner.partner_id, request_id=request_id, marketing_source=lead.marketingSource)
+        await publish_lead_created(
+            case_id=case.caseId, partner_id=partner.partner_id,
+            request_id=request_id, marketing_source=lead.marketingSource,
+        )
     except Exception as exc:
         logger.error("pubsub_publish_failed_non_fatal", case_id=case.caseId, error=str(exc))
 
-    # Enqueue follow-up task
+    # Enqueue 48-hour follow-up Cloud Task
     try:
-        task_name = await create_followup_task(case_id=case.caseId, service_account_email=TASKS_SA_EMAIL)
+        task_name = await create_followup_task(
+            case_id=case.caseId, service_account_email=_TASKS_SA_EMAIL,
+        )
         logger.info("followup_task_enqueued", case_id=case.caseId, task=task_name)
     except Exception as exc:
         logger.error("followup_task_failed_non_fatal", case_id=case.caseId, error=str(exc))
 
-    # Welcome notifications
+    # Send welcome email + SMS (non-blocking)
     try:
         notif_result = await send_welcome_notifications(
             email=str(lead.email), phone=lead.phone,
@@ -146,7 +170,7 @@ async def create_lead(
     )
 
 
-# ── GET /leads — List with pagination, filters, search ───────────────────────
+# ── GET /leads ────────────────────────────────────────────────────────────────
 
 @router.get("", summary="List leads with filters and pagination")
 @limiter.limit("200/minute")
@@ -159,12 +183,12 @@ async def list_leads(
     source: Optional[str] = Query(None),
     date_from: Optional[date] = Query(None, alias="dateFrom"),
     date_to: Optional[date] = Query(None, alias="dateTo"),
-    search: Optional[str] = Query(None, description="Search by email prefix"),
+    search: Optional[str] = Query(None, description="Email prefix search"),
     page_size: int = Query(50, ge=1, le=200, alias="pageSize"),
     page_token: Optional[str] = Query(None, alias="pageToken"),
 ) -> dict:
-    settings_obj = get_settings()
-    cases_ref = db.collection(settings_obj.firestore_cases_collection)
+    cfg = get_settings()
+    cases_ref = db.collection(cfg.firestore_cases_collection)
     query = cases_ref
 
     if status_filter:
@@ -174,16 +198,16 @@ async def list_leads(
     if source:
         query = query.where("marketingSource", "==", source)
     if search:
-        # Prefix search on email
-        query = query.where("email", ">=", search.lower()).where("email", "<=", search.lower() + "\uf8ff")
+        query = (query
+                 .where("email", ">=", search.lower())
+                 .where("email", "<=", search.lower() + "\uf8ff"))
 
     query = query.order_by("createdAt", direction=firestore.Query.DESCENDING)
 
-    # Cursor-based pagination
     if page_token:
-        cursor_doc = await cases_ref.document(page_token).get()
-        if cursor_doc.exists:
-            query = query.start_after(cursor_doc)
+        cursor = await cases_ref.document(page_token).get()
+        if cursor.exists:
+            query = query.start_after(cursor)
 
     query = query.limit(page_size + 1)
     docs = [doc async for doc in query.stream()]
@@ -192,82 +216,35 @@ async def list_leads(
     if has_more:
         docs = docs[:page_size]
 
-    cases_data = []
-    for doc in docs:
-        data = doc.to_dict()
-        # Mask sensitive fields for list view
-        cases_data.append({
-            "caseId": data.get("caseId"),
-            "status": data.get("status"),
-            "vcfEligibility": data.get("vcfEligibility"),
-            "firstName": data.get("firstName"),
-            "lastName": data.get("lastName"),
-            "email": data.get("email"),
-            "phone": data.get("phone"),
-            "marketingSource": data.get("marketingSource"),
-            "partnerId": data.get("partnerId"),
-            "assignedTo": data.get("assignedTo"),
-            "createdAt": data.get("createdAt"),
-            "updatedAt": data.get("updatedAt"),
-        })
-
-    next_token = docs[-1].id if has_more and docs else None
+    cases_data = [
+        {
+            "caseId":          d.get("caseId"),
+            "status":          d.get("status"),
+            "vcfEligibility":  d.get("vcfEligibility"),
+            "firstName":       d.get("firstName"),
+            "lastName":        d.get("lastName"),
+            "email":           d.get("email"),
+            "phone":           d.get("phone"),
+            "marketingSource": d.get("marketingSource"),
+            "partnerId":       d.get("partnerId"),
+            "assignedTo":      d.get("assignedTo"),
+            "createdAt":       d.get("createdAt"),
+            "updatedAt":       d.get("updatedAt"),
+        }
+        for doc in docs
+        for d in [doc.to_dict()]
+    ]
 
     return {
-        "cases": cases_data,
-        "pageSize": page_size,
-        "hasMore": has_more,
-        "nextPageToken": next_token,
-        "total": len(cases_data),
+        "cases":         cases_data,
+        "pageSize":      page_size,
+        "hasMore":       has_more,
+        "nextPageToken": docs[-1].id if has_more and docs else None,
+        "total":         len(cases_data),
     }
 
 
-# ── GET /leads/{lead_id} — Single case detail ────────────────────────────────
-
-@router.get("/{lead_id}", response_model=CaseDocument, summary="Get lead detail")
-async def get_lead(
-    lead_id: str,
-    partner: PartnerContext = Depends(get_partner),
-    db: firestore.AsyncClient = Depends(get_db),
-) -> CaseDocument:
-    case = await get_case(lead_id, db)
-    if not case:
-        raise HTTPException(status_code=404, detail={"error": "NOT_FOUND", "message": f"Case {lead_id} not found", "details": [], "requestId": str(uuid.uuid4()), "timestamp": datetime.utcnow().isoformat()})
-    return case
-
-
-# ── PATCH /leads/{lead_id}/status — Update case status (admin) ───────────────
-
-@router.patch("/{lead_id}/status", summary="Update case status")
-async def update_lead_status(
-    lead_id: str,
-    request: Request,
-    partner: PartnerContext = Depends(get_partner),
-    db: firestore.AsyncClient = Depends(get_db),
-) -> dict:
-    body = await request.json()
-    new_status = body.get("status")
-    note = body.get("note", "")
-    updated_by = body.get("updatedBy", partner.partner_id)
-
-    if new_status not in [s.value for s in CaseStatus]:
-        raise HTTPException(status_code=400, detail={"error": "INVALID_STATUS", "message": f"Invalid status: {new_status}", "details": []})
-
-    case = await get_case(lead_id, db)
-    if not case:
-        raise HTTPException(status_code=404, detail={"error": "NOT_FOUND", "message": f"Case {lead_id} not found", "details": []})
-
-    await update_case_status(
-        case_id=lead_id,
-        new_status=new_status,
-        updated_by=updated_by,
-        note=note,
-        db=db,
-    )
-    return {"caseId": lead_id, "status": new_status, "updatedAt": datetime.utcnow().isoformat()}
-
-
-# ── POST /leads/bulk-assign — Bulk assign to paralegal ───────────────────────
+# ── POST /leads/bulk-assign ───────────────────────────────────────────────────
 
 @router.post("/bulk-assign", summary="Bulk assign leads to a staff member")
 async def bulk_assign(
@@ -280,22 +257,23 @@ async def bulk_assign(
     assign_to: str = body.get("assignTo", "")
 
     if not case_ids or not assign_to:
-        raise HTTPException(status_code=400, detail={"error": "INVALID_REQUEST", "message": "caseIds and assignTo are required", "details": []})
-
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "INVALID_REQUEST", "message": "caseIds and assignTo are required", "details": []},
+        )
     if len(case_ids) > 100:
-        raise HTTPException(status_code=400, detail={"error": "INVALID_REQUEST", "message": "Maximum 100 cases per bulk operation", "details": []})
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "INVALID_REQUEST", "message": "Maximum 100 cases per bulk operation", "details": []},
+        )
 
-    settings_obj = get_settings()
-    updated = []
-    failed = []
-
+    cfg = get_settings()
+    updated, failed = [], []
     for case_id in case_ids:
         try:
-            doc_ref = db.collection(settings_obj.firestore_cases_collection).document(case_id)
-            await doc_ref.update({
-                "assignedTo": assign_to,
-                "updatedAt": firestore.SERVER_TIMESTAMP,
-            })
+            await db.collection(cfg.firestore_cases_collection).document(case_id).update(
+                {"assignedTo": assign_to, "updatedAt": firestore.SERVER_TIMESTAMP}
+            )
             updated.append(case_id)
         except Exception as exc:
             logger.error("bulk_assign_failed", case_id=case_id, error=str(exc))
@@ -304,7 +282,7 @@ async def bulk_assign(
     return {"updated": updated, "failed": failed, "total": len(updated)}
 
 
-# ── GET /leads/export — CSV export ───────────────────────────────────────────
+# ── GET /leads/export/csv ─────────────────────────────────────────────────────
 
 @router.get("/export/csv", summary="Export filtered leads as CSV")
 @limiter.limit("10/minute")
@@ -317,9 +295,8 @@ async def export_leads_csv(
     date_from: Optional[date] = Query(None, alias="dateFrom"),
     date_to: Optional[date] = Query(None, alias="dateTo"),
 ) -> StreamingResponse:
-    settings_obj = get_settings()
-    cases_ref = db.collection(settings_obj.firestore_cases_collection)
-    query = cases_ref
+    cfg = get_settings()
+    query = db.collection(cfg.firestore_cases_collection)
 
     if status_filter:
         query = query.where("status", "==", status_filter)
@@ -329,17 +306,18 @@ async def export_leads_csv(
     query = query.order_by("createdAt", direction=firestore.Query.DESCENDING).limit(5000)
     docs = [doc async for doc in query.stream()]
 
-    output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=[
+    _FIELDS = [
         "caseId", "firstName", "lastName", "email", "phone",
         "status", "vcfEligibility", "exposureLocation",
         "exposureDateStart", "exposureDateEnd", "wtcHealthProgramStatus",
         "priorAttorney", "marketingSource", "assignedTo", "createdAt",
-    ])
+    ]
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=_FIELDS)
     writer.writeheader()
     for doc in docs:
-        data = doc.to_dict()
-        writer.writerow({k: data.get(k, "") for k in writer.fieldnames})
+        d = doc.to_dict()
+        writer.writerow({k: d.get(k, "") for k in _FIELDS})
 
     output.seek(0)
     filename = f"leads_export_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"
@@ -350,7 +328,7 @@ async def export_leads_csv(
     )
 
 
-# ── POST /internal/tasks/followup — Cloud Tasks handler ──────────────────────
+# ── POST /leads/internal/tasks/followup ──────────────────────────────────────
 
 @router.post("/internal/tasks/followup", include_in_schema=False)
 async def handle_followup_task(
@@ -359,12 +337,12 @@ async def handle_followup_task(
 ) -> dict:
     """
     Called by Cloud Tasks 48 hours after lead creation.
-    Checks if the client has logged into the portal; if not, creates a follow-up task.
-    This endpoint is internal — protected by Cloud Tasks OIDC (no partner auth needed).
+    Verifies the Google-signed OIDC token Cloud Tasks attaches to every request.
     """
+    _verify_cloud_tasks_oidc(request)
+
     body = await request.json()
     case_id = body.get("caseId")
-
     if not case_id:
         logger.error("followup_task_missing_case_id")
         return {"status": "error", "message": "Missing caseId"}
@@ -382,34 +360,118 @@ async def handle_followup_task(
         logger.info("followup_skip_already_created", case_id=case_id)
         return {"status": "skipped", "reason": "Follow-up already created"}
 
-    # Create follow-up task in Firestore for assigned paralegal
-    settings_obj = get_settings()
+    cfg = get_settings()
     task_ref = db.collection("tasks").document()
     await task_ref.set({
-        "taskId": task_ref.id,
-        "type": "FOLLOWUP_LEAD",
-        "caseId": case_id,
+        "taskId":    task_ref.id,
+        "type":      "FOLLOWUP_LEAD",
+        "caseId":    case_id,
         "assignedTo": case.assignedTo or "unassigned",
-        "clientName": f"{case.firstName} {case.lastName}",
+        "clientName":  f"{case.firstName} {case.lastName}",
         "clientEmail": case.email,
         "clientPhone": case.phone,
-        "status": "pending",
+        "status":    "pending",
         "suggestedActions": [
             "Call client to confirm receipt of welcome email",
             "Resend portal login link if needed",
             "Confirm VCF interest and exposure history",
         ],
         "createdAt": firestore.SERVER_TIMESTAMP,
-        "dueAt": firestore.SERVER_TIMESTAMP,
+        "dueAt":     firestore.SERVER_TIMESTAMP,
     })
 
-    # Mark case as having follow-up created
-    cases_ref = db.collection(settings_obj.firestore_cases_collection).document(case_id)
-    await cases_ref.update({
+    await db.collection(cfg.firestore_cases_collection).document(case_id).update({
         "followupTaskCreated": True,
-        "followupTaskId": task_ref.id,
-        "updatedAt": firestore.SERVER_TIMESTAMP,
+        "followupTaskId":      task_ref.id,
+        "updatedAt":           firestore.SERVER_TIMESTAMP,
     })
 
     logger.info("followup_task_created", case_id=case_id, task_id=task_ref.id)
     return {"status": "created", "taskId": task_ref.id}
+
+
+def _verify_cloud_tasks_oidc(request: Request) -> None:
+    """
+    Verify the Google-signed OIDC bearer token Cloud Tasks attaches to every
+    HTTP target request. Skipped in development/test for local ease.
+    """
+    cfg = get_settings()
+    if cfg.app_env in ("development", "test"):
+        return
+
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        logger.warning("cloud_tasks_missing_oidc_token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"error": "UNAUTHORIZED", "message": "Missing OIDC token", "details": []},
+        )
+
+    token = auth_header.split(" ", 1)[1]
+    try:
+        audience = f"{cfg.cloud_tasks_handler_url}/api/v1/leads/internal/tasks/followup"
+        id_info = id_token.verify_oauth2_token(
+            token, google_requests.Request(), audience=audience,
+        )
+        expected_sa = (
+            cfg.cloud_tasks_sa_email
+            or f"lead-intake-sa@{cfg.gcp_project_id}.iam.gserviceaccount.com"
+        )
+        if id_info.get("email") != expected_sa:
+            logger.warning("cloud_tasks_wrong_sa", got=id_info.get("email"), expected=expected_sa)
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"error": "FORBIDDEN", "message": "Unexpected service account", "details": []},
+            )
+    except ValueError as exc:
+        logger.warning("cloud_tasks_invalid_oidc_token", error=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"error": "UNAUTHORIZED", "message": "Invalid OIDC token", "details": []},
+        )
+
+
+# ── GET /leads/{lead_id} ──────────────────────────────────────────────────────
+# Wildcard — must stay after all static /leads/* routes above.
+
+@router.get("/{lead_id}", response_model=CaseDocument, summary="Get lead detail")
+async def get_lead(
+    lead_id: str,
+    partner: PartnerContext = Depends(get_partner),
+    db: firestore.AsyncClient = Depends(get_db),
+) -> CaseDocument:
+    case = await get_case(lead_id, db)
+    if not case:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "NOT_FOUND", "message": f"Case {lead_id} not found",
+                "details": [], "requestId": str(uuid.uuid4()),
+                "timestamp": datetime.utcnow().isoformat(),
+            },
+        )
+    return case
+
+
+# ── PATCH /leads/{lead_id}/status ─────────────────────────────────────────────
+
+@router.patch("/{lead_id}/status", summary="Update case status")
+async def update_lead_status(
+    lead_id: str,
+    body: UpdateStatusRequest,
+    partner: PartnerContext = Depends(get_partner),
+    db: firestore.AsyncClient = Depends(get_db),
+) -> dict:
+    case = await get_case(lead_id, db)
+    if not case:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "NOT_FOUND", "message": f"Case {lead_id} not found", "details": []},
+        )
+
+    updated_by = body.updatedBy or partner.partner_id
+    await update_case_status(
+        case_id=lead_id, new_status=body.status.value,
+        updated_by=updated_by, note=body.note, db=db,
+    )
+    return {"caseId": lead_id, "status": body.status.value, "updatedAt": datetime.utcnow().isoformat()}
