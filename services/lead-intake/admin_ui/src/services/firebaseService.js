@@ -20,6 +20,19 @@ import {
   getCountFromServer,
 } from 'firebase/firestore'
 
+import { getAuth } from 'firebase/auth'
+
+const LEAD_INTAKE_URL = import.meta.env.VITE_LEAD_INTAKE_URL
+
+async function getAuthHeaders() {
+  const user = getAuth().currentUser
+  if (!user) throw new Error('Not authenticated')
+  const token = await user.getIdToken()
+  return {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  }
+}
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -178,4 +191,46 @@ export function exportToCsv(cases) {
   a.download = `leads_export_${new Date().toISOString().slice(0, 10)}.csv`
   a.click()
   URL.revokeObjectURL(url)
+}
+
+export async function createPartner(name) {
+  const headers = await getAuthHeaders()
+  const resp = await fetch(`${LEAD_INTAKE_URL}/api/v1/admin/partners`, {
+    method: 'POST', headers,
+    body: JSON.stringify({ name, allowedIps: [], requireHmac: false }),
+  })
+  return resp.json()
+}
+
+export async function generateApiKey(partnerId, label) {
+  const headers = await getAuthHeaders()
+  const resp = await fetch(`${LEAD_INTAKE_URL}/api/v1/admin/partners/${partnerId}/keys`, {
+    method: 'POST', headers,
+    body: JSON.stringify({ label }),
+  })
+  return resp.json()
+}
+
+export async function listPartners() {
+  const headers = await getAuthHeaders()
+  const resp = await fetch(`${LEAD_INTAKE_URL}/api/v1/admin/partners`, { headers })
+  return resp.json()
+}
+
+export async function updateLeadStatus(caseId, status, note = '') {
+  const headers = await getAuthHeaders()
+  const resp = await fetch(`${LEAD_INTAKE_URL}/api/v1/leads/${caseId}/status`, {
+    method: 'PATCH', headers,
+    body: JSON.stringify({ status, note }),
+  })
+  return resp.json()
+}
+
+export async function bulkAssignLeads(caseIds, assignTo) {
+  const headers = await getAuthHeaders()
+  const resp = await fetch(`${LEAD_INTAKE_URL}/api/v1/leads/bulk-assign`, {
+    method: 'POST', headers,
+    body: JSON.stringify({ caseIds, assignTo }),
+  })
+  return resp.json()
 }

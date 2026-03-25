@@ -11,7 +11,7 @@ import { auth } from "./firebase";
 // ── Base URL ──────────────────────────────────────────────────────────────
 export const API_BASE =
   import.meta.env.VITE_API_BASE_URL ??
-  "https://us-central1-simple-tort-zadroga-prod.cloudfunctions.net";
+  "https://us-central1-simpletort-zadroga-dev.cloudfunctions.net";
 
 // ── Role types (mirrors backend rbac.py) ─────────────────────────────────
 export type BackendRole =
