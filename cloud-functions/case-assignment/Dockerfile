@@ -11,4 +11,4 @@ COPY . .
 ENV PORT=8080
 EXPOSE 8080
 
-CMD ["functions-framework", "--target=case_assignment", "--port=8080"]
+CMD ["functions-framework", "--target=case_assignment", "--port=8080", "--signature-type=cloudevent"]
