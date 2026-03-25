@@ -195,7 +195,7 @@ steps:
       - --region=${_REGION}
       - --platform=managed
       - --no-allow-unauthenticated
-      - --service-account=lead-intake-sa@$PROJECT_ID.iam.gserviceaccount.com
+      - --service-account=lead-intake-service-account@$PROJECT_ID.iam.gserviceaccount.com
       - --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,APP_ENV=development,JWT_AUDIENCE=${_FIREBASE_PROJECT_ID},JWT_ISSUER=https://securetoken.google.com/${_FIREBASE_PROJECT_ID},CLOUD_TASKS_HANDLER_URL=${_CLOUD_TASKS_HANDLER_URL},CLOUD_TASKS_LOCATION=${_REGION},PUBSUB_LEAD_CREATED_TOPIC=lead-created,PUBSUB_LEAD_SCREENED_TOPIC=lead-screened
       - --set-secrets=SENDGRID_API_KEY=SENDGRID_API_KEY:latest,TWILIO_ACCOUNT_SID=TWILIO_ACCOUNT_SID:latest,TWILIO_AUTH_TOKEN=TWILIO_AUTH_TOKEN:latest,TWILIO_FROM_NUMBER=TWILIO_PHONE_NUMBER:latest
       - --memory=512Mi
@@ -220,7 +220,7 @@ steps:
       - --source=services/lead-intake/functions/vcf_screener
       - --entry-point=vcf_screener
       - --trigger-topic=lead-created
-      - --service-account=lead-intake-sa@$PROJECT_ID.iam.gserviceaccount.com
+      - --service-account=lead-intake-service-account@$PROJECT_ID.iam.gserviceaccount.com
       - --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,FIRESTORE_CASES_COLLECTION=cases,PUBSUB_LEAD_SCREENED_TOPIC=lead-screened
       - --memory=256Mi
       - --timeout=60s
@@ -243,7 +243,7 @@ steps:
       - --source=services/lead-intake/functions/notification_dispatcher
       - --entry-point=notification_dispatcher
       - --trigger-topic=lead-screened
-      - --service-account=lead-intake-sa@$PROJECT_ID.iam.gserviceaccount.com
+      - --service-account=llead-intake-service-account@$PROJECT_ID.iam.gserviceaccount.com
       - --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,FIRESTORE_CASES_COLLECTION=cases
       - --memory=256Mi
       - --timeout=60s
@@ -267,7 +267,7 @@ steps:
       - --entry-point=followup_monitor
       - --trigger-http
       - --no-allow-unauthenticated
-      - --service-account=lead-intake-sa@$PROJECT_ID.iam.gserviceaccount.com
+      - --service-account=lead-intake-service-account@$PROJECT_ID.iam.gserviceaccount.com
       - --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,FIRESTORE_CASES_COLLECTION=cases,FOLLOWUP_DELAY_HOURS=48
       - --memory=256Mi
       - --timeout=120s
@@ -294,7 +294,7 @@ steps:
           --uri="$$FUNCTION_URL" \
           --http-method=POST \
           --message-body='{}' \
-          --oidc-service-account-email=lead-intake-sa@$PROJECT_ID.iam.gserviceaccount.com \
+          --oidc-service-account-email=lead-intake-service-account@$PROJECT_ID.iam.gserviceaccount.com \
           --oidc-token-audience="$$FUNCTION_URL" \
           2>/dev/null \
         || gcloud scheduler jobs update http followup-monitor \
@@ -303,7 +303,7 @@ steps:
           --uri="$$FUNCTION_URL" \
           --http-method=POST \
           --message-body='{}' \
-          --oidc-service-account-email=lead-intake-sa@$PROJECT_ID.iam.gserviceaccount.com \
+          --oidc-service-account-email=lead-intake-service-account@$PROJECT_ID.iam.gserviceaccount.com \
           --oidc-token-audience="$$FUNCTION_URL"
 
         echo "✅ Scheduler configured"
@@ -364,7 +364,7 @@ steps:
         --non-interactive
       echo "✅ Admin UI deployed to Firebase Hosting"
     waitFor: [build-admin-ui]
-    
+
 # ── SECRETS FROM SECRET MANAGER ─────────────────────────────────────────────
 # All secrets must be created in Secret Manager BEFORE the first build runs.
 
