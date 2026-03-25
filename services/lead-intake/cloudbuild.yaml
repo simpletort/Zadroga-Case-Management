@@ -269,7 +269,7 @@ steps:
       - --entry-point=followup_monitor
       - --trigger-http
       - --no-allow-unauthenticated
-      - --service-account=followup-monitor-sa@$PROJECT_ID.iam.gserviceaccount.com
+      - --service-account=lead-intake-service-account@$PROJECT_ID.iam.gserviceaccount.com
       - --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,FIRESTORE_CASES_COLLECTION=cases-dev,FOLLOWUP_DELAY_HOURS=48,DEFAULT_ASSIGNEE_EMAIL=${_DEFAULT_ASSIGNEE_EMAIL}
       - --memory=256Mi
       - --timeout=120s
