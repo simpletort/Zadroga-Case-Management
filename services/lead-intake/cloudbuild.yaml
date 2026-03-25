@@ -70,6 +70,7 @@ steps:
 
   - name: python:3.12-slim
     id: unit-tests
+    dir: services/lead-intake
     entrypoint: bash
     args:
       - -c
@@ -94,7 +95,7 @@ steps:
         pytest tests/unit/ -v --tb=short
         echo "✅ Unit tests passed"
     env:
-      - PYTHONPATH=/workspace/api:/workspace/functions/vcf_screener
+      - PYTHONPATH=/workspace/services/lead-intake/api:/workspace/services/lead-intake/functions/vcf_screener
       - GCP_PROJECT_ID=test-project
       - APP_ENV=test
       - VCF_WINDOW_START=2001-09-11
@@ -110,6 +111,7 @@ steps:
 
   - name: python:3.12-slim
     id: integration-tests
+    dir: services/lead-intake
     entrypoint: bash
     args:
       - -c
@@ -126,7 +128,7 @@ steps:
         echo "✅ Integration tests passed"
     waitFor: [unit-tests]
     env:
-      - PYTHONPATH=/workspace/api
+      - PYTHONPATH=/workspace/services/lead-intake/api
       - GCP_PROJECT_ID=test-project
       - APP_ENV=test
       - VCF_WINDOW_START=2001-09-11
@@ -141,6 +143,7 @@ steps:
 
   - name: gcr.io/cloud-builders/docker
     id: build-image
+    dir: services/lead-intake
     args:
       - build
       - -t
@@ -195,7 +198,7 @@ steps:
       - --gen2
       - --region=${_REGION}
       - --runtime=python312
-      - --source=functions/vcf_screener
+      - --source=services/lead-intake/functions/vcf_screener
       - --entry-point=vcf_screener
       - --trigger-topic=lead-created
       - --service-account=lead-intake-sa@$PROJECT_ID.iam.gserviceaccount.com
@@ -218,7 +221,7 @@ steps:
       - --gen2
       - --region=${_REGION}
       - --runtime=python312
-      - --source=functions/notification_dispatcher
+      - --source=services/lead-intake/functions/notification_dispatcher
       - --entry-point=notification_dispatcher
       - --trigger-topic=lead-screened
       - --service-account=lead-intake-sa@$PROJECT_ID.iam.gserviceaccount.com
@@ -241,7 +244,7 @@ steps:
       - --gen2
       - --region=${_REGION}
       - --runtime=python312
-      - --source=functions/followup_monitor
+      - --source=services/lead-intake/functions/followup_monitor
       - --entry-point=followup_monitor
       - --trigger-http
       - --no-allow-unauthenticated
@@ -292,7 +295,7 @@ steps:
 
   - name: node:20-slim
     id: install-admin-ui-deps
-    dir: admin_ui
+    dir: services/lead-intake/admin_ui
     entrypoint: npm
     args: [install, --quiet]
     waitFor: [-]
@@ -301,7 +304,7 @@ steps:
 
   - name: node:20-slim
     id: build-admin-ui
-    dir: admin_ui
+    dir: services/lead-intake/admin_ui
     entrypoint: bash
     args:
       - -c
@@ -329,7 +332,7 @@ steps:
 
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     id: deploy-firebase-hosting
-    dir: admin_ui
+    dir: services/lead-intake/admin_ui
     entrypoint: bash
     args:
       - -c
