@@ -9,18 +9,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     rm -rf /var/lib/apt/lists/*
 
 COPY api/requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # ── Stage 2: Runtime image ────────────────────────────────────────────────────
 FROM python:3.12-slim AS runtime
 
 WORKDIR /app
 
-COPY --from=builder /root/.local /root/.local
+COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
 COPY api/ /app/
 
-ENV PATH=/root/.local/bin:$PATH \
-    PYTHONUNBUFFERED=1 \
+ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PORT=8080
 
