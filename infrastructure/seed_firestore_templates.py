@@ -7,12 +7,12 @@ set of templates used by the ZAD Notification Service.
 
 Templates seeded
 ----------------
-  welcome-sms          — SMS sent immediately on new lead creation
-  welcome-email        — Email sent immediately on new lead creation
-  reminder-48hr-sms    — SMS reminder 48 hours before appointment
-  reminder-48hr-email  — Email reminder 48 hours before appointment
-  reminder-7day-sms    — SMS reminder 7 days after no contact
-  reminder-7day-email  — Email reminder 7 days after no contact
+  welcome_sms          — SMS sent immediately on new lead creation
+  welcome_email        — Email sent immediately on new lead creation
+  reminder_48hr_sms    — SMS reminder 48 hours before appointment
+  reminder_48hr_email  — Email reminder 48 hours before appointment
+  reminder_7day_sms    — SMS reminder 7 days after no contact
+  reminder_7day_email  — Email reminder 7 days after no contact
 
 Usage
 -----
@@ -67,7 +67,7 @@ TEMPLATES: list[dict] = [
     # Variables: clientName, caseId, portalUrl
     # Char count (with typical values): ~155 — stays within 1 GSM-7 segment (160)
     {
-        "templateId": "welcome-sms",
+        "templateId": "welcome_sms",
         "name": "Welcome SMS",
         "channel": "SMS",
         "triggerEvent": "new_lead_created",
@@ -85,7 +85,7 @@ TEMPLATES: list[dict] = [
     # ── Welcome Email ──────────────────────────────────────────────────────────
     # Variables: clientName, caseId, portalUrl
     {
-        "templateId": "welcome-email",
+        "templateId": "welcome_email",
         "name": "Welcome Email",
         "channel": "EMAIL",
         "triggerEvent": "new_lead_created",
@@ -137,7 +137,7 @@ TEMPLATES: list[dict] = [
 
     # ── 48-Hour Reminder SMS ───────────────────────────────────────────────────
     {
-        "templateId": "reminder-48hr-sms",
+        "templateId": "reminder_48hr_sms",
         "name": "48-Hour Appointment Reminder SMS",
         "channel": "SMS",
         "triggerEvent": "appointment_reminder_48hr",
@@ -153,7 +153,7 @@ TEMPLATES: list[dict] = [
 
     # ── 48-Hour Reminder Email ─────────────────────────────────────────────────
     {
-        "templateId": "reminder-48hr-email",
+        "templateId": "reminder_48hr_email",
         "name": "48-Hour Appointment Reminder Email",
         "channel": "EMAIL",
         "triggerEvent": "appointment_reminder_48hr",
@@ -186,7 +186,7 @@ TEMPLATES: list[dict] = [
 
     # ── 7-Day Follow-Up SMS ────────────────────────────────────────────────────
     {
-        "templateId": "reminder-7day-sms",
+        "templateId": "reminder_7day_sms",
         "name": "7-Day Follow-Up SMS",
         "channel": "SMS",
         "triggerEvent": "follow_up_7day",
@@ -202,7 +202,7 @@ TEMPLATES: list[dict] = [
 
     # ── 7-Day Follow-Up Email ──────────────────────────────────────────────────
     {
-        "templateId": "reminder-7day-email",
+        "templateId": "reminder_7day_email",
         "name": "7-Day Follow-Up Email",
         "channel": "EMAIL",
         "triggerEvent": "follow_up_7day",

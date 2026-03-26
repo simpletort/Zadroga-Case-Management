@@ -4,7 +4,7 @@ E2E test for welcome SMS flow.
 
 Tests the full pipeline:
   1. POST /tasks/sms  →  Cloud Run notification service
-  2. Template fetched from Firestore (welcome-sms)
+  2. Template fetched from Firestore (welcome_sms)
   3. Variables substituted: clientName, caseId, portalUrl
   4. SMS dispatched via Twilio
   5. Delivery record written to Firestore sms_delivery_records
@@ -164,18 +164,18 @@ def _list_cases(project: str, database: str, limit: int = 10) -> None:
 
 
 def _check_template(project: str, database: str, collection: str) -> dict:
-    """Fetch welcome-sms template from Firestore and validate it."""
+    """Fetch welcome_sms template from Firestore and validate it."""
     db = _get_firestore_client(project, database)
-    doc = db.collection(collection).document("welcome-sms").get()
+    doc = db.collection(collection).document("welcome_sms").get()
 
     if not doc.exists:
-        print(f"FAIL  Template 'welcome-sms' not found in Firestore")
+        print(f"FAIL  Template 'welcome_sms' not found in Firestore")
         print(f"      Collection: {collection}")
         print(f"      Run: python infrastructure/seed_firestore_templates.py --project {project} --database {database} --collection {collection}")
         sys.exit(1)
 
     data = doc.to_dict()
-    print(f"PASS  Template found: welcome-sms")
+    print(f"PASS  Template found: welcome_sms")
     print(f"      channel      : {data.get('channel')}")
     print(f"      isActive     : {data.get('isActive')}")
     print(f"      triggerEvent : {data.get('triggerEvent')}")
@@ -221,7 +221,7 @@ def _send_sms_request(
 
     payload = {
         "to":         to,
-        "templateId": "welcome-sms",
+        "templateId": "welcome_sms",
         "variables":  variables,
         "caseId":     case_id,
         "requestId":  request_id,
