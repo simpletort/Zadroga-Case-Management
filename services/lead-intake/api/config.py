@@ -73,8 +73,8 @@ class Settings(BaseSettings):
     twilio_from_number: str = ""
  
     # ── Pub/Sub ───────────────────────────────────────────────────────────────
-    pubsub_lead_created_topic: str = "lead-created"
-    pubsub_lead_screened_topic: str = "lead-screened"
+    pubsub_lead_created_topic: str = "lead-created-dev"
+    pubsub_lead_screened_topic: str = "lead-screened-dev"
  
     @property
     def is_production(self) -> bool:
