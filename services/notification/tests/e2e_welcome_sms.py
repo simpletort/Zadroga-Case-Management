@@ -113,18 +113,21 @@ def _fetch_case(project: str, database: str, case_id: str) -> dict:
         print(f"       Use --list-cases to see available cases")
         sys.exit(1)
 
-    data = doc.to_dict()
-    first_name = data.get("firstName", "")
-    last_name  = data.get("lastName", "")
+    data      = doc.to_dict()
+    lead      = data.get("leadData") or {}
+
+    first_name  = lead.get("firstName") or data.get("firstName", "")
+    last_name   = lead.get("lastName")  or data.get("lastName", "")
+    phone       = lead.get("phone")     or data.get("phone", "")
+    email       = lead.get("email")     or data.get("email", "")
     client_name = f"{first_name} {last_name}".strip() or "Client"
-    phone       = data.get("phone", "")
-    portal_url  = f"{PORTAL_BASE_URL}/{case_id}"
+    portal_url  = data.get("portalAccessLink") or f"{PORTAL_BASE_URL}/{case_id}"
 
     print(f"\nPASS  Case found: {case_id}")
     print(f"      clientName   : {client_name}")
     print(f"      phone        : {phone}")
     print(f"      status       : {data.get('status', 'unknown')}")
-    print(f"      email        : {data.get('email', '')}")
+    print(f"      email        : {email}")
     print(f"      portalUrl    : {portal_url}")
 
     variables = {
@@ -133,7 +136,7 @@ def _fetch_case(project: str, database: str, case_id: str) -> dict:
         "portalUrl":  portal_url,
     }
 
-    return {"variables": variables, "phone": phone, "case_data": data}
+    return {"variables": variables, "phone": phone, "email": email, "case_data": data}
 
 
 def _list_cases(project: str, database: str, limit: int = 10) -> None:
@@ -146,9 +149,10 @@ def _list_cases(project: str, database: str, limit: int = 10) -> None:
     docs = list(db.collection(CASES_COLLECTION).limit(limit).get())
     count = 0
     for doc in docs:
-        d = doc.to_dict()
-        name   = f"{d.get('firstName','')} {d.get('lastName','')}".strip()
-        phone  = d.get("phone", "—")
+        d    = doc.to_dict()
+        lead = d.get("leadData") or {}
+        name   = f"{lead.get('firstName', d.get('firstName',''))} {lead.get('lastName', d.get('lastName',''))}".strip()
+        phone  = lead.get("phone") or d.get("phone", "—")
         status = d.get("status", "—")
         print(f"  {doc.id:<25} {name:<25} {phone:<18} {status}")
         count += 1
