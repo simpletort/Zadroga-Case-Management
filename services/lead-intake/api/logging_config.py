@@ -8,11 +8,20 @@ import structlog
 
 
 def setup_logging() -> None:
+    # Configure stdlib logging to route output to stdout.
+    # Required because structlog.stdlib.LoggerFactory() wraps stdlib loggers,
+    # which in turn need a handler — without this nothing would print.
+    logging.basicConfig(
+        format="%(message)s",
+        stream=sys.stdout,
+        level=logging.INFO,
+    )
+
     structlog.configure(
         processors=[
             structlog.contextvars.merge_contextvars,
             structlog.stdlib.add_log_level,
-            structlog.stdlib.add_logger_name,
+            structlog.stdlib.add_logger_name,   # needs a stdlib logger → now satisfied
             structlog.processors.TimeStamper(fmt="iso"),
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
@@ -20,7 +29,7 @@ def setup_logging() -> None:
         ],
         wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
         context_class=dict,
-        logger_factory=structlog.PrintLoggerFactory(file=sys.stdout),
+        logger_factory=structlog.stdlib.LoggerFactory(),  # was: PrintLoggerFactory
     )
 
 
