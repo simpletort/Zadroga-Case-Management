@@ -46,6 +46,10 @@ def get_db() -> AsyncClient:
     global _db
     if _db is None:
         _init_firebase()
-        _db = firestore_async.client()
-        logger.info("firestore_client_created")
+        settings = get_settings()
+        _db = firestore_async.client(database=settings.firestore_database_id)
+        logger.info(
+            "firestore_client_created",
+            database=settings.firestore_database_id,
+        )
     return _db
