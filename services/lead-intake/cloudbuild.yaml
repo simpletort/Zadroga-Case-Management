@@ -39,7 +39,7 @@
 #      roles/storage.admin          ← needed to push Docker images
 #
 # 4. SERVICE ACCOUNT for Cloud Run & Functions — create once:
-#      gcloud iam service-accounts create lead-intake-sa \
+#      gcloud iam service-accounts create lead-intake-service-account \
 #        --display-name="Lead Intake Service Account"
 #    Then grant it:
 #      roles/datastore.user
@@ -196,7 +196,7 @@ steps:
       - --platform=managed
       - --no-allow-unauthenticated
       - --service-account=lead-intake-service-account@$PROJECT_ID.iam.gserviceaccount.com
-      - --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,APP_ENV=development,JWT_AUDIENCE=${_FIREBASE_PROJECT_ID},JWT_ISSUER=https://securetoken.google.com/${_FIREBASE_PROJECT_ID},CLOUD_TASKS_HANDLER_URL=${_CLOUD_TASKS_HANDLER_URL},CLOUD_TASKS_LOCATION=${_REGION},PUBSUB_LEAD_CREATED_TOPIC=lead-created,PUBSUB_LEAD_SCREENED_TOPIC=lead-screened
+      - --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,APP_ENV=development,JWT_AUDIENCE=${_FIREBASE_PROJECT_ID},JWT_ISSUER=https://securetoken.google.com/${_FIREBASE_PROJECT_ID},CLOUD_TASKS_HANDLER_URL=${_CLOUD_TASKS_HANDLER_URL},CLOUD_TASKS_LOCATION=${_REGION},PUBSUB_LEAD_CREATED_TOPIC=lead-created-dev,PUBSUB_LEAD_SCREENED_TOPIC=lead-screened-dev,CLOUD_TASKS_SA_EMAIL=lead-intake-service-account@$PROJECT_ID.iam.gserviceaccount.com
       - --set-secrets=SENDGRID_API_KEY=SENDGRID_API_KEY:latest,TWILIO_ACCOUNT_SID=TWILIO_ACCOUNT_SID:latest,TWILIO_AUTH_TOKEN=TWILIO_AUTH_TOKEN:latest,TWILIO_FROM_NUMBER=TWILIO_PHONE_NUMBER:latest
       - --memory=512Mi
       - --cpu=1
@@ -219,9 +219,9 @@ steps:
       - --runtime=python312
       - --source=services/lead-intake/functions/vcf_screener
       - --entry-point=vcf_screener
-      - --trigger-topic=lead-created
+      - --trigger-topic=lead-created-dev
       - --service-account=lead-intake-service-account@$PROJECT_ID.iam.gserviceaccount.com
-      - --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,FIRESTORE_CASES_COLLECTION=cases,PUBSUB_LEAD_SCREENED_TOPIC=lead-screened
+      - --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,FIRESTORE_CASES_COLLECTION=cases,PUBSUB_LEAD_SCREENED_TOPIC=lead-screened-dev
       - --memory=256Mi
       - --timeout=60s
       - --min-instances=0
@@ -242,7 +242,7 @@ steps:
       - --runtime=python312
       - --source=services/lead-intake/functions/notification_dispatcher
       - --entry-point=notification_dispatcher
-      - --trigger-topic=lead-screened
+      - --trigger-topic=lead-screened-dev
       - --service-account=lead-intake-service-account@$PROJECT_ID.iam.gserviceaccount.com
       - --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,FIRESTORE_CASES_COLLECTION=cases
       - --memory=256Mi

@@ -37,7 +37,7 @@ from cloudevents.http import CloudEvent
 
 GCP_PROJECT = os.environ["GCP_PROJECT_ID"]
 CASES_COLLECTION = os.environ.get("FIRESTORE_CASES_COLLECTION", "cases")
-LEAD_SCREENED_TOPIC = os.environ.get("PUBSUB_LEAD_SCREENED_TOPIC", "lead-screened")
+LEAD_SCREENED_TOPIC = os.environ.get("PUBSUB_LEAD_SCREENED_TOPIC", "lead-screened-dev")
 
 VCF_WINDOW_START = date(2001, 9, 11)
 VCF_WINDOW_END = date(2011, 5, 30)
