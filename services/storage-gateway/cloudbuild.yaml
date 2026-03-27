@@ -1,59 +1,46 @@
 steps:
-  # 1. Lint
-  - name: 'python:3.11-slim'
+  - name: "python:3.11-slim"
+    dir: "services/storage-gateway"
     entrypoint: bash
-    dir: 'services/client-portal'
     args:
-      - '-c'
+      - "-c"
       - |
-        pip install black flake8 --quiet
-        black --check .
-        flake8 . --max-line-length=88
+        pip install -r requirements.txt
+        pytest tests/ -v --tb=short
 
-  # 2. Test
-  # - name: 'python:3.11-slim'
-  #   entrypoint: bash
-  #   dir: 'services/client-portal'
-  #   args:
-  #     - '-c'
-  #     - |
-  #       pip install -r requirements.txt pytest --quiet
-  #       pytest tests/ -v
-
-  # 3. Build image
-  - name: 'gcr.io/cloud-builders/docker'
+  - name: "gcr.io/cloud-builders/docker"
+    dir: "services/storage-gateway"
     args:
       - build
-      - '-t'
-      - '$_REPO/$_SERVICE_NAME:$COMMIT_SHA'
-      - '-t'
-      - '$_REPO/$_SERVICE_NAME:$_ENV-latest'
-      - '-f'
-      - 'services/client-portal/Dockerfile'
-      - 'services/client-portal'
+      - "-t"
+      - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+      - "-t"
+      - "$_REPO/$_SERVICE_NAME:latest"
+      - "."
 
-  # 4. Push image
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', '--all-tags', '$_REPO/$_SERVICE_NAME']
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"]
 
-  # 5. Deploy to Cloud Run
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: gcloud
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "$_REPO/$_SERVICE_NAME:latest"]
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: bash
     args:
-      - run
-      - deploy
-      - '$_SERVICE_NAME-$_ENV'
-      - '--image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA'
-      - '--region=$_REGION'
-      - '--platform=managed'
-      - '--allow-unauthenticated'
-      - '--set-env-vars=ENV=$_ENV'
+      - "-c"
+      - |
+        bash scripts/deploy.sh \
+          $_ENV \
+          $_SERVICE_NAME \
+          $_REPO \
+          $COMMIT_SHA \
+          $_REGION \
+          $PROJECT_ID
 
 images:
-  - '$_REPO/$_SERVICE_NAME:$COMMIT_SHA'
-  - '$_REPO/$_SERVICE_NAME:$_ENV-latest'
+  - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+  - "$_REPO/$_SERVICE_NAME:latest"
 
 options:
   logging: CLOUD_LOGGING_ONLY
-
-timeout: '600s'
+  timeout: 1800s   # 30 min — canary window (15 min) + build time

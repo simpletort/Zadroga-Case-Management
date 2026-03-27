@@ -1,2 +1,23 @@
-flask==3.0.3
-gunicorn==22.0.0
+fastapi==0.110.0
+uvicorn[standard]==0.29.0
+pydantic==2.7.0
+pydantic-settings==2.2.0
+python-multipart==0.0.9    # required by FastAPI for request.form() parsing
+
+# Twilio SMS
+twilio==9.0.5
+
+# Firestore / Firebase
+google-cloud-firestore==2.16.0
+firebase-admin==6.5.0
+google-auth==2.29.0
+
+# Cloud Tasks
+google-cloud-tasks==2.16.3
+protobuf==4.25.3
+
+# HTTP client (used for OIDC verify in non-GCP envs)
+requests==2.32.3
+
+# Test dependencies (also required by FastAPI TestClient at import time)
+httpx==0.27.0

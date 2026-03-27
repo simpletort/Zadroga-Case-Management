@@ -1,59 +1,198 @@
-steps:
-  # 1. Lint
-  - name: 'python:3.11-slim'
-    entrypoint: bash
-    dir: 'services/client-portal'
-    args:
-      - '-c'
-      - |
-        pip install black flake8 --quiet
-        black --check .
-        flake8 . --max-line-length=88
+# services/notification/cloudbuild.yaml
+#
+# CI/CD pipeline for the Notification Service (Twilio SMS + opt-out management).
+# Follows the same 4-stage pattern as services/storage-gateway/cloudbuild.yaml:
+#
+#   Stage 1 — Test   : install deps, run pytest (all mocked; no real Twilio/GCP)
+#   Stage 2 — Build  : docker build, tag with COMMIT_SHA + ENV-latest
+#   Stage 3 — Push   : push both tags to Artifact Registry
+#   Stage 4 — Deploy : scripts/deploy.sh → direct (dev) or canary (prod)
+#
+# Required substitution variables (set in the Cloud Build trigger):
+#   _REPO                    Artifact Registry path
+#                            e.g. us-central1-docker.pkg.dev/simpletort-prod/zad-docker-repo
+#   _SERVICE_NAME            Cloud Run service base name
+#                            e.g. zad-notification
+#   _ENV                     dev | prod
+#   _REGION                  GCP region, e.g. us-central1
+#
+#   _TWILIO_FROM_NUMBER      Twilio sender number, e.g. +12025550100
+#   _CLOUD_TASKS_QUEUE       SMS dispatch queue name, e.g. sms-dispatch
+#   _CLOUD_TASKS_QUEUE_REGION  Region of the queue, e.g. us-east1
+#   _NOTIFICATION_SA_EMAIL   Service account that Cloud Tasks uses for OIDC
+#                            e.g. notification-sa@PROJECT_ID.iam.gserviceaccount.com
+#
+# Secrets (already stored in Secret Manager, referenced by name):
+#   TWILIO_ACCOUNT_SID       Twilio account SID
+#   TWILIO_AUTH_TOKEN        Twilio auth token
+#   FIREBASE_SA_KEY          Firebase service-account JSON (base64 not needed; mounted as file)
+#
+# Cloud Run identity:
+#   The service runs as  notification-sa@PROJECT_ID.iam.gserviceaccount.com
+#   (created by infrastructure/notification-setup.sh)
 
-  # 2. Test
-  # - name: 'python:3.11-slim'
-  #   entrypoint: bash
-  #   dir: 'services/client-portal'
-  #   args:
-  #     - '-c'
-  #     - |
-  #       pip install -r requirements.txt pytest --quiet
-  #       pytest tests/ -v
-
-  # 3. Build image
-  - name: 'gcr.io/cloud-builders/docker'
-    args:
-      - build
-      - '-t'
-      - '$_REPO/$_SERVICE_NAME:$COMMIT_SHA'
-      - '-t'
-      - '$_REPO/$_SERVICE_NAME:$_ENV-latest'
-      - '-f'
-      - 'services/client-portal/Dockerfile'
-      - 'services/client-portal'
-
-  # 4. Push image
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', '--all-tags', '$_REPO/$_SERVICE_NAME']
-
-  # 5. Deploy to Cloud Run
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: gcloud
-    args:
-      - run
-      - deploy
-      - '$_SERVICE_NAME-$_ENV'
-      - '--image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA'
-      - '--region=$_REGION'
-      - '--platform=managed'
-      - '--allow-unauthenticated'
-      - '--set-env-vars=ENV=$_ENV'
-
-images:
-  - '$_REPO/$_SERVICE_NAME:$COMMIT_SHA'
-  - '$_REPO/$_SERVICE_NAME:$_ENV-latest'
+substitutions:
+  _REGION: us-central1
+  _SERVICE_NAME: zad-notification
+  _REPO: ""                        # set in trigger — Artifact Registry repo path
+  _ENV: dev
+  _TWILIO_FROM_NUMBER: ""          # set in trigger
+  _CLOUD_TASKS_QUEUE: sms-dispatch
+  _CLOUD_TASKS_QUEUE_REGION: us-east1
+  _NOTIFICATION_SA_EMAIL: ""       # set in trigger — notification-sa@PROJECT_ID.iam.gserviceaccount.com
 
 options:
   logging: CLOUD_LOGGING_ONLY
+  substitutionOption: ALLOW_LOOSE
 
-timeout: '600s'
+timeout: 1800s   # 30 min — matches storage-gateway (canary window + build time)
+
+steps:
+
+  # ══════════════════════════════════════════════════════════════════
+  # STAGE 1 — TEST
+  # All dependencies are mocked; no Twilio account or GCP project needed.
+  # ══════════════════════════════════════════════════════════════════
+
+  - name: "python:3.11-slim"
+    id: test
+    dir: "services/notification"
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        pip install -r requirements.txt \
+                    pytest==8.1.0 \
+                    pytest-asyncio==0.23.6 \
+                    pytest-mock==3.14.0 \
+                    httpx==0.27.0 \
+                    --quiet
+        pytest tests/ -v --tb=short
+    env:
+      - "TWILIO_ACCOUNT_SID=ACtest000000000000000000000000000"
+      - "TWILIO_AUTH_TOKEN=test_auth_token_placeholder_xxxxxxx"
+      - "TWILIO_FROM_NUMBER=+15005550006"
+      - "APP_ENV=development"
+      - "GCP_PROJECT_ID=test-project"
+      - "NOTIFICATION_SERVICE_URL=https://notification-test.run.app"
+      - "NOTIFICATION_SA_EMAIL=test-sa@test-project.iam.gserviceaccount.com"
+
+  # ══════════════════════════════════════════════════════════════════
+  # STAGE 2 — BUILD Docker image
+  # ══════════════════════════════════════════════════════════════════
+
+  - name: "gcr.io/cloud-builders/docker"
+    id: build
+    dir: "services/notification"
+    args:
+      - build
+      - "-t"
+      - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+      - "-t"
+      - "$_REPO/$_SERVICE_NAME:$_ENV-latest"
+      - "."
+    waitFor: ["test"]
+
+  # ══════════════════════════════════════════════════════════════════
+  # STAGE 3 — PUSH to Artifact Registry
+  # ══════════════════════════════════════════════════════════════════
+
+  - name: "gcr.io/cloud-builders/docker"
+    id: push-sha
+    args: ["push", "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"]
+    waitFor: ["build"]
+
+  - name: "gcr.io/cloud-builders/docker"
+    id: push-latest
+    args: ["push", "$_REPO/$_SERVICE_NAME:$_ENV-latest"]
+    waitFor: ["build"]
+
+  # ══════════════════════════════════════════════════════════════════
+  # STAGE 4 — DEPLOY to Cloud Run
+  # dev  → direct deploy (scripts/deploy.sh)
+  # prod → canary deploy (scripts/canary-deploy.sh via deploy.sh)
+  #
+  # --set-env-vars / --set-secrets are passed on every deploy so the
+  # running revision always reflects the trigger's substitution values.
+  # Cloud Run merges these with any existing env vars on the service.
+  # ══════════════════════════════════════════════════════════════════
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: deploy
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        # Resolve the self-referencing NOTIFICATION_SERVICE_URL
+        # (the service URL follows the pattern Cloud Run assigns)
+        # NOTE: bash-local vars (SERVICE_URL, ENV_VARS, SECRETS) use $$ so
+        # Cloud Build does not try to substitute them as build variables.
+        SERVICE_URL=$(gcloud run services describe $_SERVICE_NAME-$_ENV \
+          --region=$_REGION \
+          --project=$PROJECT_ID \
+          --format="value(status.url)" 2>/dev/null || echo "")
+
+        if [ -z "$$SERVICE_URL" ]; then
+          # First deploy — URL not known yet; placeholder used and corrected
+          # automatically on the second pipeline run.
+          SERVICE_URL="https://$_SERVICE_NAME-$_ENV-uc.a.run.app"
+          echo "First deploy detected — using placeholder URL: $$SERVICE_URL"
+        fi
+
+        ENV_VARS="GCP_PROJECT_ID=$PROJECT_ID"
+        ENV_VARS="$$ENV_VARS,APP_ENV=$_ENV"
+        ENV_VARS="$$ENV_VARS,TWILIO_FROM_NUMBER=$_TWILIO_FROM_NUMBER"
+        ENV_VARS="$$ENV_VARS,CLOUD_TASKS_QUEUE=$_CLOUD_TASKS_QUEUE"
+        ENV_VARS="$$ENV_VARS,CLOUD_TASKS_QUEUE_REGION=$_CLOUD_TASKS_QUEUE_REGION"
+        ENV_VARS="$$ENV_VARS,NOTIFICATION_SA_EMAIL=$_NOTIFICATION_SA_EMAIL"
+        ENV_VARS="$$ENV_VARS,NOTIFICATION_SERVICE_URL=$$SERVICE_URL"
+
+        SECRETS="TWILIO_ACCOUNT_SID=TWILIO_ACCOUNT_SID:latest"
+        SECRETS="$$SECRETS,TWILIO_AUTH_TOKEN=TWILIO_AUTH_TOKEN:latest"
+
+        if [ "$_ENV" = "prod" ]; then
+          echo "Production deployment — running canary..."
+          # Deploy with no traffic first, then canary-deploy handles traffic split
+          gcloud run deploy $_SERVICE_NAME-$_ENV \
+            --image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA \
+            --region=$_REGION \
+            --project=$PROJECT_ID \
+            --platform=managed \
+            --no-traffic \
+            --service-account=$_NOTIFICATION_SA_EMAIL \
+            --no-allow-unauthenticated \
+            --min-instances=1 \
+            --max-instances=20 \
+            --memory=512Mi \
+            --cpu=1 \
+            --concurrency=80 \
+            --set-env-vars="$$ENV_VARS" \
+            --set-secrets="$$SECRETS"
+
+          bash scripts/canary-deploy.sh \
+            $_SERVICE_NAME-$_ENV \
+            $_REPO/$_SERVICE_NAME:$COMMIT_SHA \
+            $_REGION \
+            $PROJECT_ID
+        else
+          echo "Dev deployment — deploying directly..."
+          gcloud run deploy $_SERVICE_NAME-$_ENV \
+            --image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA \
+            --region=$_REGION \
+            --project=$PROJECT_ID \
+            --platform=managed \
+            --service-account=$_NOTIFICATION_SA_EMAIL \
+            --no-allow-unauthenticated \
+            --min-instances=0 \
+            --max-instances=5 \
+            --memory=512Mi \
+            --cpu=1 \
+            --concurrency=80 \
+            --set-env-vars="$$ENV_VARS" \
+            --set-secrets="$$SECRETS"
+        fi
+    waitFor: ["push-sha", "push-latest"]
+
+images:
+  - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+  - "$_REPO/$_SERVICE_NAME:$_ENV-latest"

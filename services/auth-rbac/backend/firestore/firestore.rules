@@ -1,0 +1,199 @@
+rules_version = '2';
+
+// Database: simpletort-dev
+// Permissions use dot-notation matching the `roles` collection.
+// Server-side (Admin SDK) always bypasses these rules.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ───────────────────────────────────────────────────────────
+    function isAuth()     { return request.auth != null; }
+    function isActive()   { return request.auth.token.get('active', false) == true; }
+    function validUser()  { return isAuth() && isActive(); }
+    function role()       { return request.auth.token.get('role', 'client'); }
+
+    function hasPerm(p) {
+      return validUser() && (
+        role() == 'senior_partner' ||
+        role() == 'system_admin'   ||
+        (role() == 'junior_partner' && p in [
+          'cases.read','cases.write','cases.status.update','cases.approve',
+          'clients.read','clients.write',
+          'documents.read','documents.upload','documents.verify',
+          'tasks.read','tasks.write','tasks.complete',
+          'communications.read','communications.write',
+          'timeline.read','expenses.read','expenses.write',
+          'disbursements.read','disbursements.write',
+          'staff.read','reports.read','analytics.read',
+          'settings.read','auditLog.read'
+        ]) ||
+        (role() == 'paralegal' && p in [
+          'cases.read','cases.write','cases.status.update',
+          'clients.read','clients.write',
+          'documents.read','documents.upload','documents.verify',
+          'tasks.read','tasks.write','tasks.complete',
+          'communications.read','communications.write',
+          'timeline.read','expenses.read','expenses.write',
+          'disbursements.read','staff.read','reports.read'
+        ]) ||
+        (role() == 'admin_staff' && p in [
+          'cases.read','cases.write','cases.status.update',
+          'clients.read','clients.write',
+          'documents.read','documents.upload',
+          'tasks.read','tasks.write','tasks.complete',
+          'communications.read','communications.write',
+          'timeline.read','expenses.read','expenses.write',
+          'disbursements.read','staff.read','staff.manage'
+        ]) ||
+        (role() == 'client' && p in [
+          'cases.read','documents.read','documents.upload',
+          'communications.read','timeline.read'
+        ])
+      );
+    }
+
+    function isStaff() {
+      return validUser() && role() in ['admin_staff','paralegal','junior_partner','senior_partner','system_admin'];
+    }
+
+
+    // ════════════════════════════════════════════════════════════════════
+    // ROLES — read-only from client, managed via Admin SDK / console
+    // ════════════════════════════════════════════════════════════════════
+    match /roles/{roleId} {
+      allow read:  if validUser();
+      allow write: if false; // Admin SDK only
+    }
+
+
+    // ════════════════════════════════════════════════════════════════════
+    // USERS / STAFF
+    // ════════════════════════════════════════════════════════════════════
+    match /users/{uid} {
+      allow read:   if validUser() && (request.auth.uid == uid || isStaff());
+      allow create: if hasPerm('staff.manage');
+      allow update: if validUser() && (
+        (request.auth.uid == uid &&
+          request.resource.data.diff(resource.data).changedKeys().hasOnly(['displayName','updatedAt']))
+        || hasPerm('staff.manage')
+      );
+      allow delete: if false;
+    }
+
+    match /staff/{uid} {
+      allow read:   if validUser() && (request.auth.uid == uid || isStaff());
+      allow create: if hasPerm('staff.manage');
+      allow update: if validUser() && (
+        request.auth.uid == uid || hasPerm('staff.manage')
+      );
+      allow delete: if false;
+    }
+
+
+    // ════════════════════════════════════════════════════════════════════
+    // CASES
+    // ════════════════════════════════════════════════════════════════════
+    match /cases/{caseId} {
+      allow read:   if hasPerm('cases.read') || (
+        validUser() && resource.data.get('clientId', '') == request.auth.uid
+      );
+      allow create: if hasPerm('cases.write');
+      allow update: if hasPerm('cases.write') || hasPerm('cases.status.update') || hasPerm('cases.approve');
+      allow delete: if hasPerm('cases.delete');
+    }
+
+
+    // ════════════════════════════════════════════════════════════════════
+    // CLIENTS
+    // ════════════════════════════════════════════════════════════════════
+    match /clients/{clientId} {
+      allow read:   if hasPerm('clients.read') || (
+        validUser() && resource.data.get('uid', '') == request.auth.uid
+      );
+      allow create: if hasPerm('clients.write');
+      allow update: if hasPerm('clients.write') || (
+        validUser() && resource.data.get('uid', '') == request.auth.uid &&
+        request.resource.data.diff(resource.data).changedKeys().hasOnly(['phone','address','updatedAt'])
+      );
+      allow delete: if false;
+    }
+
+
+    // ════════════════════════════════════════════════════════════════════
+    // AUDIT LOG
+    // ════════════════════════════════════════════════════════════════════
+    match /auditLog/{logId} {
+      allow read:   if hasPerm('auditLog.read');
+      allow write:  if false; // Admin SDK only
+    }
+
+
+    // ════════════════════════════════════════════════════════════════════
+    // NOTIFICATIONS
+    // ════════════════════════════════════════════════════════════════════
+    match /notifications/{notifId} {
+      allow read:   if validUser() && (
+        isStaff() || resource.data.get('recipientId', '') == request.auth.uid
+      );
+      allow create: if isStaff();
+      allow update: if validUser() && resource.data.get('recipientId', '') == request.auth.uid;
+      allow delete: if false;
+    }
+
+    match /notificationTemplates/{templateId} {
+      allow read:   if isStaff();
+      allow write:  if hasPerm('settings.write');
+    }
+
+
+    // ════════════════════════════════════════════════════════════════════
+    // FIRM SETTINGS & CONFIG
+    // ════════════════════════════════════════════════════════════════════
+    match /firmSettings/{doc} {
+      allow read:   if hasPerm('settings.read');
+      allow write:  if hasPerm('settings.write');
+    }
+
+    match /integrationConfig/{doc} {
+      allow read:   if hasPerm('settings.read');
+      allow write:  if hasPerm('settings.write');
+    }
+
+    match /integrationSync/{doc} {
+      allow read:   if isStaff();
+      allow write:  if hasPerm('settings.write');
+    }
+
+
+    // ════════════════════════════════════════════════════════════════════
+    // ANALYTICS & REPORTING
+    // ════════════════════════════════════════════════════════════════════
+    match /analyticsCache/{doc} {
+      allow read:   if hasPerm('analytics.read');
+      allow write:  if false; // Admin SDK only
+    }
+
+    match /complianceMetrics/{doc} {
+      allow read:   if hasPerm('reports.read');
+      allow write:  if false; // Admin SDK only
+    }
+
+
+    // ════════════════════════════════════════════════════════════════════
+    // INTERNAL — Admin SDK only, no client access
+    // ════════════════════════════════════════════════════════════════════
+    match /_sessions/{id}       { allow read, write: if false; }
+    match /_rate_limits/{id}    { allow read, write: if false; }
+    match /_portal_invites/{id} { allow read, write: if false; }
+
+
+    // ════════════════════════════════════════════════════════════════════
+    // CATCH-ALL — block any unlisted collection from client access
+    // ════════════════════════════════════════════════════════════════════
+    match /{document=**} {
+      allow read:  if false;
+      allow write: if false;
+    }
+  }
+}

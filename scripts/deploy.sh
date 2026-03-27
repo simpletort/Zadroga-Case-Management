@@ -19,5 +19,8 @@ if [ "$ENV" = "prod" ]; then
     $PROJECT_ID
 else
   echo "Staging deployment - deploying directly..."
-  gcloud run deploy $SERVICE_NAME-$ENV --image=$REPO/$SERVICE_NAME:$COMMIT_SHA --region=$REGION --platform=managed --allow-unauthenticated --set-env-vars=ENV=$ENV
+  gcloud run deploy $SERVICE_NAME-$ENV \
+    --image=$REPO/$SERVICE_NAME:$COMMIT_SHA \
+    --region=$REGION \
+    --platform=managed
 fi

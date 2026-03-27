@@ -1,0 +1,21 @@
+# Firebase Cloud Functions — Python 3.12 runtime
+# Versions pinned for reproducible builds.
+
+firebase-functions==0.4.2
+firebase-admin==6.5.0
+google-cloud-firestore==2.16.1
+flask==3.0.3          # used internally by firebase-functions
+
+# HTTP client (used by Mailgun email dispatch)
+requests==2.32.3
+
+# ── Email providers — uncomment the one you use ───────────────────────────────
+# Set EMAIL_PROVIDER=sendgrid + SENDGRID_API_KEY + SENDGRID_FROM_EMAIL
+sendgrid==6.11.0
+
+# Set EMAIL_PROVIDER=mailgun + MAILGUN_API_KEY + MAILGUN_DOMAIN
+# (uses requests above — no extra package needed)
+
+# ── Dev / test dependencies (not deployed) ────────────────────────────────────
+# pytest==8.2.2
+# pytest-mock==3.14.0

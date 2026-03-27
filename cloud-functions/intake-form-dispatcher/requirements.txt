@@ -1,0 +1,4 @@
+functions-framework==3.10.1
+google-cloud-firestore==2.16.0
+google-auth==2.29.0
+sendgrid==6.11.0

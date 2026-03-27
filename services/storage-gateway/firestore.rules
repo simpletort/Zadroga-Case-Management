@@ -1,0 +1,46 @@
+rules_version = '2';
+
+// Firestore Security Rules — storage-gateway
+//
+// The Cloud Run service account authenticates via the Admin SDK, which bypasses
+// these rules entirely.  These rules protect against any client-SDK path that
+// might be opened in the future.
+//
+// Key invariant: audit_logs entries are APPEND-ONLY.
+// Neither client-side code nor the Admin SDK should ever call .update() or
+// .delete() on an audit log document.  The Admin SDK path is enforced by code
+// convention (only .add() is called).  The client-SDK path is locked down here.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── audit_logs (top-level collection) ─────────────────────────────────────
+    // Immutable audit trail.  Allow create; deny read/update/delete for all
+    // client-SDK callers.  The Cloud Run SA uses Admin SDK and bypasses these
+    // rules; the append-only guarantee there is enforced by code (only .add()).
+    match /audit_logs/{logId} {
+      allow create: if request.auth != null;
+      allow read, update, delete: if false;
+    }
+
+    // ── cases/{caseId}/documents (sub-collection) ─────────────────────────────
+    // Document metadata.  Read and update are allowed for authenticated users;
+    // delete is denied — documents are archived, not deleted, per HIPAA policy.
+    match /cases/{caseId}/documents/{fileId} {
+      allow read, create, update: if request.auth != null;
+      allow delete: if false;
+    }
+
+    // ── file_uploads (top-level collection) ───────────────────────────────────
+    // Virus-scanner and upload-registration tracking records.
+    // Created and updated by the Cloud Run SA (Admin SDK); deny client access.
+    match /file_uploads/{fileId} {
+      allow read, write: if false;
+    }
+
+    // ── Deny everything else ──────────────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

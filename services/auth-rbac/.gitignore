@@ -1,0 +1,17 @@
+node_modules/
+**/node_modules/
+**/__pycache__/
+**/*.pyc
+.venv/
+venv/
+frontend/dist/
+backend/frontend/dist/
+.env.local
+.env.*.local
+frontend/.env.local
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+.DS_Store
+*.log

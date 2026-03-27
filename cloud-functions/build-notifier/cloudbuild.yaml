@@ -1,0 +1,103 @@
+# Cloud Build pipeline for the build-notifier Cloud Function.
+#
+# Steps:
+#   1. Run unit tests
+#   2. Build & push Docker image
+#   3. Deploy to Cloud Run
+#   4. Create/update the Eventarc Pub/Sub trigger pointing at cloud-builds topic
+#
+# Substitution variables (set in Cloud Build trigger):
+#   _SERVICE_NAME — Cloud Run service name (e.g. build-notifier)
+#   _REPO         — Artifact Registry repo URL
+#   _REGION       — GCP region (e.g. us-central1)
+#   _ENV          — dev | test | prod
+#   _TEAMS_SECRET — Secret Manager secret name for the Teams webhook URL
+#                   (default: teams-build-webhook)
+
+steps:
+  # ── Tests ──────────────────────────────────────────────────────────────────
+  - name: "python:3.11-slim"
+    id: test
+    dir: "cloud-functions/build-notifier"
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        pip install -r requirements.txt pytest pytest-mock
+        pytest tests/ -v --tb=short
+
+  # ── Build image ────────────────────────────────────────────────────────────
+  - name: "gcr.io/cloud-builders/docker"
+    id: build
+    waitFor: ["test"]
+    dir: "cloud-functions/build-notifier"
+    args:
+      - build
+      - "-t"
+      - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+      - "-t"
+      - "$_REPO/$_SERVICE_NAME:latest"
+      - "."
+
+  - name: "gcr.io/cloud-builders/docker"
+    id: push-sha
+    waitFor: ["build"]
+    args: ["push", "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"]
+
+  - name: "gcr.io/cloud-builders/docker"
+    id: push-latest
+    waitFor: ["build"]
+    args: ["push", "$_REPO/$_SERVICE_NAME:latest"]
+
+  # ── Deploy to Cloud Run ────────────────────────────────────────────────────
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: deploy
+    waitFor: ["push-sha", "push-latest"]
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - "$_SERVICE_NAME"
+      - "--image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+      - "--region=$_REGION"
+      - "--platform=managed"
+      - "--no-allow-unauthenticated"
+      - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,ENV=$_ENV"
+      - "--set-secrets=TEAMS_WEBHOOK_URL=${_TEAMS_SECRET:-teams-build-webhook}:latest"
+      - "--memory=256Mi"
+      - "--cpu=1"
+      - "--timeout=60s"
+      - "--max-instances=3"
+      - "--min-instances=0"
+
+  # ── Create/update Eventarc trigger ────────────────────────────────────────
+  # Idempotent: delete-then-create so the trigger always points to the latest
+  # Cloud Run revision.  Failures here are non-fatal (|| true).
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: eventarc-trigger
+    waitFor: ["deploy"]
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        gcloud eventarc triggers delete build-notifier-trigger \
+          --location=$_REGION --quiet 2>/dev/null || true
+
+        gcloud eventarc triggers create build-notifier-trigger \
+          --location=$_REGION \
+          --destination-run-service=$_SERVICE_NAME \
+          --destination-run-region=$_REGION \
+          --event-filters="type=google.cloud.pubsub.topic.v1.messagePublished" \
+          --transport-topic=projects/$PROJECT_ID/topics/cloud-builds \
+          --service-account=$PROJECT_NUMBER-compute@developer.gserviceaccount.com
+
+images:
+  - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+  - "$_REPO/$_SERVICE_NAME:latest"
+
+substitutions:
+  _SERVICE_NAME: build-notifier
+  _TEAMS_SECRET: teams-build-webhook
+
+options:
+  logging: CLOUD_LOGGING_ONLY
