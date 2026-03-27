@@ -82,7 +82,7 @@ def require_min_role(endpoint_key: str):
         if user_level < required_level:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="This action requires at least '{}' (level {}) access. Current level: {}".format(required_role, required_level, user_level),
+                detail="This action requires at least '{}' (level {}) access. Current role: '{}', Current level: {}".format(required_role, required_level, user_role, user_level),
             )
         return user
 
