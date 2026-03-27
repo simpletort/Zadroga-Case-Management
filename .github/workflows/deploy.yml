@@ -2,9 +2,7 @@ name: Deploy auth-rbac
 
 on:
   push:
-    branches:
-      - main
-      - dev
+    branches: [main, dev]
     paths:
       - "services/auth-rbac/**"
       - ".github/workflows/deploy.yml"
@@ -14,10 +12,31 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+      id-token: write   # REQUIRED for auth
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # -----------------------------
+      # GOOGLE CLOUD AUTH (NEW)
+      # -----------------------------
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      - name: Setup gcloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Set project
+        run: gcloud config set project simpletort-zadroga-dev
+
+      # -----------------------------
+      # NODE + PYTHON
+      # -----------------------------
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -28,9 +47,12 @@ jobs:
         with:
           python-version: "3.12"
 
+      # -----------------------------
+      # FRONTEND BUILD
+      # -----------------------------
       - name: Install frontend dependencies
         working-directory: services/auth-rbac/frontend
-        run: npm install
+        run: npm ci
 
       - name: Build frontend
         working-directory: services/auth-rbac/frontend
@@ -42,21 +64,28 @@ jobs:
           VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
           VITE_FIREBASE_APP_ID:              ${{ secrets.VITE_FIREBASE_APP_ID }}
           VITE_API_BASE_URL:                 ${{ secrets.VITE_API_BASE_URL }}
-          VITE_USE_EMULATORS:                "false"
+          VITE_USE_EMULATORS: "false"
         run: npm run build
 
+      # -----------------------------
+      # FIREBASE CLI
+      # -----------------------------
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
 
-      - name: Create Python venv for Firebase Functions
+      # -----------------------------
+      # PYTHON FUNCTIONS ENV
+      # -----------------------------
+      - name: Create Python venv
         working-directory: services/auth-rbac/backend/functions
         run: |
-          python3.12 -m venv venv
+          python -m venv venv
           venv/bin/pip install --upgrade pip
           venv/bin/pip install -r requirements.txt
 
+      # -----------------------------
+      # DEPLOY (NO TOKEN!)
+      # -----------------------------
       - name: Deploy to Firebase
         working-directory: services/auth-rbac/backend
-        env:
-          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
-        run: firebase deploy --non-interactive --project simpletort-zadroga-dev --token "$FIREBASE_TOKEN"
+        run: firebase deploy --non-interactive --project simpletort-zadroga-dev
