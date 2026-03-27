@@ -9,7 +9,7 @@
   ],
 
   "hosting": {
-  "site": "simple-tort-zadroga-prod",
+  "site": "simpletort-zadroga-dev",
   "public": "frontend/dist",
   "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
   "rewrites": [

@@ -16,9 +16,9 @@ import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey:            import.meta.env.VITE_FIREBASE_API_KEY             ?? "",
-  authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN         ?? "simple-tort-zadroga-prod.firebaseapp.com",
-  projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID          ?? "simple-tort-zadroga-prod",
-  storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET      ?? "simple-tort-zadroga-prod.firebasestorage.app",
+  authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN         ?? "simpletort-zadroga-dev.firebaseapp.com",
+  projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID          ?? "simpletort-zadroga-dev",
+  storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET      ?? "simpletort-zadroga-dev.firebasestorage.app",
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID ?? "",
   appId:             import.meta.env.VITE_FIREBASE_APP_ID               ?? "",
 };
