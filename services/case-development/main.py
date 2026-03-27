@@ -39,13 +39,15 @@ app = FastAPI(
     title="SimpleTort Case Development Service",
     version="1.0.0",
     lifespan=lifespan,
-    docs_url="/docs" if settings.environment != "production" else None,
+    docs_url="/docs" if settings.environment == "dev" else None,
     redoc_url=None,
 )
 
+origins = [o.strip() for o in settings.allowed_origins.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://staff.simpletort.com"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH"],
     allow_headers=["Authorization", "Content-Type"],
