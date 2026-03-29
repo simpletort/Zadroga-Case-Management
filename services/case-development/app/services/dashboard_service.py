@@ -21,6 +21,8 @@ from typing import Optional
 
 from google.cloud import firestore
 
+from app.utils.roles import normalize_role
+
 logger = logging.getLogger(__name__)
 
 ADMIN_ROLES = {"admin_staff", "junior_partner", "senior_partner", "system_admin"}
@@ -55,7 +57,7 @@ def get_dashboard(
     page: int,
     page_size: int,
 ) -> dict:
-    user_role = user.get("role", "")
+    user_role = normalize_role(user.get("role", ""))
     user_uid  = user.get("uid", "")
     is_admin  = user_role in ADMIN_ROLES
 

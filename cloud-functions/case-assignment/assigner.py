@@ -25,7 +25,22 @@ logger = logging.getLogger(__name__)
 
 ASSIGNMENT_MODE_DOC  = "assignment_mode"
 RR_POINTER_DOC       = "assignment_rr_pointer"
-PARALEGAL_ROLE       = "Paralegal"
+PARALEGAL_ROLE       = "paralegal"
+
+# Local role normalisation — mirrors services/case-development/app/utils/roles.py
+# without creating a shared-package dependency in the Cloud Function.
+_ROLE_DISPLAY_TO_CODE: dict[str, str] = {
+    "Paralegal":      "paralegal",
+    "Junior Partner": "junior_partner",
+    "Senior Partner": "senior_partner",
+    "System Admin":   "system_admin",
+    "Admin Staff":    "admin_staff",
+}
+
+
+def _normalize_role(role: str) -> str:
+    """Convert display-format role to code-format; pass-through if already code."""
+    return _ROLE_DISPLAY_TO_CODE.get(role, role)
 
 
 # ── Public API ─────────────────────────────────────────────────────────────
@@ -168,14 +183,30 @@ def _do_assign(
 # ── Firestore helpers ──────────────────────────────────────────────────────
 
 def _get_available_paralegals(db: firestore.Client) -> list[dict]:
-    """Query staff for active paralegals, returned as plain dicts."""
-    docs = (
-        db.collection("staff")
-        .where("role", "==", PARALEGAL_ROLE)
-        .where("isActive", "==", True)
-        .stream()
-    )
-    return [doc.to_dict() for doc in docs if doc.to_dict()]
+    """Query staff for active paralegals, returned as plain dicts.
+
+    Dual-queries both "paralegal" (code format) and "Paralegal" (display format)
+    to handle the mixed role values present in the DB during migration.
+    Deduplication by document ID prevents double-counting.
+    """
+    seen: set[str] = set()
+    results: list[dict] = []
+
+    for role_val in (PARALEGAL_ROLE, "Paralegal"):
+        for doc in (
+            db.collection("staff")
+            .where("role", "==", role_val)
+            .where("isActive", "==", True)
+            .stream()
+        ):
+            if doc.id in seen:
+                continue
+            seen.add(doc.id)
+            data = doc.to_dict()
+            if data:
+                results.append(data)
+
+    return results
 
 
 def _get_setting(db: firestore.Client, doc_id: str, default: str) -> str:
