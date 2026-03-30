@@ -116,6 +116,8 @@ def manual_assign(
         transaction.update(case_ref, {
             "assignment.assignedParalegal": new_paralegal_id,
             "assignment.assignmentDate":   assigned_at,
+            "assignment.assignedBy":       actor_uid,
+            "assignment.assignedParalegalName": display_name,
         })
 
         # Increment new paralegal count (only if not self-reassignment)
