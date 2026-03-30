@@ -65,12 +65,14 @@ def manual_assign(
     """
     # Validate new paralegal exists and has the correct role
     new_staff_snap = db.collection("staff").document(new_paralegal_id).get()
+    logger.info("New staff snap: %s", new_staff_snap)
     if not new_staff_snap.exists:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Staff member '{}' not found.".format(new_paralegal_id),
         )
     new_staff_data = new_staff_snap.to_dict() or {}
+    logger.info("New staff data: %s", new_staff_data)
     if normalize_role(new_staff_data.get("role", "")) != PARALEGAL_ROLE:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -83,6 +85,9 @@ def manual_assign(
     case_ref      = db.collection("cases").document(case_id)
     new_staff_ref = db.collection("staff").document(new_paralegal_id)
     timeline_ref  = db.collection("cases").document(case_id).collection("timeline").document()
+    logger.info("Case ref: %s", case_ref)
+    logger.info("New staff ref: %s", new_staff_ref)
+    logger.info("Timeline ref: %s", timeline_ref)
 
     @firestore.transactional
     def _txn(transaction: firestore.Transaction) -> str | None:
