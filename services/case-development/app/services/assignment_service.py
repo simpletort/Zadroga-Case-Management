@@ -11,9 +11,11 @@ from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from google.cloud import firestore
 
+from app.utils.roles import normalize_role
+
 logger = logging.getLogger(__name__)
 
-PARALEGAL_ROLE = "Paralegal"
+PARALEGAL_ROLE = "paralegal"
 
 
 def get_assignment_info(db: firestore.Client, case_id: str) -> dict:
@@ -63,13 +65,15 @@ def manual_assign(
     """
     # Validate new paralegal exists and has the correct role
     new_staff_snap = db.collection("staff").document(new_paralegal_id).get()
+    logger.info("New staff snap: %s", new_staff_snap)
     if not new_staff_snap.exists:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Staff member '{}' not found.".format(new_paralegal_id),
         )
     new_staff_data = new_staff_snap.to_dict() or {}
-    if new_staff_data.get("role") != PARALEGAL_ROLE:
+    logger.info("New staff data: %s", new_staff_data)
+    if normalize_role(new_staff_data.get("role", "")) != PARALEGAL_ROLE:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Staff member '{}' is not a Paralegal.".format(new_paralegal_id),
@@ -81,6 +85,9 @@ def manual_assign(
     case_ref      = db.collection("cases").document(case_id)
     new_staff_ref = db.collection("staff").document(new_paralegal_id)
     timeline_ref  = db.collection("cases").document(case_id).collection("timeline").document()
+    logger.info("Case ref: %s", case_ref)
+    logger.info("New staff ref: %s", new_staff_ref)
+    logger.info("Timeline ref: %s", timeline_ref)
 
     @firestore.transactional
     def _txn(transaction: firestore.Transaction) -> str | None:
@@ -109,6 +116,8 @@ def manual_assign(
         transaction.update(case_ref, {
             "assignment.assignedParalegal": new_paralegal_id,
             "assignment.assignmentDate":   assigned_at,
+            "assignment.assignedBy":       actor_uid,
+            "assignment.assignedParalegalName": display_name,
         })
 
         # Increment new paralegal count (only if not self-reassignment)
@@ -156,22 +165,27 @@ def get_workload(db: firestore.Client) -> list[dict]:
     """
     Return all paralegals with their current caseload, sorted by
     activeCaseCount descending (busiest first).
+
+    Dual-queries both "paralegal" (code format) and "Paralegal" (display format)
+    to handle the mixed role values currently present in the DB.  Deduplication
+    by document ID ensures no paralegal appears twice.
     """
-    docs = (
-        db.collection("staff")
-        .where("role", "==", PARALEGAL_ROLE)
-        .stream()
-    )
-    results = []
-    for doc in docs:
-        data = doc.to_dict() or {}
-        results.append({
-            "user_id":          data.get("userId", doc.id),
-            "display_name":     data.get("displayName", ""),
-            "active_case_count": data.get("activeCaseCount") or 0,
-            "max_caseload":     data.get("maxCaseload"),
-            "is_active":        data.get("isActive", False),
-        })
+    seen: set[str] = set()
+    results: list[dict] = []
+
+    for role_val in (PARALEGAL_ROLE, "Paralegal"):
+        for doc in db.collection("staff").where("role", "==", role_val).stream():
+            if doc.id in seen:
+                continue
+            seen.add(doc.id)
+            data = doc.to_dict() or {}
+            results.append({
+                "user_id":           data.get("userId", doc.id),
+                "display_name":      data.get("displayName", ""),
+                "active_case_count": data.get("activeCaseCount") or 0,
+                "max_caseload":      data.get("maxCaseload"),
+                "is_active":         data.get("isActive", False),
+            })
 
     results.sort(key=lambda x: x["active_case_count"], reverse=True)
     return results

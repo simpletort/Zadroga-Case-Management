@@ -6,6 +6,8 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from firebase_admin import auth as firebase_auth
 import logging
 
+from app.utils.roles import normalize_role
+
 logger = logging.getLogger(__name__)
 
 # auto_error=False so that a missing Authorization header yields None instead
@@ -74,10 +76,11 @@ def require_min_role(endpoint_key: str):
         _get_user = sys.modules[__name__].get_current_user
         user = _get_user(credentials)
 
-        user_role     = user.get("role", "")
+        user_role     = normalize_role(user.get("role", ""))
         required_role = ENDPOINT_MIN_ROLES.get(endpoint_key, "senior_partner")
         user_level    = ROLE_HIERARCHY.get(user_role, 0)
         required_level = ROLE_HIERARCHY.get(required_role, 99)
+        logger.info
 
         if user_level < required_level:
             raise HTTPException(
