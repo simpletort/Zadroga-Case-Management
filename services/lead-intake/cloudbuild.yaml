@@ -15,8 +15,8 @@ steps:
         pytest tests/ -v --tb=short
     env:
       - "PYTHONPATH=/workspace/services/lead-intake/api"
-      - "GCP_PROJECT_ID=test-project"
-      - "FIREBASE_PROJECT_ID=test-project"
+      - "GCP_PROJECT_ID=simpletort-zadroga-dev"
+      - "FIREBASE_PROJECT_ID=simpletort-zadroga-dev"
       - "APP_ENV=test"
       - "JWT_AUDIENCE=test-audience"
       - "JWT_ISSUER=https://test-issuer.example.com"
@@ -56,7 +56,7 @@ steps:
       - "--region=$_REGION"
       - "--platform=managed"
       - "--no-allow-unauthenticated"
-      - "--service-account=lead-intake-sa@$PROJECT_ID.iam.gserviceaccount.com"
+      - "--service-account=lead-intake-service-account@simpletort-zadroga-dev.iam.gserviceaccount.com"
       - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,ENV=$_ENV,APP_ENV=$_ENV,FIREBASE_PROJECT_ID=$_FIREBASE_PROJECT_ID,JWT_AUDIENCE=$_FIREBASE_PROJECT_ID,JWT_ISSUER=https://securetoken.google.com/$_FIREBASE_PROJECT_ID,CLOUD_TASKS_HANDLER_URL=$_CLOUD_TASKS_HANDLER_URL,CLOUD_TASKS_LOCATION=$_REGION,CLOUD_TASKS_QUEUE_REGION=$_REGION,CLOUD_TASKS_SA_EMAIL=lead-intake-sa@$PROJECT_ID.iam.gserviceaccount.com,PUBSUB_LEAD_CREATED_TOPIC=lead-created-$_ENV,PUBSUB_LEAD_SCREENED_TOPIC=lead-screened-$_ENV,NOTIFICATION_SERVICE_URL=$_NOTIFICATION_SERVICE_URL"
       - "--set-secrets=SENDGRID_API_KEY=SENDGRID_API_KEY:latest,TWILIO_ACCOUNT_SID=TWILIO_ACCOUNT_SID:latest,TWILIO_AUTH_TOKEN=TWILIO_AUTH_TOKEN:latest,TWILIO_FROM_NUMBER=TWILIO_PHONE_NUMBER:latest"
       - "--memory=512Mi"
