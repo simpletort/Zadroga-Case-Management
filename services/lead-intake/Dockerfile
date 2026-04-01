@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc libffi-dev && \
     rm -rf /var/lib/apt/lists/*
 
-COPY api/requirements.txt .
+COPY services/lead-intake/api/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # ── Stage 2: Runtime image ────────────────────────────────────────────────────

@@ -21,7 +21,7 @@ steps:
       - "JWT_AUDIENCE=test-audience"
       - "JWT_ISSUER=https://test-issuer.example.com"
       - "JWKS_URI=https://test.example.com/.well-known/jwks.json"
-      - "CLOUD_TASKS_HANDLER_URL=https://test.example.com"
+      - "CLOUD_TASKS_HANDLER_URL=https://lead-intake-dev.run.app"
       - "CLOUD_TASKS_QUEUE_REGION=us-central1"
       - "RATE_LIMIT_REQUESTS=100"
       - "FOLLOWUP_DELAY_HOURS=48"
