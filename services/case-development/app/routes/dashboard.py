@@ -21,6 +21,15 @@ def paralegal_dashboard(
         default=None,
         description="One or more status values (repeat param for multiple)",
     ),
+    case_type: Optional[str] = Query(
+        default=None,
+        pattern="^(all|wtc|vcf)$",
+        description="Case type filter: all | wtc | vcf",
+    ),
+    assignees: Optional[list[str]] = Query(
+        default=None,
+        description="Filter by assigned paralegal UID(s) — admin roles only (repeat param for multiple)",
+    ),
     deadline_from: Optional[datetime] = Query(
         default=None,
         description="Filter: VCF deadline on or after this date (ISO 8601)",
@@ -35,7 +44,7 @@ def paralegal_dashboard(
     qual_max: Optional[float] = Query(default=None, ge=0, le=100),
     sort_by: str = Query(
         default="last_activity",
-        description="Column to sort by: case_id | client_name | status | vcf_deadline | doc_completeness_pct | qual_score | last_activity",
+        description="Column to sort by: case_id | client_name | status | case_type | vcf_deadline | doc_completeness_pct | qual_score | last_activity",
     ),
     sort_dir: str = Query(default="desc", pattern="^(asc|desc)$"),
     page: int = Query(default=1, ge=1),
@@ -47,6 +56,8 @@ def paralegal_dashboard(
         db=db,
         user=user,
         statuses=statuses,
+        case_type=case_type,
+        assignees=assignees,
         deadline_from=deadline_from,
         deadline_to=deadline_to,
         completeness_min=completeness_min,
