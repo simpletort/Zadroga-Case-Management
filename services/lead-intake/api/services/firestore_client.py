@@ -13,5 +13,6 @@ def get_db() -> firestore.AsyncClient:
     global _db
     if _db is None:
         settings = get_settings()
-        _db = firestore.AsyncClient(project=settings.gcp_project_id, database="simpletort-dev")
+        _db = firestore.AsyncClient(project=settings.gcp_project_id)
+        # _db = firestore.AsyncClient(project=settings.gcp_project_id, database="simpletort-dev")
     return _db
