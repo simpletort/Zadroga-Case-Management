@@ -80,6 +80,7 @@ def require_min_role(endpoint_key: str):
         required_role = ENDPOINT_MIN_ROLES.get(endpoint_key, "senior_partner")
         user_level    = ROLE_HIERARCHY.get(user_role, 0)
         required_level = ROLE_HIERARCHY.get(required_role, 99)
+        logger.info
 
         if user_level < required_level:
             raise HTTPException(

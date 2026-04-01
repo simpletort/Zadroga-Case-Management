@@ -1,0 +1,5 @@
+functions-framework==3.5.0
+google-cloud-firestore==2.16.0
+google-auth==2.29.0
+cloudevents==1.11.0
+google-events==0.7.0
