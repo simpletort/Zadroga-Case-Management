@@ -9,10 +9,10 @@ Templates seeded
 ----------------
   welcome_sms          — SMS sent immediately on new lead creation
   welcome_email        — Email sent immediately on new lead creation
-  reminder_48hr_sms    — SMS reminder 48 hours before appointment
-  reminder_48hr_email  — Email reminder 48 hours before appointment
-  reminder_7day_sms    — SMS reminder 7 days after no contact
-  reminder_7day_email  — Email reminder 7 days after no contact
+  reminder_48hr_sms    — SMS reminder 48 hours before document submission deadline
+  reminder_48hr_email  — Email reminder 48 hours before document submission deadline
+  reminder_7day_sms    — SMS escalation 7 days after documents are overdue
+  reminder_7day_email  — Email escalation 7 days after documents are overdue
 
 Usage
 -----
@@ -135,98 +135,153 @@ TEMPLATES: list[dict] = [
         "isActive": True,
     },
 
-    # ── 48-Hour Reminder SMS ───────────────────────────────────────────────────
+    # ── 48-Hour Document Reminder SMS ─────────────────────────────────────────
+    # Variables: clientName, caseId, missingDocsList, portalUrl, deadline
+    # Tone: friendly but firm — documents due in 48 hours
+    # Note: missingDocsList may push this over 160 chars (multi-segment SMS)
     {
         "templateId": "reminder_48hr_sms",
-        "name": "48-Hour Appointment Reminder SMS",
+        "name": "48-Hour Document Reminder SMS",
         "channel": "SMS",
-        "triggerEvent": "appointment_reminder_48hr",
+        "triggerEvent": "document_reminder_48hr",
+        "variables": ["clientName", "caseId", "missingDocsList", "portalUrl", "deadline"],
         "body": (
-            "Hi {{clientName}}, this is a reminder that your Zadroga claim "
-            "consultation is scheduled for {{appointmentDate}} at {{appointmentTime}}. "
-            "Case: {{caseId}}. Reply STOP to opt out."
+            "Hi {{clientName}}, your Zadroga claim {{caseId}} is missing required "
+            "documents: {{missingDocsList}}. Please upload by {{deadline}} at "
+            "{{portalUrl}} Reply STOP to opt out."
         ),
         "subject": "",
         "htmlBody": "",
         "isActive": True,
     },
 
-    # ── 48-Hour Reminder Email ─────────────────────────────────────────────────
+    # ── 48-Hour Document Reminder Email ───────────────────────────────────────
+    # Variables: clientName, caseId, missingDocsList, portalUrl, deadline
+    # Tone: professional and helpful — clear action required
     {
         "templateId": "reminder_48hr_email",
-        "name": "48-Hour Appointment Reminder Email",
+        "name": "48-Hour Document Reminder Email",
         "channel": "EMAIL",
-        "triggerEvent": "appointment_reminder_48hr",
+        "triggerEvent": "document_reminder_48hr",
+        "variables": ["clientName", "caseId", "missingDocsList", "portalUrl", "deadline"],
         "body": (
             "Hi {{clientName}},\n\n"
-            "This is a reminder that your Zadroga Act claim consultation is "
-            "scheduled for {{appointmentDate}} at {{appointmentTime}}.\n\n"
-            "Case number: {{caseId}}\n"
-            "Location / call-in details: {{appointmentLocation}}\n\n"
-            "Please contact us if you need to reschedule.\n\n"
+            "This is a reminder that your Zadroga Act claim (case {{caseId}}) "
+            "requires the following documents to proceed:\n\n"
+            "{{missingDocsList}}\n\n"
+            "Please upload these documents through your secure client portal "
+            "by {{deadline}}:\n"
+            "{{portalUrl}}\n\n"
+            "Submitting your documents on time ensures there are no delays in "
+            "processing your claim. If you have trouble uploading or need "
+            "assistance, please contact our office right away.\n\n"
             "Sincerely,\n"
             "The Zadroga Case Management Team"
         ),
-        "subject": "Reminder: Zadroga Claim Consultation on {{appointmentDate}} — Case {{caseId}}",
+        "subject": "Action Required: Documents Needed for Case {{caseId}} — Due {{deadline}}",
         "htmlBody": (
+            "<!DOCTYPE html>"
+            "<html><body style='font-family:Arial,sans-serif;color:#333;max-width:600px;margin:auto;padding:20px'>"
+            "<h2 style='color:#1a3c6b'>Action Required: Documents Needed</h2>"
             "<p>Hi {{clientName}},</p>"
-            "<p>This is a reminder that your Zadroga Act claim consultation is "
-            "scheduled for <strong>{{appointmentDate}}</strong> at "
-            "<strong>{{appointmentTime}}</strong>.</p>"
-            "<ul>"
-            "<li><strong>Case number:</strong> {{caseId}}</li>"
-            "<li><strong>Location / call-in:</strong> {{appointmentLocation}}</li>"
-            "</ul>"
-            "<p>Please <a href='mailto:{{contactEmail}}'>contact us</a> if you "
-            "need to reschedule.</p>"
-            "<p>Sincerely,<br>The Zadroga Case Management Team</p>"
+            "<p>Your Zadroga Act claim (<strong>{{caseId}}</strong>) requires the "
+            "following documents to proceed:</p>"
+            "<div style='background:#fff8e1;border-left:4px solid #f59e0b;padding:12px 16px;margin:16px 0'>"
+            "<p style='margin:0;font-weight:bold;color:#92400e'>Missing Documents:</p>"
+            "<p style='margin:8px 0 0;white-space:pre-line'>{{missingDocsList}}</p>"
+            "</div>"
+            "<p><strong>Deadline: {{deadline}}</strong></p>"
+            "<p>Please upload your documents through your secure client portal:</p>"
+            "<p style='text-align:center;margin:24px 0'>"
+            "<a href='{{portalUrl}}' "
+            "style='background:#1a3c6b;color:#fff;padding:12px 28px;"
+            "border-radius:4px;text-decoration:none;font-weight:bold'>"
+            "Upload Documents Now</a></p>"
+            "<p>Submitting on time ensures there are no delays in processing "
+            "your claim. If you need assistance, please contact our office.</p>"
+            "<hr style='border:none;border-top:1px solid #eee;margin:24px 0'>"
+            "<p style='font-size:12px;color:#888'>"
+            "The Zadroga Case Management Team<br>"
+            "This message was sent regarding case {{caseId}}.</p>"
+            "</body></html>"
         ),
         "isActive": True,
     },
 
-    # ── 7-Day Follow-Up SMS ────────────────────────────────────────────────────
+    # ── 7-Day Overdue Document Reminder SMS ───────────────────────────────────
+    # Variables: clientName, caseId, missingDocsList, portalUrl
+    # Tone: escalation — urgent, case may be affected
     {
         "templateId": "reminder_7day_sms",
-        "name": "7-Day Follow-Up SMS",
+        "name": "7-Day Overdue Document Reminder SMS",
         "channel": "SMS",
-        "triggerEvent": "follow_up_7day",
+        "triggerEvent": "document_reminder_7day",
+        "variables": ["clientName", "caseId", "missingDocsList", "portalUrl"],
         "body": (
-            "Hi {{clientName}}, we wanted to follow up on your Zadroga Act claim "
-            "(case {{caseId}}). Please call us or reply to this message so we can "
-            "assist you. Reply STOP to opt out."
+            "URGENT — {{clientName}}, your Zadroga claim {{caseId}} is overdue "
+            "for: {{missingDocsList}}. Upload now to avoid delays: {{portalUrl}} "
+            "Reply STOP to opt out."
         ),
         "subject": "",
         "htmlBody": "",
         "isActive": True,
     },
 
-    # ── 7-Day Follow-Up Email ──────────────────────────────────────────────────
+    # ── 7-Day Overdue Document Reminder Email ─────────────────────────────────
+    # Variables: clientName, caseId, missingDocsList, portalUrl
+    # Tone: escalation — firm, immediate action required, case at risk
     {
         "templateId": "reminder_7day_email",
-        "name": "7-Day Follow-Up Email",
+        "name": "7-Day Overdue Document Reminder Email",
         "channel": "EMAIL",
-        "triggerEvent": "follow_up_7day",
+        "triggerEvent": "document_reminder_7day",
+        "variables": ["clientName", "caseId", "missingDocsList", "portalUrl"],
         "body": (
             "Hi {{clientName}},\n\n"
-            "We wanted to follow up regarding your Zadroga Act claim (case {{caseId}}) "
-            "that was submitted on {{submittedDate}}.\n\n"
-            "We have been unable to reach you and want to make sure you have all "
-            "the support you need. Please contact us at your earliest convenience "
-            "so we can move forward with your case.\n\n"
-            "You can reply to this email, call our office, or visit our website.\n\n"
+            "IMPORTANT: Your Zadroga Act claim (case {{caseId}}) is now overdue "
+            "for required document submissions. Despite our previous reminder, "
+            "the following documents have not yet been received:\n\n"
+            "{{missingDocsList}}\n\n"
+            "Please be advised that failure to submit the required documents may "
+            "result in delays or jeopardize the processing of your claim. "
+            "Immediate action is required.\n\n"
+            "Please upload your documents now through your secure client portal:\n"
+            "{{portalUrl}}\n\n"
+            "If you are experiencing difficulties or have already submitted these "
+            "documents, please contact our office immediately so we can update "
+            "your file.\n\n"
             "Sincerely,\n"
             "The Zadroga Case Management Team"
         ),
-        "subject": "Following Up on Your Zadroga Act Claim — Case {{caseId}}",
+        "subject": "URGENT: Overdue Documents Required for Case {{caseId}} — Immediate Action Needed",
         "htmlBody": (
+            "<!DOCTYPE html>"
+            "<html><body style='font-family:Arial,sans-serif;color:#333;max-width:600px;margin:auto;padding:20px'>"
+            "<h2 style='color:#b91c1c'>Urgent: Overdue Documents Required</h2>"
             "<p>Hi {{clientName}},</p>"
-            "<p>We wanted to follow up regarding your Zadroga Act claim "
-            "(case <strong>{{caseId}}</strong>) submitted on {{submittedDate}}.</p>"
-            "<p>We have been unable to reach you and want to make sure you have "
-            "all the support you need. Please contact us at your earliest "
-            "convenience so we can move forward with your case.</p>"
-            "<p>You can reply to this email, call our office, or visit our website.</p>"
-            "<p>Sincerely,<br>The Zadroga Case Management Team</p>"
+            "<p><strong>Your Zadroga Act claim (<strong>{{caseId}}</strong>) is now "
+            "overdue for required document submissions.</strong> Despite our previous "
+            "reminder, the following documents have not yet been received:</p>"
+            "<div style='background:#fef2f2;border-left:4px solid #dc2626;padding:12px 16px;margin:16px 0'>"
+            "<p style='margin:0;font-weight:bold;color:#991b1b'>Overdue Documents:</p>"
+            "<p style='margin:8px 0 0;white-space:pre-line'>{{missingDocsList}}</p>"
+            "</div>"
+            "<p style='color:#b91c1c;font-weight:bold'>Failure to submit the required "
+            "documents may result in delays or jeopardize the processing of your claim. "
+            "Immediate action is required.</p>"
+            "<p style='text-align:center;margin:24px 0'>"
+            "<a href='{{portalUrl}}' "
+            "style='background:#b91c1c;color:#fff;padding:12px 28px;"
+            "border-radius:4px;text-decoration:none;font-weight:bold'>"
+            "Upload Documents Immediately</a></p>"
+            "<p>If you are experiencing difficulties or have already submitted these "
+            "documents, please contact our office immediately so we can update "
+            "your file.</p>"
+            "<hr style='border:none;border-top:1px solid #eee;margin:24px 0'>"
+            "<p style='font-size:12px;color:#888'>"
+            "The Zadroga Case Management Team<br>"
+            "This message was sent regarding case {{caseId}}.</p>"
+            "</body></html>"
         ),
         "isActive": True,
     },

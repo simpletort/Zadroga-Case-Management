@@ -9,6 +9,13 @@ POST /tasks/sms
     Must return 2xx for Cloud Tasks to consider the task done; returns 4xx
     for payload errors (no retry) and 5xx for transient failures (will retry).
 
+POST /internal/reminders/schedule
+    Schedule 48-hour and 7-day document reminder tasks for a case.
+    Called by case-reminder-trigger Cloud Function (Firestore event-driven).
+
+DELETE /internal/reminders/{case_id}
+    Cancel pending document reminder tasks when a client uploads all documents.
+
 POST /webhooks/twilio/status
     Twilio status callback.  Updates the delivery record with the final
     message status (delivered, failed, undelivered) from Twilio.
@@ -48,6 +55,7 @@ from logging_config import get_logger, setup_logging
 from services.firestore_client import get_db
 from services.opt_out_service import clear_opt_out, record_opt_out
 from services.sms_service import SmsDispatchResult, send_sms
+from services.tasks_service import cancel_document_reminders, enqueue_document_reminders
 
 logger = get_logger(__name__)
 
@@ -87,6 +95,29 @@ class SmsTaskPayload(BaseModel):
     templateId: str = Field(..., description="Firestore SMS template document ID")
     variables: dict = Field(default_factory=dict)
     caseId: Optional[str] = Field(None)
+    requestId: Optional[str] = Field(None)
+
+
+class ScheduleRemindersPayload(BaseModel):
+    """
+    Payload for POST /internal/reminders/schedule.
+    Sent by intake-form-dispatcher when a case advances to "Pending Client Info".
+    """
+    caseId: str = Field(..., description="Firestore case ID, e.g. ZAD-2024-01-0001")
+    phone: str = Field(..., description="E.164 client phone number")
+    clientName: str = Field(..., description="Client full name for template substitution")
+    missingDocsList: str = Field(
+        ...,
+        description=(
+            "Newline-separated list of outstanding documents, "
+            "e.g. '• Medical records\\n• Authorization form'"
+        ),
+    )
+    portalUrl: str = Field(..., description="Client portal upload URL")
+    deadlineLabel: str = Field(
+        ...,
+        description="Human-readable 48-hour deadline, e.g. 'April 5, 2026 at 5:00 PM'",
+    )
     requestId: Optional[str] = Field(None)
 
 
@@ -294,6 +325,104 @@ async def twilio_inbound(request: Request):
         '<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
         media_type="text/xml",
     )
+
+
+# ── Document reminder scheduling ──────────────────────────────────────────────
+
+@app.post("/internal/reminders/schedule", status_code=status.HTTP_200_OK)
+async def schedule_document_reminders(
+    request: Request,
+    payload: ScheduleRemindersPayload,
+):
+    """
+    Schedule 48-hour and 7-day document reminder SMS tasks for a case.
+
+    Called by the ``case-reminder-trigger`` Cloud Function (Firestore event-driven)
+    when a case advances to the "Pending Client Info" status.  Creates two named
+    Cloud Tasks:
+
+    * ``doc-reminder-{caseId}-48hr``  — fires 48 hours from now
+    * ``doc-reminder-{caseId}-7day``  — fires 7 days from now
+
+    Both tasks are idempotent — re-scheduling an already-pending case is safe
+    (the existing task is preserved and its name is returned).
+
+    Authentication: OIDC Bearer token (Cloud Tasks or internal callers).
+    """
+    _verify_oidc_token(request)
+
+    logger.info(
+        "reminder_schedule_requested",
+        case_id=payload.caseId,
+        request_id=payload.requestId,
+        to_masked="[REDACTED]",
+    )
+
+    try:
+        result = enqueue_document_reminders(
+            case_id=payload.caseId,
+            phone=payload.phone,
+            client_name=payload.clientName,
+            missing_docs_list=payload.missingDocsList,
+            portal_url=payload.portalUrl,
+            deadline_label=payload.deadlineLabel,
+            request_id=payload.requestId,
+        )
+    except Exception as exc:
+        logger.error(
+            "reminder_schedule_failed",
+            case_id=payload.caseId,
+            error=str(exc),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to schedule reminders: {exc}",
+        )
+
+    logger.info(
+        "reminders_scheduled",
+        case_id=payload.caseId,
+        task_48hr=result.get("task_48hr"),
+        task_7day=result.get("task_7day"),
+    )
+
+    return {
+        "caseId": payload.caseId,
+        "scheduled": True,
+        "task48hr": result.get("task_48hr"),
+        "task7day": result.get("task_7day"),
+    }
+
+
+@app.delete("/internal/reminders/{case_id}", status_code=status.HTTP_200_OK)
+async def cancel_document_reminder_tasks(case_id: str, request: Request):
+    """
+    Cancel pending 48-hour and 7-day document reminder tasks for a case.
+
+    Should be called when the client uploads all required documents so they
+    do not receive reminders after compliance.  Safe to call even if one or
+    both tasks have already fired — missing tasks are silently ignored.
+
+    Authentication: OIDC Bearer token.
+    """
+    _verify_oidc_token(request)
+
+    logger.info("reminder_cancel_requested", case_id=case_id)
+
+    result = cancel_document_reminders(case_id=case_id)
+
+    logger.info(
+        "reminders_cancel_complete",
+        case_id=case_id,
+        cancelled_48hr=result["cancelled_48hr"],
+        cancelled_7day=result["cancelled_7day"],
+    )
+
+    return {
+        "caseId": case_id,
+        "cancelled48hr": result["cancelled_48hr"],
+        "cancelled7day": result["cancelled_7day"],
+    }
 
 
 # ── Health check ──────────────────────────────────────────────────────────────

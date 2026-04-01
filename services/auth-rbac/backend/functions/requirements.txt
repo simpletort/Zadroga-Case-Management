@@ -1,7 +1,7 @@
 # Firebase Cloud Functions — Python 3.12 runtime
 # Versions pinned for reproducible builds.
 
-firebase-functions==0.4.2
+firebase-functions==0.5.0
 firebase-admin==6.5.0
 google-cloud-firestore==2.16.1
 flask==3.0.3          # used internally by firebase-functions

@@ -19,6 +19,9 @@ from typing import Any
 
 from firebase_admin import firestore as fs_admin
 from firebase_functions import https_fn
+from firebase_functions.options import CorsOptions
+
+CORS_OPTIONS = CorsOptions(cors_origins="*", cors_methods=["get", "post", "put", "delete", "options"])
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +48,7 @@ PHI_FIELDS: frozenset[str] = frozenset({"phi_data", "ssn", "dob", "medical_info"
 
 # ── Timestamp fields on user documents ───────────────────────────────────────
 # Used by serialise_doc() below; avoids magic string repetition.
-TIMESTAMP_FIELDS: tuple[str, ...] = ("created_at", "updated_at", "deleted_at", "timestamp")
+TIMESTAMP_FIELDS: tuple[str, ...] = ("created_at", "updated_at", "deleted_at", "timestamp", "createdAt", "lastLoginAt", "deletedAt")
 
 
 # ── Firestore shortcut ────────────────────────────────────────────────────────
@@ -56,7 +59,8 @@ def db() -> Any:
     Was called as `fs_admin.client()` in 18 separate places across 6 files.
     Using this wrapper makes mocking in tests trivial (patch one symbol).
     """
-    return fs_admin.client(database="simpletort-dev")
+    return fs_admin.client()
+    # return fs_admin.client(database="simpletort-dev")
 
 
 # ── JSON response helpers ─────────────────────────────────────────────────────

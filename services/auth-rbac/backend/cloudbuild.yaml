@@ -1,0 +1,51 @@
+steps:
+  # ── 1. Test ─────────────────────────────────────────────────────────────────
+  - name: "python:3.12-slim"
+    dir: "services/auth-rbac/backend/functions"
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        pip install -r requirements.txt \
+                    pytest==8.3.5 \
+                    pytest-mock==3.15.0 \
+                    --quiet --break-system-packages
+        pytest tests/ -v --tb=short
+    env:
+      - "PYTHONPATH=/workspace/services/auth-rbac/backend/functions"
+      - "APP_ENV=test"
+
+  # ── 2. Install Firebase tools ─────────────────────────────────────────────
+  # No Docker build/push — auth-rbac deploys as Firebase Cloud Functions.
+  - name: "node:20-slim"
+    dir: "services/auth-rbac/backend"
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        npm install --quiet
+
+  # ── 3. Deploy Firebase Functions ─────────────────────────────────────────────
+  - name: "node:20-slim"
+    dir: "services/auth-rbac/backend"
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        npx firebase-tools deploy --only functions \
+          --project=$_FIREBASE_PROJECT_ID \
+          --non-interactive
+
+  # ── 4. Deploy Firestore rules and indexes ─────────────────────────────────────
+  - name: "node:20-slim"
+    dir: "services/auth-rbac/backend"
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        npx firebase-tools deploy --only firestore:rules,firestore:indexes \
+          --project=$_FIREBASE_PROJECT_ID \
+          --non-interactive
+
+options:
+  logging: CLOUD_LOGGING_ONLY
