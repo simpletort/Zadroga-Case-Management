@@ -1,6 +1,6 @@
 # Endpoints defined in this module:
 #   GET /api/v1/dashboard/cases   — paginated, filterable case list (min: paralegal)
-#                                   ?statuses=        one or more status values
+#                                   ?statuses=        one or more status values eg. statuses=Pending%20Client%20Info&statuses=Pending%20Paralegal%20Review
 #                                   ?case_type=       all | wtc | vcf
 #                                   ?assignees=       paralegal UID(s) — admin roles only
 #                                   ?deadline_from=   VCF deadline on or after (ISO 8601)

@@ -14,7 +14,7 @@ from shared.middlewares.error_handler import ErrorHandlerMiddleware
 from shared.middlewares.logging import LoggingMiddleware
 
 from app.config import get_settings
-from app.routes import assignment, dashboard
+from app.routes import assignment, dashboard, communication
 
 settings = get_settings()
 
@@ -63,3 +63,4 @@ def health():
 
 app.include_router(assignment.router)
 app.include_router(dashboard.router)
+app.include_router(communication.router)

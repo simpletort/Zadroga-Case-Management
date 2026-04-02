@@ -28,6 +28,8 @@ ENDPOINT_MIN_ROLES = {
     "case_assignment_read": "paralegal",
     "workload_view":        "paralegal",
     "dashboard_view":       "paralegal",
+    "comm_read":            "paralegal",
+    "comm_write":           "paralegal",
 }
 
 
