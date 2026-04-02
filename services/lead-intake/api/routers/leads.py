@@ -1,18 +1,23 @@
 """
 api/routers/leads.py — Lead ingestion and management endpoints.
 
-Key architecture (aligned to real notification dispatcher implementation):
+All messaging (SMS) is handled by the notification service via Pub/Sub.
+lead-intake publishes events and writes to Firestore. It does not call
+the notification service directly.
 
 POST /leads flow:
   1. Validate → deduplicate → create case (Firestore transaction)
-  2. Inline VCF screening (synchronous, replaces vcf_screener Cloud Function)
+  2. Inline VCF screening (synchronous)
   3. Write VCF result to Firestore case document
-  4. Write staff in-app notification to /notifications (replaces notification_dispatcher CF)
-  5. Publish lead-created + lead-screened to Pub/Sub (audit trail)
-  6. Enqueue welcome SMS via Cloud Tasks → notification dispatcher POST /tasks/sms
-  7. Send welcome email directly via SendGrid (dispatcher is SMS-only)
-  8. Enqueue 48h follow-up Cloud Task
-  9. Return 201 with eligibility in body (caller gets result immediately)
+  4. Write staff in-app notification to /notifications (Firestore write)
+  5. Publish lead-created  → notification service sends welcome_sms
+  6. Publish lead-screened → audit trail
+  7. Enqueue 48h Cloud Task → /internal/tasks/followup
+  8. Return 201 with eligibility immediately
+
+/internal/tasks/followup flow (48h later):
+  1. Create Admin Staff task in /tasks (Firestore write)
+  2. Publish lead-followup → notification service sends followup_sms
 
 Route order: static paths must come before /{lead_id}
 """
@@ -44,8 +49,9 @@ from services.case_service import (
 )
 from services.duplicate_detection import detect_duplicate, is_idempotent_retry
 from services.firestore_client import get_db
-from services.notification_service import send_welcome_notifications
-from services.pubsub_service import publish_lead_created, publish_lead_screened
+from services.pubsub_service import (
+    publish_lead_created, publish_lead_screened, publish_lead_followup,
+)
 from services.tasks_service import create_followup_task
 from services.validation import validate_lead
 from services.vcf_screener import run_screening
@@ -56,7 +62,7 @@ _settings = get_settings()
 
 _TASKS_SA_EMAIL = (
     _settings.cloud_tasks_sa_email
-    or f"lead-intake-sa@{_settings.gcp_project_id}.iam.gserviceaccount.com"
+    or f"lead-intake-service-account@{_settings.gcp_project_id}.iam.gserviceaccount.com"
 )
 
 
@@ -74,7 +80,7 @@ def _err(request_id: str, code: str, message: str, details=None) -> dict:
     "",
     status_code=status.HTTP_201_CREATED,
     response_model=LeadCreatedResponse,
-    summary="Ingest a new lead (inline VCF screening, immediate eligibility response)",
+    summary="Ingest a new lead",
 )
 @limiter.limit(f"{_settings.rate_limit_requests}/minute")
 async def create_lead(
@@ -91,7 +97,8 @@ async def create_lead(
     if not validation_result.is_valid:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=_err(request_id, "VALIDATION_ERROR", "Request validation failed", validation_result.errors),
+            detail=_err(request_id, "VALIDATION_ERROR", "Request validation failed",
+                        validation_result.errors),
         )
 
     # Idempotency — same X-Request-ID returns the original case
@@ -109,7 +116,9 @@ async def create_lead(
             )
 
     # Duplicate detection
-    existing_case_id = await detect_duplicate(email=str(lead.email), phone=lead.phone, db=db)
+    existing_case_id = await detect_duplicate(
+        email=str(lead.email), phone=lead.phone, db=db,
+    )
     if existing_case_id:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -121,7 +130,7 @@ async def create_lead(
             ),
         )
 
-    # Create case (atomic Firestore transaction)
+    # Create case in Firestore (atomic transaction)
     try:
         case: CaseDocument = await create_case(
             lead=lead, partner_id=partner.partner_id,
@@ -134,7 +143,7 @@ async def create_lead(
             detail=_err(request_id, "INTERNAL_ERROR", "Failed to create case."),
         )
 
-    # ── INLINE VCF SCREENING ──────────────────────────────────────────────────
+    # ── Inline VCF screening ──────────────────────────────────────────────────
     screening_result = None
     try:
         case_dict        = case.to_firestore_dict()
@@ -157,10 +166,7 @@ async def create_lead(
     except Exception as exc:
         logger.error("vcf_screening_failed_non_fatal", case_id=case.caseId, error=str(exc))
 
-    # ── WRITE STAFF IN-APP NOTIFICATION ──────────────────────────────────────
-    # Replaces the removed notification_dispatcher Cloud Function.
-    # The auth-rbac frontend reads /notifications to show alerts on the
-    # staff dashboard. This is separate from SMS — no dispatcher involved.
+    # ── Staff in-app notification (Firestore write — not SMS) ─────────────────
     if screening_result is not None:
         try:
             await write_staff_screening_notification(
@@ -174,17 +180,26 @@ async def create_lead(
                 db          = db,
             )
         except Exception as exc:
-            logger.error("staff_notification_failed_non_fatal", case_id=case.caseId, error=str(exc))
+            logger.error("staff_notification_failed_non_fatal",
+                         case_id=case.caseId, error=str(exc))
 
-    # ── PUB/SUB EVENTS (audit trail) ──────────────────────────────────────────
+    # ── Pub/Sub: lead-created → notification service sends welcome_sms ────────
+    # Phone and name are included in the payload so the notification service
+    # can dispatch without making a Firestore lookup.
     try:
         await publish_lead_created(
-            case_id=case.caseId, partner_id=partner.partner_id,
-            request_id=request_id, marketing_source=lead.marketingSource,
+            case_id          = case.caseId,
+            partner_id       = partner.partner_id,
+            request_id       = request_id,
+            marketing_source = lead.marketingSource,
+            first_name       = lead.firstName,
+            last_name        = lead.lastName,
+            phone            = lead.phone,
         )
     except Exception as exc:
         logger.error("pubsub_lead_created_failed", case_id=case.caseId, error=str(exc))
 
+    # ── Pub/Sub: lead-screened → audit trail ──────────────────────────────────
     if screening_result is not None:
         try:
             await publish_lead_screened(
@@ -198,23 +213,10 @@ async def create_lead(
         except Exception as exc:
             logger.error("pubsub_lead_screened_failed", case_id=case.caseId, error=str(exc))
 
-    # ── WELCOME NOTIFICATIONS ─────────────────────────────────────────────────
-    # Email → direct SendGrid (notification dispatcher has no email endpoint)
-    # SMS   → Cloud Tasks → notification dispatcher POST /tasks/sms
-    try:
-        notif_result = await send_welcome_notifications(
-            email      = str(lead.email),
-            phone      = lead.phone,
-            first_name = lead.firstName,
-            last_name  = lead.lastName,
-            case_id    = case.caseId,
-            portal_url = getattr(case, "portalAccessLink", None) or None,
-        )
-        logger.info("welcome_notifications_dispatched", case_id=case.caseId, **notif_result)
-    except Exception as exc:
-        logger.error("welcome_notifications_failed_non_fatal", case_id=case.caseId, error=str(exc))
-
-    # ── 48-HOUR FOLLOW-UP CLOUD TASK ──────────────────────────────────────────
+    # ── Cloud Task: 48h Admin Staff follow-up ─────────────────────────────────
+    # Schedules a task that calls /internal/tasks/followup 48h from now.
+    # That handler creates the Firestore task doc and publishes lead-followup
+    # which triggers the follow-up SMS via the notification service.
     try:
         task_name = await create_followup_task(
             case_id=case.caseId, service_account_email=_TASKS_SA_EMAIL,
@@ -272,8 +274,8 @@ async def list_leads(
         if cursor.exists:
             query = query.start_after(cursor)
 
-    query = query.limit(page_size + 1)
-    docs  = [doc async for doc in query.stream()]
+    query    = query.limit(page_size + 1)
+    docs     = [doc async for doc in query.stream()]
     has_more = len(docs) > page_size
     if has_more:
         docs = docs[:page_size]
@@ -318,10 +320,15 @@ async def bulk_assign(
     body      = await request.json()
     case_ids  = body.get("caseIds", [])
     assign_to = body.get("assignTo", "")
+
     if not case_ids or not assign_to:
-        raise HTTPException(status_code=400, detail={"error": "INVALID_REQUEST", "message": "caseIds and assignTo are required", "details": []})
+        raise HTTPException(status_code=400, detail={
+            "error": "INVALID_REQUEST", "message": "caseIds and assignTo are required", "details": [],
+        })
     if len(case_ids) > 100:
-        raise HTTPException(status_code=400, detail={"error": "INVALID_REQUEST", "message": "Maximum 100 cases per bulk operation", "details": []})
+        raise HTTPException(status_code=400, detail={
+            "error": "INVALID_REQUEST", "message": "Maximum 100 cases per bulk operation", "details": [],
+        })
 
     cfg            = get_settings()
     updated, failed = [], []
@@ -334,6 +341,7 @@ async def bulk_assign(
         except Exception as exc:
             logger.error("bulk_assign_failed", case_id=case_id, error=str(exc))
             failed.append(case_id)
+
     return {"updated": updated, "failed": failed, "total": len(updated)}
 
 
@@ -389,10 +397,12 @@ async def handle_followup_task(
 ) -> dict:
     """
     Called by Cloud Tasks 48 hours after lead creation.
-    Creates a Firestore task for Admin Staff and enqueues a follow-up SMS
-    via the notification dispatcher.
+
+    Creates an Admin Staff task in /tasks (Firestore write).
+    Publishes lead-followup to Pub/Sub — notification service sends followup_sms.
     """
     _verify_cloud_tasks_oidc(request)
+
     body    = await request.json()
     case_id = body.get("caseId")
     if not case_id:
@@ -404,26 +414,23 @@ async def handle_followup_task(
         logger.warning("followup_task_case_not_found", case_id=case_id)
         return {"status": "not_found"}
 
-    if case.portalLoginAt:
-        logger.info("followup_skip_portal_login", case_id=case_id)
-        return {"status": "skipped", "reason": "Client logged in"}
-
     if case.followupTaskCreated:
         logger.info("followup_skip_already_created", case_id=case_id)
         return {"status": "skipped", "reason": "Follow-up already created"}
 
+    # Create Admin Staff task in Firestore
     cfg      = get_settings()
     task_ref = db.collection("tasks").document()
     await task_ref.set({
-        "taskId":     task_ref.id,
-        "type":       "FOLLOWUP_LEAD",
-        "caseId":     case_id,
+        "taskId":    task_ref.id,
+        "type":      "FOLLOWUP_LEAD",
+        "caseId":    case_id,
         "assignedTo": case.assignedTo or "admin_pool",
         "clientName":  f"{case.firstName} {case.lastName}",
         "clientEmail": case.email,
         "clientPhone": case.phone,
-        "status":     "pending",
-        "priority":   "high",
+        "status":    "pending",
+        "priority":  "high",
         "suggestedActions": [
             "Call client to confirm receipt of welcome communication",
             "Confirm VCF interest and exposure history",
@@ -441,37 +448,43 @@ async def handle_followup_task(
     })
     logger.info("followup_task_created", case_id=case_id, task_id=task_ref.id)
 
-    # Enqueue follow-up SMS via notification dispatcher
-    from services.notification_service import send_followup_sms
-    import asyncio
+    # Publish lead-followup → notification service sends followup_sms
     try:
-        await send_followup_sms(
-            phone      = case.phone,
-            first_name = case.firstName,
+        await publish_lead_followup(
             case_id    = case_id,
+            first_name = case.firstName,
+            phone      = case.phone,
             request_id = task_ref.id,
         )
     except Exception as exc:
-        logger.error("followup_sms_failed_non_fatal", case_id=case_id, error=str(exc))
+        logger.error("pubsub_lead_followup_failed", case_id=case_id, error=str(exc))
 
     return {"status": "created", "taskId": task_ref.id}
 
 
 def _verify_cloud_tasks_oidc(request: Request) -> None:
+    """Verify Google-signed OIDC token from Cloud Tasks. Skipped in dev/test."""
     cfg = get_settings()
     if cfg.app_env in ("development", "test"):
         return
+
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"error": "UNAUTHORIZED", "message": "Missing OIDC token", "details": []},
         )
+
     token    = auth_header.split(" ", 1)[1]
     audience = f"{cfg.cloud_tasks_handler_url}/api/v1/leads/internal/tasks/followup"
     try:
-        id_info     = id_token.verify_oauth2_token(token, google_requests.Request(), audience=audience)
-        expected_sa = cfg.cloud_tasks_sa_email or f"lead-intake-sa@{cfg.gcp_project_id}.iam.gserviceaccount.com"
+        id_info     = id_token.verify_oauth2_token(
+            token, google_requests.Request(), audience=audience,
+        )
+        expected_sa = (
+            cfg.cloud_tasks_sa_email
+            or f"lead-intake-sa@{cfg.gcp_project_id}.iam.gserviceaccount.com"
+        )
         if id_info.get("email") != expected_sa:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -525,4 +538,8 @@ async def update_lead_status(
         case_id=lead_id, new_status=body.status.value,
         updated_by=updated_by, note=body.note, db=db,
     )
-    return {"caseId": lead_id, "status": body.status.value, "updatedAt": datetime.utcnow().isoformat()}
+    return {
+        "caseId":    lead_id,
+        "status":    body.status.value,
+        "updatedAt": datetime.utcnow().isoformat(),
+    }
