@@ -50,6 +50,8 @@ def _call_service(db, user=None, **kwargs):
     from app.services.dashboard_service import get_dashboard
     defaults = dict(
         statuses=None,
+        case_type=None,
+        assignees=None,
         deadline_from=None, deadline_to=None,
         completeness_min=None, completeness_max=None,
         qual_min=None, qual_max=None,

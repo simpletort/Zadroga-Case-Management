@@ -1,3 +1,8 @@
+# Endpoints defined in this module:
+#   POST /api/v1/cases/{caseId}/assign          — manually assign / re-assign a case (min: admin_staff)
+#   GET  /api/v1/cases/{caseId}/assignment      — get current assignment for a case (min: paralegal)
+#   GET  /api/v1/staff/paralegals/workload      — view workload distribution across all paralegals (min: paralegal)
+
 from fastapi import APIRouter, Depends, Path
 
 from app.models.assignment import AssignRequest, AssignmentResponse, AssignmentInfo, WorkloadResponse, WorkloadEntry

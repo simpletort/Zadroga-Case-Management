@@ -1,3 +1,17 @@
+# Endpoints defined in this module:
+#   GET /api/v1/dashboard/cases   — paginated, filterable case list (min: paralegal)
+#                                   ?statuses=        one or more status values
+#                                   ?case_type=       all | wtc | vcf
+#                                   ?assignees=       paralegal UID(s) — admin roles only
+#                                   ?deadline_from=   VCF deadline on or after (ISO 8601)
+#                                   ?deadline_to=     VCF deadline on or before (ISO 8601)
+#                                   ?completeness_min/max=  doc completeness % range (0-100)
+#                                   ?qual_min/max=    qualification score range (0-100)
+#                                   ?sort_by=         case_id | client_name | status | case_type | vcf_deadline | doc_completeness_pct | qual_score | last_activity
+#                                   ?sort_dir=        asc | desc  (default: desc)
+#                                   ?page=            page number (default: 1)
+#                                   ?page_size=       items per page (default: 20, max: 100)
+
 from datetime import datetime
 from typing import Optional
 
