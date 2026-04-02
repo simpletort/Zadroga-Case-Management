@@ -47,6 +47,7 @@ def list_communications(
         .order_by("createdAt", direction=firestore.Query.DESCENDING)
     )
     docs = list(query.stream())
+    logger.info("Retrieved %d communications for case %s", len(docs), case_id)
 
     # Materialise and normalise timestamps
     entries: list[dict] = []
