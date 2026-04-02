@@ -1,13 +1,9 @@
 """
 api/config.py — Application settings via pydantic-settings.
-All config loaded from environment variables / Secret Manager mounts.
 
-Changes vs. original:
-  - Removed duplicate `notification_service_url` and `cloud_tasks_sms_queue` fields
-  - Added `firebase_project_id` for Firebase JWT verification in staff auth
-  - Added `cloud_tasks_queue_region` (canonical name, replaces duplicate aliases)
-  - Removed direct sendgrid/twilio references from Cloud Tasks queue names
-    (those are now managed by the Notification Dispatcher service)
+All messaging (SMS, email) is handled by the notification service.
+lead-intake only publishes Pub/Sub events and writes to Firestore.
+No SendGrid, Twilio, or notification_service_url fields here.
 """
 from __future__ import annotations
 from functools import lru_cache
@@ -24,21 +20,21 @@ class Settings(BaseSettings):
 
     # ── GCP ──────────────────────────────────────────────────────────────────
     gcp_project_id: str = "simpletort-zadroga-dev"
-    app_env: str = "development"           # development | staging | production
+    app_env:        str = "development"   # development | staging | production
 
     # ── Firebase ──────────────────────────────────────────────────────────────
-    # Used for staff Firebase JWT verification (auth-rbac tokens).
-    # Must match the Firebase project where auth-rbac Cloud Functions are deployed.
+    # Used to verify Firebase Auth JWT tokens issued by auth-rbac for staff.
     firebase_project_id: str = "simpletort-zadroga-dev"
 
     # ── Firestore ─────────────────────────────────────────────────────────────
-    firestore_cases_collection:       str = "cases"
-    firestore_counters_collection:    str = "counters"
-    firestore_partners_collection:    str = "partners"
+    firestore_cases_collection:        str = "cases"
+    firestore_counters_collection:     str = "counters"
+    firestore_partners_collection:     str = "partners"
     firestore_request_logs_collection: str = "request_logs"
+    firestore_database:                str = "simpletort-dev"
 
-    # ── JWT Auth (partner tokens) ─────────────────────────────────────────────
-    jwks_uri:    str = "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"
+    # ── JWT Auth (partner API key tokens) ─────────────────────────────────────
+    jwks_uri:     str = "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"
     jwt_audience: str = ""
     jwt_issuer:   str = ""
 
@@ -48,42 +44,31 @@ class Settings(BaseSettings):
     vcf_window_end:   str = "2011-05-30"
 
     # ── API Key Auth ──────────────────────────────────────────────────────────
-    hmac_signature_max_age_seconds: int = 300   # 5 minutes
+    hmac_signature_max_age_seconds: int = 300
 
     # ── Rate Limiting ─────────────────────────────────────────────────────────
     rate_limit_requests:       int = 100
     rate_limit_window_seconds: int = 60
 
-    # ── Cloud Tasks ───────────────────────────────────────────────────────────
+    # ── Cloud Tasks (Admin Staff follow-up task only) ─────────────────────────
+    # The sms-dispatch queue is owned by the notification service.
+    # lead-intake only uses lead-followup-queue for the 48h follow-up Cloud Task
+    # that calls back to /internal/tasks/followup on this service.
     cloud_tasks_queue:        str = "lead-followup-queue"
     cloud_tasks_location:     str = "us-central1"
-    cloud_tasks_queue_region: str = "us-central1"   # canonical alias for location
-    cloud_tasks_handler_url:  str = ""    # Cloud Run service URL (no trailing slash)
-    cloud_tasks_sa_email:     str = ""
-    cloud_tasks_sms_queue:    str = "sms-dispatch"
-    cloud_tasks_email_queue:  str = "email-dispatch"
+    cloud_tasks_queue_region: str = "us-central1"
+    cloud_tasks_handler_url:  str = ""   # This service's Cloud Run URL
+    cloud_tasks_sa_email:     str = ""   # SA used to sign Cloud Tasks OIDC tokens
     followup_delay_hours:     int = 48
-
-    # ── Notification Dispatcher Service (separate Cloud Run service) ──────────
-    # When set: welcome emails/SMS are enqueued to this service via Cloud Tasks.
-    # When unset (dev): direct SendGrid/Twilio calls are used as fallback.
-    notification_service_url: str = ""    # e.g. https://notification-dispatcher-xxx.run.app
-
-    # ── Direct notification credentials (dev fallback) ────────────────────────
-    sendgrid_api_key:      str = ""
-    sendgrid_from_email:   str = "noreply@zadlegal.com"
-    twilio_account_sid:    str = ""
-    twilio_auth_token:     str = ""
-    twilio_from_number:    str = ""
+    
 
     # ── Pub/Sub topics ────────────────────────────────────────────────────────
-    # lead-created  → triggers VCF screening (now done inline, topic kept for audit)
-    # lead-screened → consumed by Notification Dispatcher service
+    # lead-created  → notification service sends welcome_sms
+    # lead-screened → audit trail + staff Firestore notification (no SMS)
+    # lead-followup → notification service sends followup_sms
     pubsub_lead_created_topic:  str = "lead-created-dev"
     pubsub_lead_screened_topic: str = "lead-screened-dev"
-
-    # ── Client portal ─────────────────────────────────────────────────────────
-    portal_base_url: str = "https://portal.zadroga.com/c"
+    pubsub_lead_followup_topic: str = "lead-followup-dev"
 
     @property
     def is_production(self) -> bool:
@@ -91,7 +76,6 @@ class Settings(BaseSettings):
 
     @property
     def firebase_jwks_uri(self) -> str:
-        """Google's public keys for verifying Firebase Auth JWTs."""
         return "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com"
 
     @property
