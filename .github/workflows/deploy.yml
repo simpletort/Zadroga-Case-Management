@@ -79,7 +79,7 @@ jobs:
       # Cloud Run service directly, NOT via gcloud functions add-invoker-policy-binding.
       - name: Allow unauthenticated access to public functions
         run: |
-          for FUNCTION in register-fn password_reset-fn create-session-fn; do
+          for FUNCTION in register-fn password-reset-fn create-session-fn; do
             gcloud run services add-iam-policy-binding $FUNCTION \
               --region=${{ env.REGION }} \
               --member="allUsers" \
