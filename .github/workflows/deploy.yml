@@ -74,24 +74,22 @@ jobs:
             --non-interactive \
             --project ${{ env.PROJECT_ID }}
 
-      # ── Fix 1: Allow unauthenticated access on public endpoints ──────────
-      # register_fn is a public endpoint — Cloud Run blocks all traffic by
-      # default on 2nd gen functions, so we must explicitly grant allUsers.
+       # ── Allow unauthenticated access on public endpoints ─────────────────
+      # IMPORTANT: 2nd gen functions run on Cloud Run. Must set IAM on the
+      # Cloud Run service directly, NOT via gcloud functions add-invoker-policy-binding.
       - name: Allow unauthenticated access to public functions
         run: |
-          gcloud functions add-invoker-policy-binding register_fn \
-            --region=${{ env.REGION }} \
-            --member="allUsers"
-          gcloud functions add-invoker-policy-binding password_reset_fn \
-            --region=${{ env.REGION }} \
-            --member="allUsers"
-          gcloud functions add-invoker-policy-binding create_session_fn \
-            --region=${{ env.REGION }} \
-            --member="allUsers"
+          for FUNCTION in register_fn password_reset_fn create_session_fn; do
+            gcloud run services add-iam-policy-binding $FUNCTION \
+              --region=${{ env.REGION }} \
+              --member="allUsers" \
+              --role="roles/run.invoker" \
+              --project=${{ env.PROJECT_ID }}
+          done
 
-
+      # ── Wait for IAM propagation ─────────────────────────────────────────
       - name: Wait for IAM policy propagation
-        run: sleep 60      
+        run: sleep 30
       # ── Smoke test ───────────────────────────────────────────────────────
       # Fix 2: Rewrote exit check to avoid hidden character bug,
       # and added 401 as a detectable case with a clear error message.
