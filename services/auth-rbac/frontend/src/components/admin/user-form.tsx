@@ -58,7 +58,7 @@ export function UserForm() {
         await updateUser({ uid: userId!, displayName: name, role, isActive: status === "active" });
         addToast({ message: "User updated successfully", type: "success" });
       } else {
-        await createUser({ email, password, displayName: name, role });
+        await createUser({ email, password, display_name: name, role });
         addToast({ message: "User created successfully", type: "success" });
       }
       navigate("/admin/users");

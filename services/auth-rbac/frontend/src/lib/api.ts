@@ -9,9 +9,14 @@
 import { auth } from "./firebase";
 
 // ── Base URL ──────────────────────────────────────────────────────────────
+const _apiBase = import.meta.env.VITE_API_BASE_URL;
+if (!_apiBase && import.meta.env.PROD) {
+  throw new Error("VITE_API_BASE_URL must be set for production builds");
+}
 export const API_BASE =
-  import.meta.env.VITE_API_BASE_URL ??
-  "https://us-central1-simpletort-zadroga-dev.cloudfunctions.net";
+  _apiBase ?? "http://localhost:5001/simpletort-zadroga-dev/us-central1";
+
+
 
 // ── Role types (mirrors backend rbac.py) ─────────────────────────────────
 export type BackendRole =
@@ -45,7 +50,7 @@ export interface ApiUser {
   userId:            string;
   email:             string;
   displayName:       string;
-  role:              string;          // human-readable: "Admin Staff", "Paralegal", etc.
+  role:              BackendRole;          // human-readable: "Admin Staff", "Paralegal", etc.
   isActive:          boolean;
   googleWorkspaceId: string;
   lastLoginAt:       string | null;

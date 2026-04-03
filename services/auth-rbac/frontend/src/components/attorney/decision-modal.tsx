@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CheckCircle2, XCircle, AlertTriangle, X, Calculator } from 'lucide-react';
+import { CircleCheckBig, CircleX, AlertTriangle, X, Calculator } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useToast } from '../ui/toast-provider';
 import { useNavigate } from 'react-router';
@@ -88,9 +88,9 @@ export function DecisionModal({
   const getIcon = () => {
     switch (decisionType) {
       case 'approve':
-        return <CheckCircle2 className="w-12 h-12 text-green-600" />;
+        return <CircleCheckBig className="w-12 h-12 text-green-600" />;
       case 'reject':
-        return <XCircle className="w-12 h-12 text-red-600" />;
+        return <CircleX className="w-12 h-12 text-red-600" />;
       case 'escalate':
         return <AlertTriangle className="w-12 h-12 text-yellow-600" />;
     }

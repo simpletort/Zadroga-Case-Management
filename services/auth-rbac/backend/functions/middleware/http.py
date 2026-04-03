@@ -20,8 +20,14 @@ from typing import Any
 from firebase_admin import firestore as fs_admin
 from firebase_functions import https_fn
 from firebase_functions.options import CorsOptions
+import os
+ALLOWED_ORIGIN = os.environ.get(
+    "ALLOWED_ORIGIN",
+    "https://simpletort-zadroga-dev.web.app"
+)
 
-CORS_OPTIONS = CorsOptions(cors_origins="*", cors_methods=["get", "post", "put", "delete", "options"])
+
+CORS_OPTIONS = CorsOptions(cors_origins=ALLOWED_ORIGIN, cors_methods=["get", "post", "put", "delete", "options"])
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +40,7 @@ REGION: str = "us-central1"
 # Was defined in middleware/jwt_middleware.py and imported by every API file.
 # Tighten Access-Control-Allow-Origin to your domain in production.
 CORS_HEADERS: dict[str, str] = {
-    "Access-Control-Allow-Origin":  "*",
+    "Access-Control-Allow-Origin":  ALLOWED_ORIGIN,
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Authorization, Content-Type",
     "Access-Control-Max-Age":       "3600",
@@ -59,8 +65,8 @@ def db() -> Any:
     Was called as `fs_admin.client()` in 18 separate places across 6 files.
     Using this wrapper makes mocking in tests trivial (patch one symbol).
     """
-    return fs_admin.client()
-    # return fs_admin.client(database="simpletort-dev")
+   #return fs_admin.client()
+    return fs_admin.client(database="simpletort-dev")
 
 
 # ── JSON response helpers ─────────────────────────────────────────────────────
@@ -165,7 +171,7 @@ def write_audit_event(event_type: str, **fields: Any) -> None:
             "timestamp":  fs_admin.SERVER_TIMESTAMP,
             **fields,
         }
-        db().collection("audit_log").add(payload)
+        db().collection("auditLog").add(payload)
     except Exception as exc:
         # Audit failures must never block the primary operation.
         logger.error("Failed to write audit event '%s': %s", event_type, exc)
