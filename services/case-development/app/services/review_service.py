@@ -134,7 +134,7 @@ def submit_for_review(
     if not preflight["all_passed"]:
         failed = [c["detail"] for c in preflight["checks"] if not c["passed"]]
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=422,
             detail={
                 "message": "Pre-flight checks failed. Submission blocked.",
                 "failed_checks": failed,
