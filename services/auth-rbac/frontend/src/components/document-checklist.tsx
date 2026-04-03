@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, Clock, AlertCircle } from 'lucide-react';
+import { CircleCheckBig, Clock, CircleAlert } from 'lucide-react';
 import { Document } from '../types';
 import { cn } from '../lib/utils';
 
@@ -11,11 +11,11 @@ export function DocumentChecklist({ documents }: DocumentChecklistProps) {
   const getStatusIcon = (status: Document['status']) => {
     switch (status) {
       case 'Complete':
-        return <CheckCircle2 className="w-5 h-5 text-green-600" />;
+        return <CircleCheckBig className="w-5 h-5 text-green-600" />;
       case 'Pending':
         return <Clock className="w-5 h-5 text-yellow-600" />;
       case 'Missing':
-        return <AlertCircle className="w-5 h-5 text-red-600" />;
+        return <CircleAlert className="w-5 h-5 text-red-600" />;
     }
   };
 

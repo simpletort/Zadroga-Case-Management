@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
-import { Plus, Search, Edit, Trash2, Mail, Shield, CheckCircle2, XCircle, Filter, RefreshCw } from "lucide-react";
+import { Plus, Search, Edit, Trash2, Mail, Shield, CircleCheckBig, CircleX, Filter, RefreshCw } from "lucide-react";
 import { Card, CardContent } from "../ui/card";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
@@ -165,8 +165,8 @@ export function UserList() {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-1">
                         {u.isActive === true
-                          ? <CheckCircle2 className="w-4 h-4 text-green-500" />
-                          : <XCircle     className="w-4 h-4 text-red-500" />}
+                          ? <CircleCheckBig className="w-4 h-4 text-green-500" />
+                          : <CircleX     className="w-4 h-4 text-red-500" />}
                         <Badge variant="default" className={`border ${statusBadge(u.isActive ? "active" : "inactive")} capitalize`}>
                           {u.isActive ? "active" : "inactive"}
                         </Badge>

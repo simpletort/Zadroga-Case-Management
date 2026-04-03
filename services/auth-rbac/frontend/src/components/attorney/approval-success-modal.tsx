@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, X, Calculator, ArrowRight } from 'lucide-react';
+import { CircleCheckBig, X, Calculator, ArrowRight } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useNavigate } from 'react-router';
 
@@ -55,7 +55,7 @@ export function ApprovalSuccessModal({
           <div className="p-8 text-center">
             {/* Success Icon */}
             <div className="w-20 h-20 bg-gradient-to-br from-green-100 to-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <CheckCircle2 className="w-12 h-12 text-green-600" />
+              <CircleCheckBig className="w-12 h-12 text-green-600" />
             </div>
 
             {/* Title */}

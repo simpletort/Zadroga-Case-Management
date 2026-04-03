@@ -5,9 +5,9 @@ import {
   FileText,
   User,
   Calendar,
-  AlertCircle,
-  CheckCircle2,
-  XCircle,
+  CircleAlert,
+  CircleCheckBig,
+  CircleX,
   AlertTriangle,
   Download,
   ExternalLink,
@@ -223,7 +223,7 @@ export function AttorneyCaseReviewDetail() {
           <div className="flex flex-wrap gap-3">
             <Button
               variant="outline"
-              leftIcon={<XCircle className="w-4 h-4" />}
+              leftIcon={<CircleX className="w-4 h-4" />}
               onClick={() => handleDecision('reject')}
               className="border-red-300 text-red-700 hover:bg-red-50"
             >
@@ -239,7 +239,7 @@ export function AttorneyCaseReviewDetail() {
             </Button>
             <Button
               variant="primary"
-              leftIcon={<CheckCircle2 className="w-4 h-4" />}
+              leftIcon={<CircleCheckBig className="w-4 h-4" />}
               onClick={() => handleDecision('approve')}
             >
               Approve for Submission
@@ -506,10 +506,10 @@ export function AttorneyCaseReviewDetail() {
                     <div key={decision.id} className="border-l-2 border-slate-300 pl-4">
                       <div className="flex items-center gap-2 mb-1">
                         {decision.decision === 'approved' && (
-                          <CheckCircle2 className="w-4 h-4 text-green-600" />
+                          <CircleCheckBig className="w-4 h-4 text-green-600" />
                         )}
                         {decision.decision === 'rejected' && (
-                          <XCircle className="w-4 h-4 text-red-600" />
+                          <CircleX className="w-4 h-4 text-red-600" />
                         )}
                         {decision.decision === 'escalated' && (
                           <AlertTriangle className="w-4 h-4 text-yellow-600" />

@@ -171,7 +171,7 @@ ROLE_PERMISSIONS: dict[Role, Set[Permission]] = {
         Permission.REPORTS_READ,
         Permission.ANALYTICS_READ,
         Permission.SETTINGS_READ,
-        Permission.VIEW_AUDIT_LOG,
+        # Permission.VIEW_AUDIT_LOG,
     },
 
     Role.SENIOR_PARTNER: {p for p in Permission},  # all permissions

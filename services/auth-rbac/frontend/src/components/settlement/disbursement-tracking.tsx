@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, CheckCircle2, Circle, Calendar, DollarSign, Building2, User } from 'lucide-react';
+import { X, CircleCheckBig, Circle, Calendar, DollarSign, Building2, User } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { useToast } from '../ui/toast-provider';
@@ -252,7 +252,7 @@ export function DisbursementTracking({
                     <div className="flex items-start gap-4">
                       <div className="flex-shrink-0 mt-1">
                         {item.status === 'completed' ? (
-                          <CheckCircle2 className="w-6 h-6 text-green-600" />
+                          <CircleCheckBig className="w-6 h-6 text-green-600" />
                         ) : (
                           <Circle className="w-6 h-6 text-slate-400" />
                         )}
@@ -465,7 +465,7 @@ export function DisbursementTracking({
             {/* Completion Notice */}
             {completedCount === totalCount && (
               <div className="mt-8 bg-gradient-to-r from-green-100 to-blue-100 border-2 border-green-400 rounded-lg p-6 text-center">
-                <CheckCircle2 className="w-16 h-16 text-green-600 mx-auto mb-3" />
+                <CircleCheckBig className="w-16 h-16 text-green-600 mx-auto mb-3" />
                 <h3 className="text-xl font-bold text-green-900 mb-2">
                   All Disbursements Complete!
                 </h3>

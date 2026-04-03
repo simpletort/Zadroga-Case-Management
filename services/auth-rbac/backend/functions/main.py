@@ -39,4 +39,4 @@ from api.auth_api import (
     create_invite_fn,
 )
 from api.audit     import get_audit_log_fn
-# from auth.triggers import on_user_created, on_user_deleted
+from auth.triggers import on_user_created, on_user_deleted
