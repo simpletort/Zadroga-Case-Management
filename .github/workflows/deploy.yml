@@ -39,52 +39,49 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20       # FIXED I-09-CI: Node 24 is not LTS; use 20 (LTS) — firebase-tools requires it
+          node-version: 20
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      # ── Frontend Build ───────────────────────────────────────────────────
-      # FIX: package-lock.json lives at services/auth-rbac/frontend/package-lock.json
-      # If npm ci still fails, it means package-lock.json was not committed.
-      # Run `npm install` locally in frontend/ then commit the lock file.
-      - name: Install frontend dependencies
-        working-directory: services/auth-rbac/frontend
-        run: npm ci
+      # # ── Frontend Build ───────────────────────────────────────────────────
+      # - name: Install frontend dependencies
+      #   working-directory: services/auth-rbac/frontend
+      #   run: npm ci
 
-      - name: Build frontend
-        working-directory: services/auth-rbac/frontend
-        env:
-          VITE_FIREBASE_API_KEY:             ${{ secrets.VITE_FIREBASE_API_KEY }}
-          VITE_FIREBASE_AUTH_DOMAIN:         ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
-          VITE_FIREBASE_PROJECT_ID:          ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
-          VITE_FIREBASE_STORAGE_BUCKET:      ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
-          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
-          VITE_FIREBASE_APP_ID:              ${{ secrets.VITE_FIREBASE_APP_ID }}
-          VITE_API_BASE_URL:                 ${{ secrets.VITE_API_BASE_URL }}
-          VITE_USE_EMULATORS: 'false'
-        run: npm run build
+      # - name: Build frontend
+      #   working-directory: services/auth-rbac/frontend
+      #   env:
+      #     VITE_FIREBASE_API_KEY:             ${{ secrets.VITE_FIREBASE_API_KEY }}
+      #     VITE_FIREBASE_AUTH_DOMAIN:         ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+      #     VITE_FIREBASE_PROJECT_ID:          ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+      #     VITE_FIREBASE_STORAGE_BUCKET:      ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+      #     VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+      #     VITE_FIREBASE_APP_ID:              ${{ secrets.VITE_FIREBASE_APP_ID }}
+      #     VITE_API_BASE_URL:                 ${{ secrets.VITE_API_BASE_URL }}
+      #     VITE_USE_EMULATORS: 'false'
+      #   run: npm run build
 
-      # ── CRITICAL: Copy frontend dist into backend for firebase deploy ────
-      # vite.config.ts outDir is 'dist' (relative to frontend/) → services/auth-rbac/frontend/dist
-      # firebase.json hosting.public is 'frontend/dist' (relative to backend/) → same absolute path after copy
-      - name: Stage frontend dist for Firebase Hosting
-        run: |
-          mkdir -p services/auth-rbac/backend/frontend
-          cp -r services/auth-rbac/frontend/dist services/auth-rbac/backend/frontend/dist
+      # # ── CRITICAL: Copy frontend dist into backend for firebase deploy ────
+      # - name: Stage frontend dist for Firebase Hosting
+      #   run: |
+      #     mkdir -p services/auth-rbac/backend/frontend
+      #     cp -r services/auth-rbac/frontend/dist services/auth-rbac/backend/frontend/dist
 
-      - name: Verify frontend dist exists
-        run: |
-          ls -la services/auth-rbac/backend/frontend/dist/
-          test -f services/auth-rbac/backend/frontend/dist/index.html || exit 1
+      # - name: Verify frontend dist exists
+      #   run: |
+      #     ls -la services/auth-rbac/backend/frontend/dist/
+      #     test -f services/auth-rbac/backend/frontend/dist/index.html || exit 1
 
       # ── Firebase CLI ─────────────────────────────────────────────────────
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
 
       # ── Python Functions Env ─────────────────────────────────────────────
+      # Note: Firebase CLI manages its own venv for Python functions.
+      # This venv is for local validation only (not used by firebase deploy).
       - name: Validate Python requirements
         working-directory: services/auth-rbac/backend/functions
         run: |
@@ -110,13 +107,13 @@ jobs:
             --non-interactive \
             --project ${{ env.PROJECT_ID }}
 
-      # Step 3: Hosting (after functions so rewrites work immediately)
-      - name: Deploy Firebase Hosting
-        working-directory: services/auth-rbac/backend
-        run: |
-          firebase deploy --only hosting \
-            --non-interactive \
-            --project ${{ env.PROJECT_ID }}
+      # # Step 3: Hosting (after functions so rewrites work immediately)
+      # - name: Deploy Firebase Hosting
+      #   working-directory: services/auth-rbac/backend
+      #   run: |
+      #     firebase deploy --only hosting \
+      #       --non-interactive \
+      #       --project ${{ env.PROJECT_ID }}
 
       # ── Smoke test ───────────────────────────────────────────────────────
       - name: Smoke test — register endpoint reachable
@@ -128,4 +125,4 @@ jobs:
             https://${{ env.REGION }}-${{ env.PROJECT_ID }}.cloudfunctions.net/register_fn)
           echo "register_fn returned HTTP $STATUS"
           # 400 = validation error (correct — function is live)
-          [ "$STATUS" = '400' ] || [ "$STATUS" = '200' ] || exit 1
+          [ "$STATUS" = '400' ] || [ "$STATUS" = '200' ] || exit 1 

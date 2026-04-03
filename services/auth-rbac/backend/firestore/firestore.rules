@@ -26,7 +26,7 @@ service cloud.firestore {
           'timeline.read','expenses.read','expenses.write',
           'disbursements.read','disbursements.write',
           'staff.read','reports.read','analytics.read',
-          'settings.read','auditLog.read'
+          'settings.read'
         ]) ||
         (role() == 'paralegal' && p in [
           'cases.read','cases.write','cases.status.update',

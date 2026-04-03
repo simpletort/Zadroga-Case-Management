@@ -27,7 +27,7 @@ ALLOWED_ORIGIN = os.environ.get(
 )
 
 
-CORS_OPTIONS = CorsOptions(cors_origins=ALLOWED_ORIGIN, cors_methods=["get", "post", "put", "delete", "options"])
+CORS_OPTIONS = CorsOptions(cors_origins=ALLOWED_ORIGIN, cors_methods=["get", "post", "put", "delete", "options","patch"])
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,6 @@ def db() -> Any:
     Was called as `fs_admin.client()` in 18 separate places across 6 files.
     Using this wrapper makes mocking in tests trivial (patch one symbol).
     """
-   #return fs_admin.client()
     return fs_admin.client(database="simpletort-dev")
 
 
