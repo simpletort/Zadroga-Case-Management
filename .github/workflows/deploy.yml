@@ -89,6 +89,9 @@ jobs:
             --region=${{ env.REGION }} \
             --member="allUsers"
 
+
+      - name: Wait for IAM policy propagation
+        run: sleep 60      
       # ── Smoke test ───────────────────────────────────────────────────────
       # Fix 2: Rewrote exit check to avoid hidden character bug,
       # and added 401 as a detectable case with a clear error message.
