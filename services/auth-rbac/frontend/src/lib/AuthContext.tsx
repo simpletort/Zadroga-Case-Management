@@ -54,7 +54,6 @@ const ROLE_PERMISSIONS: Record<BackendRole, string[]> = {
     "staff.read",
     "reports.read", "analytics.read",
     "settings.read",
-    "auditLog.read",
   ],
   senior_partner: [
     "cases.read", "cases.write", "cases.status.update", "cases.approve", "cases.delete",
