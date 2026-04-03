@@ -1,28 +1,31 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, Literal
 from datetime import datetime
 
 
 class CommunicationEntry(BaseModel):
     comm_id: str
-    type: str                         # call | email | letter | fax | in_person
-    direction: str                    # inbound | outbound
+    channel: str                          # Email | Call | Letter | Fax | In Person
+    direction: str                        # Inbound | Outbound
     subject: str
-    notes: Optional[str] = None
-    contact_name: Optional[str] = None
-    contact_method: Optional[str] = None   # phone number / email address / etc.
-    created_by: str                   # staff UID
-    created_by_name: Optional[str] = None
-    created_at: datetime
+    body: Optional[str] = None
+    from_address: Optional[str] = None    # Firestore field: "from"
+    to: Optional[str] = None
+    delivery_status: Optional[str] = None # Sent | Failed | Pending
+    is_automated: bool = False
+    logged_by: Optional[str] = None       # staff UID who manually logged (empty if automated)
+    template_id: Optional[str] = None
+    external_message_id: Optional[str] = None
+    sent_at: Optional[datetime] = None    # Firestore field: "sentAt"
 
 
 class CommunicationLogRequest(BaseModel):
-    type: Literal["call", "email", "letter", "fax", "in_person"]
-    direction: Literal["inbound", "outbound"]
+    channel: Literal["Email", "Call", "Letter", "Fax", "In Person"]
+    direction: Literal["Inbound", "Outbound"]
     subject: str
-    notes: Optional[str] = None
-    contact_name: Optional[str] = None
-    contact_method: Optional[str] = None
+    body: Optional[str] = None
+    from_address: Optional[str] = None
+    to: Optional[str] = None
 
 
 class CommunicationListResponse(BaseModel):
