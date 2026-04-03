@@ -39,7 +39,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 20       # FIXED I-09-CI: Node 24 is not LTS; use 20 (LTS) — firebase-tools requires it
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -47,6 +47,9 @@ jobs:
           python-version: '3.12'
 
       # ── Frontend Build ───────────────────────────────────────────────────
+      # FIX: package-lock.json lives at services/auth-rbac/frontend/package-lock.json
+      # If npm ci still fails, it means package-lock.json was not committed.
+      # Run `npm install` locally in frontend/ then commit the lock file.
       - name: Install frontend dependencies
         working-directory: services/auth-rbac/frontend
         run: npm ci
@@ -65,6 +68,8 @@ jobs:
         run: npm run build
 
       # ── CRITICAL: Copy frontend dist into backend for firebase deploy ────
+      # vite.config.ts outDir is 'dist' (relative to frontend/) → services/auth-rbac/frontend/dist
+      # firebase.json hosting.public is 'frontend/dist' (relative to backend/) → same absolute path after copy
       - name: Stage frontend dist for Firebase Hosting
         run: |
           mkdir -p services/auth-rbac/backend/frontend
@@ -80,8 +85,6 @@ jobs:
         run: npm install -g firebase-tools
 
       # ── Python Functions Env ─────────────────────────────────────────────
-      # Note: Firebase CLI manages its own venv for Python functions.
-      # This venv is for local validation only (not used by firebase deploy).
       - name: Validate Python requirements
         working-directory: services/auth-rbac/backend/functions
         run: |
@@ -125,4 +128,4 @@ jobs:
             https://${{ env.REGION }}-${{ env.PROJECT_ID }}.cloudfunctions.net/register_fn)
           echo "register_fn returned HTTP $STATUS"
           # 400 = validation error (correct — function is live)
-          [ "$STATUS" = '400' ] || [ "$STATUS" = '200' ] || exit 1 
+          [ "$STATUS" = '400' ] || [ "$STATUS" = '200' ] || exit 1
