@@ -4,9 +4,12 @@ Communication Log Service
 Firestore path: cases/{caseId}/communications/{commId}
 
 GET strategy:
-  1. Stream the full communications sub-collection ordered by createdAt desc.
-  2. Apply optional type filter in Python (avoids extra composite indexes).
-  3. Paginate in Python (consistent with dashboard pattern).
+  1. Stream the full communications sub-collection with no server-side order_by.
+     Firestore silently excludes documents that lack the ordered field, so sorting
+     is done in Python after materialisation instead.
+  2. Sort by createdAt descending in Python (missing createdAt sorts to bottom).
+  3. Apply optional type filter in Python (avoids extra composite indexes).
+  4. Paginate in Python (consistent with dashboard pattern).
 
 POST strategy:
   1. Verify the parent case exists (raises 404 if not).
@@ -41,12 +44,9 @@ def list_communications(
             detail=f"Case '{case_id}' not found.",
         )
 
-    # Stream sub-collection ordered newest first
-    query = (
-        case_ref.collection("communications")
-        .order_by("createdAt", direction=firestore.Query.DESCENDING)
-    )
-    docs = list(query.stream())
+    # Stream the full sub-collection — no server-side order_by so documents
+    # without a createdAt field are not silently excluded by Firestore
+    docs = list(case_ref.collection("communications").stream())
     logger.info("Retrieved %d communications for case %s", len(docs), case_id)
 
     # Materialise and normalise timestamps
@@ -69,6 +69,12 @@ def list_communications(
             "created_by_name": data.get("createdByName"),
             "created_at":     created_at,
         })
+
+    # Sort newest first in Python (avoids Firestore order_by excluding docs without createdAt)
+    entries.sort(
+        key=lambda e: e["created_at"].timestamp() if e["created_at"] else 0.0,
+        reverse=True,
+    )
 
     # Post-filter by type
     if comm_type:
