@@ -4,7 +4,7 @@ All Firestore and Firebase auth calls are mocked.
 """
 
 import pytest
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 
@@ -13,63 +13,56 @@ from fastapi.testclient import TestClient
 
 def _make_comm_doc(
     comm_id,
-    comm_type="call",
-    direction="outbound",
+    channel="Email",
+    direction="Outbound",
     subject="Follow-up",
-    notes=None,
-    contact_name="Jane Smith",
-    contact_method="212-555-0100",
-    created_by="staff-uid",
-    created_by_name="Sarah Chen",
-    created_at=None,
+    body=None,
+    from_address="noreply@simpletort.com",
+    to="jane.doe@example.com",
+    delivery_status="Sent",
+    is_automated=False,
+    logged_by="staff-uid",
+    sent_at=None,
 ):
     doc = MagicMock()
     doc.id = comm_id
     doc.to_dict.return_value = {
-        "type":          comm_type,
-        "direction":     direction,
-        "subject":       subject,
-        "notes":         notes,
-        "contactName":   contact_name,
-        "contactMethod": contact_method,
-        "createdBy":     created_by,
-        "createdByName": created_by_name,
-        "createdAt":     created_at or datetime(2026, 1, 10, tzinfo=timezone.utc),
+        "channel":           channel,
+        "direction":         direction,
+        "subject":           subject,
+        "body":              body,
+        "from":              from_address,
+        "to":                to,
+        "deliveryStatus":    delivery_status,
+        "isAutomated":       is_automated,
+        "loggedBy":          logged_by,
+        "templateId":        "",
+        "externalMessageId": "",
+        "sentAt":            sent_at or datetime(2026, 1, 10, tzinfo=timezone.utc),
     }
     return doc
 
 
 def _make_db(comm_docs=None, case_exists=True):
-    """Build a mock Firestore client with a case doc and communications sub-collection."""
     db = MagicMock()
 
-    # Case document
     case_snap = MagicMock()
     case_snap.exists = case_exists
 
-    # Sub-collection query chain
-    sub_query = MagicMock()
-    sub_query.order_by.return_value = sub_query
-    sub_query.stream.return_value = iter(comm_docs or [])
+    sub_col = MagicMock()
+    sub_col.stream.return_value = iter(comm_docs or [])
 
     case_ref = MagicMock()
     case_ref.get.return_value = case_snap
-    case_ref.collection.return_value = sub_query
+    case_ref.collection.return_value = sub_col
 
     db.collection.return_value.document.return_value = case_ref
-
-    # Staff lookup (for actor display name)
-    staff_snap = MagicMock()
-    staff_snap.exists = True
-    staff_snap.to_dict.return_value = {"displayName": "Sarah Chen"}
-    db.collection.return_value.document.return_value = case_ref
-
     return db, case_ref
 
 
 def _call_list(db, case_id="ZAD-2026-01-0001", **kwargs):
     from app.services.communication_service import list_communications
-    defaults = dict(comm_type=None, page=1, page_size=20)
+    defaults = dict(channel=None, page=1, page_size=20)
     defaults.update(kwargs)
     return list_communications(db=db, case_id=case_id, **defaults)
 
@@ -77,12 +70,12 @@ def _call_list(db, case_id="ZAD-2026-01-0001", **kwargs):
 def _call_create(db, case_id="ZAD-2026-01-0001", actor_uid="staff-uid", **kwargs):
     from app.services.communication_service import create_communication
     defaults = dict(
-        comm_type="call",
-        direction="outbound",
+        channel="Call",
+        direction="Outbound",
         subject="Follow-up call",
-        notes=None,
-        contact_name="Jane Smith",
-        contact_method="212-555-0100",
+        body=None,
+        from_address=None,
+        to=None,
     )
     defaults.update(kwargs)
     return create_communication(db=db, case_id=case_id, actor_uid=actor_uid, **defaults)
@@ -107,32 +100,41 @@ class TestListCommunications:
         assert result["total_pages"] == 1
 
     def test_fields_mapped_correctly(self):
-        docs = [_make_comm_doc("comm-abc", comm_type="email", direction="inbound",
-                               subject="Request docs", contact_name="Client")]
+        docs = [_make_comm_doc(
+            "comm-abc",
+            channel="Email",
+            direction="Inbound",
+            subject="Request docs",
+            from_address="client@example.com",
+            to="noreply@simpletort.com",
+            is_automated=True,
+        )]
         db, _ = _make_db(docs)
         result = _call_list(db)
         item = result["items"][0]
         assert item["comm_id"] == "comm-abc"
-        assert item["type"] == "email"
-        assert item["direction"] == "inbound"
+        assert item["channel"] == "Email"
+        assert item["direction"] == "Inbound"
         assert item["subject"] == "Request docs"
-        assert item["contact_name"] == "Client"
+        assert item["from_address"] == "client@example.com"
+        assert item["to"] == "noreply@simpletort.com"
+        assert item["is_automated"] is True
 
-    def test_type_filter_applied(self):
+    def test_channel_filter_applied(self):
         docs = [
-            _make_comm_doc("c1", comm_type="call"),
-            _make_comm_doc("c2", comm_type="email"),
-            _make_comm_doc("c3", comm_type="call"),
+            _make_comm_doc("c1", channel="Call"),
+            _make_comm_doc("c2", channel="Email"),
+            _make_comm_doc("c3", channel="Call"),
         ]
         db, _ = _make_db(docs)
-        result = _call_list(db, comm_type="call")
+        result = _call_list(db, channel="Call")
         assert result["total"] == 2
-        assert all(i["type"] == "call" for i in result["items"])
+        assert all(i["channel"] == "Call" for i in result["items"])
 
-    def test_type_filter_no_match(self):
-        docs = [_make_comm_doc("c1", comm_type="call")]
+    def test_channel_filter_no_match(self):
+        docs = [_make_comm_doc("c1", channel="Call")]
         db, _ = _make_db(docs)
-        result = _call_list(db, comm_type="fax")
+        result = _call_list(db, channel="Fax")
         assert result["total"] == 0
 
     def test_case_not_found_raises_404(self):
@@ -144,10 +146,19 @@ class TestListCommunications:
 
     def test_timestamp_normalised_to_utc(self):
         naive_dt = datetime(2026, 3, 1, 10, 0, 0)   # no tzinfo
-        docs = [_make_comm_doc("c1", created_at=naive_dt)]
+        docs = [_make_comm_doc("c1", sent_at=naive_dt)]
         db, _ = _make_db(docs)
         result = _call_list(db)
-        assert result["items"][0]["created_at"].tzinfo is not None
+        assert result["items"][0]["sent_at"].tzinfo is not None
+
+    def test_sorted_newest_first(self):
+        older = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        newer = datetime(2026, 3, 1, tzinfo=timezone.utc)
+        docs = [_make_comm_doc("c1", sent_at=older), _make_comm_doc("c2", sent_at=newer)]
+        db, _ = _make_db(docs)
+        result = _call_list(db)
+        assert result["items"][0]["comm_id"] == "c2"
+        assert result["items"][1]["comm_id"] == "c1"
 
 
 # ── Service: pagination ────────────────────────────────────────────────────
@@ -185,37 +196,26 @@ class TestCreateCommunication:
         case_snap = MagicMock()
         case_snap.exists = case_exists
 
-        staff_snap = MagicMock()
-        staff_snap.exists = True
-        staff_snap.to_dict.return_value = {"displayName": "Sarah Chen"}
-
-        case_ref  = MagicMock()
+        case_ref = MagicMock()
         case_ref.get.return_value = case_snap
 
         batch = MagicMock()
         db.batch.return_value = batch
+        db.collection.return_value.document.return_value = case_ref
 
-        # Route all collection().document() calls through side_effect
-        def _col_doc(col_name):
-            col = MagicMock()
-            if col_name == "cases":
-                col.document.return_value = case_ref
-            elif col_name == "staff":
-                col.document.return_value = MagicMock(get=lambda: staff_snap)
-            return col
-
-        db.collection.side_effect = _col_doc
         return db, batch
 
     def test_returns_comm_entry(self):
         db, _ = self._make_db_for_create()
         result = _call_create(db)
-        assert result["type"] == "call"
-        assert result["direction"] == "outbound"
+        assert result["channel"] == "Call"
+        assert result["direction"] == "Outbound"
         assert result["subject"] == "Follow-up call"
-        assert result["created_by"] == "staff-uid"
+        assert result["is_automated"] is False
+        assert result["delivery_status"] == "Sent"
+        assert result["logged_by"] == "staff-uid"
         assert "comm_id" in result
-        assert result["created_at"] is not None
+        assert result["sent_at"] is not None
 
     def test_batch_committed(self):
         db, batch = self._make_db_for_create()
@@ -269,11 +269,13 @@ class TestCommunicationRBAC:
         user = {"uid": "staff-uid", "role": "paralegal"}
         svc_result = {
             "comm_id": "abc-123",
-            "type": "call", "direction": "outbound",
-            "subject": "Test", "notes": None,
-            "contact_name": None, "contact_method": None,
-            "created_by": "staff-uid", "created_by_name": "Sarah Chen",
-            "created_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+            "channel": "Call", "direction": "Outbound",
+            "subject": "Test", "body": None,
+            "from_address": None, "to": None,
+            "delivery_status": "Sent", "is_automated": False,
+            "logged_by": "staff-uid", "template_id": None,
+            "external_message_id": None,
+            "sent_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
         }
         with patch("app.utils.auth.get_current_user", return_value=user), \
              patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
@@ -285,7 +287,7 @@ class TestCommunicationRBAC:
             client = TestClient(m.app, raise_server_exceptions=False)
             resp = client.post(
                 "/api/v1/cases/ZAD-2026-01-0001/communications",
-                json={"type": "call", "direction": "outbound", "subject": "Test"},
+                json={"channel": "Call", "direction": "Outbound", "subject": "Test"},
             )
         assert resp.status_code == 201
 
@@ -302,6 +304,6 @@ class TestCommunicationRBAC:
             client = TestClient(m.app, raise_server_exceptions=False)
             resp = client.post(
                 "/api/v1/cases/ZAD-2026-01-0001/communications",
-                json={"type": "call", "direction": "outbound", "subject": "Test"},
+                json={"channel": "Call", "direction": "Outbound", "subject": "Test"},
             )
         assert resp.status_code == 403

@@ -3,19 +3,32 @@ Communication Log Service
 
 Firestore path: cases/{caseId}/communications/{commId}
 
+Firestore field mapping:
+  channel          → channel          (Email | Call | Letter | Fax | In Person)
+  direction        → direction         (Inbound | Outbound)
+  subject          → subject
+  body             → body
+  from             → from_address      ("from" is a Python keyword)
+  to               → to
+  deliveryStatus   → delivery_status
+  isAutomated      → is_automated
+  loggedBy         → logged_by
+  templateId       → template_id
+  externalMessageId→ external_message_id
+  sentAt           → sent_at           (primary timestamp)
+
 GET strategy:
   1. Stream the full communications sub-collection with no server-side order_by.
      Firestore silently excludes documents that lack the ordered field, so sorting
      is done in Python after materialisation instead.
-  2. Sort by createdAt descending in Python (missing createdAt sorts to bottom).
-  3. Apply optional type filter in Python (avoids extra composite indexes).
+  2. Sort by sentAt descending in Python (missing sentAt sorts to bottom).
+  3. Apply optional channel filter in Python (avoids extra composite indexes).
   4. Paginate in Python (consistent with dashboard pattern).
 
 POST strategy:
   1. Verify the parent case exists (raises 404 if not).
-  2. Resolve the actor's display name from the staff collection.
-  3. Write the new communication document.
-  4. Append a timeline event on the parent case.
+  2. Write the new communication document matching the existing schema.
+  3. Append a timeline event on the parent case.
 """
 
 import logging
@@ -29,10 +42,19 @@ from google.cloud import firestore
 logger = logging.getLogger(__name__)
 
 
+def _normalise_ts(ts) -> Optional[datetime]:
+    """Return an aware datetime from a Firestore Timestamp or datetime, or None."""
+    if ts is None:
+        return None
+    if hasattr(ts, "tzinfo") and ts.tzinfo is None:
+        return ts.replace(tzinfo=timezone.utc)
+    return ts
+
+
 def list_communications(
     db: firestore.Client,
     case_id: str,
-    comm_type: Optional[str],
+    channel: Optional[str],
     page: int,
     page_size: int,
 ) -> dict:
@@ -45,40 +67,39 @@ def list_communications(
         )
 
     # Stream the full sub-collection — no server-side order_by so documents
-    # without a createdAt field are not silently excluded by Firestore
+    # without a sentAt field are not silently excluded by Firestore
     docs = list(case_ref.collection("communications").stream())
     logger.info("Retrieved %d communications for case %s", len(docs), case_id)
 
-    # Materialise and normalise timestamps
+    # Materialise and normalise
     entries: list[dict] = []
     for doc in docs:
         data = doc.to_dict() or {}
-        created_at = data.get("createdAt")
-        if hasattr(created_at, "tzinfo") and created_at is not None and created_at.tzinfo is None:
-            created_at = created_at.replace(tzinfo=timezone.utc)
-
         entries.append({
-            "comm_id":        doc.id,
-            "type":           data.get("type", ""),
-            "direction":      data.get("direction", ""),
-            "subject":        data.get("subject", ""),
-            "notes":          data.get("notes"),
-            "contact_name":   data.get("contactName"),
-            "contact_method": data.get("contactMethod"),
-            "created_by":     data.get("createdBy", ""),
-            "created_by_name": data.get("createdByName"),
-            "created_at":     created_at,
+            "comm_id":              doc.id,
+            "channel":              data.get("channel", ""),
+            "direction":            data.get("direction", ""),
+            "subject":              data.get("subject", ""),
+            "body":                 data.get("body"),
+            "from_address":         data.get("from"),
+            "to":                   data.get("to"),
+            "delivery_status":      data.get("deliveryStatus"),
+            "is_automated":         data.get("isAutomated", False),
+            "logged_by":            data.get("loggedBy"),
+            "template_id":          data.get("templateId"),
+            "external_message_id":  data.get("externalMessageId"),
+            "sent_at":              _normalise_ts(data.get("sentAt")),
         })
 
-    # Sort newest first in Python (avoids Firestore order_by excluding docs without createdAt)
+    # Sort newest first in Python
     entries.sort(
-        key=lambda e: e["created_at"].timestamp() if e["created_at"] else 0.0,
+        key=lambda e: e["sent_at"].timestamp() if e["sent_at"] else 0.0,
         reverse=True,
     )
 
-    # Post-filter by type
-    if comm_type:
-        entries = [e for e in entries if e["type"] == comm_type]
+    # Post-filter by channel
+    if channel:
+        entries = [e for e in entries if e["channel"] == channel]
 
     # Paginate
     total       = len(entries)
@@ -99,14 +120,14 @@ def create_communication(
     db: firestore.Client,
     case_id: str,
     actor_uid: str,
-    comm_type: str,
+    channel: str,
     direction: str,
     subject: str,
-    notes: Optional[str],
-    contact_name: Optional[str],
-    contact_method: Optional[str],
+    body: Optional[str],
+    from_address: Optional[str],
+    to: Optional[str],
 ) -> dict:
-    case_ref = db.collection("cases").document(case_id)
+    case_ref  = db.collection("cases").document(case_id)
     case_snap = case_ref.get()
     if not case_snap.exists:
         raise HTTPException(
@@ -114,23 +135,24 @@ def create_communication(
             detail=f"Case '{case_id}' not found.",
         )
 
-    # Resolve actor display name from staff collection
-    staff_snap = db.collection("staff").document(actor_uid).get()
-    actor_name = staff_snap.to_dict().get("displayName") if staff_snap.exists else None
-
     now     = datetime.now(tz=timezone.utc)
     comm_id = str(uuid.uuid4())
 
     comm_data = {
-        "type":          comm_type,
-        "direction":     direction,
-        "subject":       subject,
-        "notes":         notes,
-        "contactName":   contact_name,
-        "contactMethod": contact_method,
-        "createdBy":     actor_uid,
-        "createdByName": actor_name,
-        "createdAt":     now,
+        "commId":      comm_id,
+        "caseId":      case_id,
+        "channel":     channel,
+        "direction":   direction,
+        "subject":     subject,
+        "body":        body,
+        "from":        from_address,
+        "to":          to,
+        "deliveryStatus":      "Sent",
+        "isAutomated":         False,
+        "loggedBy":            actor_uid,
+        "templateId":          "",
+        "externalMessageId":   "",
+        "sentAt":              now,
     }
 
     # Write communication document and timeline event atomically
@@ -141,9 +163,8 @@ def create_communication(
     batch.set(comm_ref, comm_data)
     batch.set(timeline_ref, {
         "eventType":   "Communication",
-        "description": f"{direction.capitalize()} {comm_type} — {subject}",
+        "description": f"{direction} {channel} — {subject}",
         "performedBy": actor_uid,
-        "performedByName": actor_name,
         "timestamp":   now,
     })
     batch.update(case_ref, {"updatedAt": now})
@@ -152,14 +173,17 @@ def create_communication(
     logger.info("Communication %s logged on case %s by %s", comm_id, case_id, actor_uid)
 
     return {
-        "comm_id":        comm_id,
-        "type":           comm_type,
-        "direction":      direction,
-        "subject":        subject,
-        "notes":          notes,
-        "contact_name":   contact_name,
-        "contact_method": contact_method,
-        "created_by":     actor_uid,
-        "created_by_name": actor_name,
-        "created_at":     now,
+        "comm_id":             comm_id,
+        "channel":             channel,
+        "direction":           direction,
+        "subject":             subject,
+        "body":                body,
+        "from_address":        from_address,
+        "to":                  to,
+        "delivery_status":     "Sent",
+        "is_automated":        False,
+        "logged_by":           actor_uid,
+        "template_id":         None,
+        "external_message_id": None,
+        "sent_at":             now,
     }
