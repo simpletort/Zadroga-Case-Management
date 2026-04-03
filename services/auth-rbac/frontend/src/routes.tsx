@@ -2,7 +2,6 @@ import { createBrowserRouter } from "react-router";
 import { RootLayout } from "./components/root-layout";
 import { CaseList } from "./components/case-list";
 import { CaseDetail } from "./components/case-detail";
-import { WorkloadDistribution } from "./components/workload-distribution";
 import { Login } from "./components/login";
 import { Signup } from "./components/signup";
 import { ForgotPassword } from "./components/forgot-password";
@@ -61,10 +60,6 @@ export const router = createBrowserRouter([
       {
         path: "leads/:leadId",
         Component: LeadDetail,
-      },
-      {
-        path: "workload",
-        Component: WorkloadDistribution,
       },
       // Attorney Review Routes
       {
