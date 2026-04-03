@@ -121,7 +121,7 @@ jobs:
           STATUS=$(curl -s -o /dev/null -w '%{http_code}' \
             -X POST \
             -H 'Content-Type: application/json' \
-            -d '{"email":"","password":"","display_name":""}' \
+            -d '{"email":"","password":"","display_name":"","role":""}' \
             https://${{ env.REGION }}-${{ env.PROJECT_ID }}.cloudfunctions.net/register_fn)
           echo "register_fn returned HTTP $STATUS"
           # 400 = validation error (correct — function is live)
