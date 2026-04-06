@@ -246,15 +246,15 @@ def create_user(
     })
 
     # F-01: generate AND send the verification email
-    verification_link = auth.generate_email_verification_link(email)
-    send_verification_email(email, verification_link)
+    # verification_link = auth.generate_email_verification_link(email)
+    # send_verification_email(email, verification_link)
 
     return {
         "uid":               user_record.uid,
         "email":             email,
         "display_name":      display_name,
         "role":              role,
-        "verification_link": verification_link,
+    #     "verification_link": verification_link,
     }
 
 
