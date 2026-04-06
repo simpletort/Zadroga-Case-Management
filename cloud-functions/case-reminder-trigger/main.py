@@ -87,19 +87,20 @@ def _get_db() -> firestore.Client:
 def _get_oidc_token(audience: str) -> str:
     """
     Fetch an OIDC identity token from the GCP metadata server.
-    Used to authenticate calls to the notification service.
-    In development, returns an empty string (OIDC check skipped by notification service).
+    Always attempted — works in Cloud Run regardless of APP_ENV.
+    Returns empty string if metadata server is unreachable (local dev).
     """
-    if APP_ENV != "production":
+    try:
+        url = (
+            "http://metadata.google.internal/computeMetadata/v1/instance/"
+            f"service-accounts/default/identity?audience={audience}"
+        )
+        req = _urllib_request.Request(url, headers={"Metadata-Flavor": "Google"})
+        with _urllib_request.urlopen(req, timeout=5) as resp:
+            return resp.read().decode("utf-8")
+    except Exception as exc:
+        logger.warning("Could not get OIDC token (local dev?): %s", exc)
         return ""
-
-    url = (
-        "http://metadata.internal/computeMetadata/v1/instance/"
-        f"service-accounts/default/identity?audience={audience}"
-    )
-    req = _urllib_request.Request(url, headers={"Metadata-Flavor": "Google"})
-    with _urllib_request.urlopen(req, timeout=5) as resp:
-        return resp.read().decode("utf-8")
 
 
 # ── Notification service callers ───────────────────────────────────────────────

@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     delivery_records_collection: str = Field(
         "sms_delivery_records", alias="FIRESTORE_DELIVERY_RECORDS_COLLECTION"
     )
+    scheduled_reminders_collection: str = Field(
+        "scheduledReminders", alias="FIRESTORE_SCHEDULED_REMINDERS_COLLECTION"
+    )
 
     # ── Twilio ────────────────────────────────────────────────────────────
     twilio_account_sid: str = Field(..., alias="TWILIO_ACCOUNT_SID")

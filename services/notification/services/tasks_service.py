@@ -184,17 +184,18 @@ _REMINDER_7DAY_SECONDS = 7 * 24 * 3600  # 7 days in seconds
 
 def _reminder_task_name(queue_path: str, case_id: str, suffix: str) -> str:
     """
-    Build a deterministic named-task resource path for a document reminder.
+    Build a unique named-task resource path for a document reminder.
 
-    Cloud Tasks task IDs may only contain letters, digits, hyphens, and
-    underscores.  Case IDs use hyphens (e.g. ZAD-2024-01-0001) which are
-    valid, so no transformation is needed beyond stripping any path separators.
+    Includes the current epoch timestamp so each scheduling attempt generates
+    a new unique task name, avoiding Cloud Tasks' tombstone/deduplication
+    period that blocks reuse of recently-deleted task names.
     """
     safe_id = case_id.replace("/", "-")
-    return f"{queue_path}/tasks/doc-reminder-{safe_id}-{suffix}"
+    epoch = int(time.time())
+    return f"{queue_path}/tasks/doc-reminder-{safe_id}-{suffix}-{epoch}"
 
 
-def enqueue_document_reminders(
+async def enqueue_document_reminders(
     case_id: str,
     phone: str,
     client_name: str,
@@ -203,6 +204,7 @@ def enqueue_document_reminders(
     deadline_label: str,
     *,
     request_id: Optional[str] = None,
+    db=None,
 ) -> dict[str, Optional[str]]:
     """
     Enqueue named 48-hour and 7-day document reminder SMS tasks for a case.
@@ -305,7 +307,7 @@ def enqueue_document_reminders(
                 to_masked="[REDACTED]",
             )
         except google.api_core.exceptions.AlreadyExists:
-            # Task already scheduled from a previous dispatch — keep existing.
+            # Timestamp-based names should never collide — log and continue.
             results[result_key] = task_name
             logger.info(
                 "reminder_task_already_exists",
@@ -322,36 +324,95 @@ def enqueue_document_reminders(
                 error=str(exc),
             )
 
+    # Store task names in Firestore so cancel can use exact names.
+    if db and (results.get("task_48hr") or results.get("task_7day")):
+        try:
+            from google.cloud import firestore as _fs
+            settings = get_settings()
+            doc_ref = db.collection(
+                settings.scheduled_reminders_collection
+            ).document(case_id)
+            await doc_ref.set({
+                "caseId": case_id,
+                "task48hr": results.get("task_48hr"),
+                "task7day": results.get("task_7day"),
+                "scheduledAt": _fs.SERVER_TIMESTAMP,
+            })
+            logger.info("reminder_task_names_stored", case_id=case_id)
+        except Exception as exc:
+            logger.error(
+                "reminder_task_names_store_failed",
+                case_id=case_id,
+                error=str(exc),
+            )
+
     return results
 
 
-def cancel_document_reminders(case_id: str) -> dict[str, bool]:
+async def cancel_document_reminders(case_id: str, db=None) -> dict[str, bool]:
     """
     Cancel (delete) pending 48-hour and 7-day document reminder tasks for
     a case.
 
-    Should be called as soon as the client uploads all required documents so
-    they do not receive unnecessary follow-up messages.
+    Reads the exact task names from Firestore (written by
+    :func:`enqueue_document_reminders`) so cancellation is immune to the
+    Cloud Tasks tombstone/deduplication period that blocks reconstructed names.
 
     Parameters
     ----------
     case_id:
-        Firestore case ID — used to reconstruct the deterministic task names.
+        Firestore case ID.
+    db:
+        Firestore async client — used to look up stored task names.
 
     Returns
     -------
     dict
         ``{"cancelled_48hr": bool, "cancelled_7day": bool}``
-        ``True``  — task was found and deleted successfully.
-        ``False`` — task was not found (already executed or never created).
     """
     client = _get_tasks_client()
-    queue = _queue_path()
-
     results: dict[str, bool] = {"cancelled_48hr": False, "cancelled_7day": False}
 
-    for suffix, result_key in [("48hr", "cancelled_48hr"), ("7day", "cancelled_7day")]:
-        task_name = _reminder_task_name(queue, case_id, suffix)
+    # Read stored task names from Firestore
+    task_48hr_name: Optional[str] = None
+    task_7day_name: Optional[str] = None
+
+    if db:
+        try:
+            settings = get_settings()
+            doc_ref = db.collection(
+                settings.scheduled_reminders_collection
+            ).document(case_id)
+            doc = await doc_ref.get()
+            if doc.exists:
+                data = doc.to_dict()
+                task_48hr_name = data.get("task48hr")
+                task_7day_name = data.get("task7day")
+                logger.info(
+                    "reminder_task_names_loaded",
+                    case_id=case_id,
+                    task_48hr=task_48hr_name,
+                    task_7day=task_7day_name,
+                )
+            else:
+                logger.info(
+                    "reminder_task_names_not_found",
+                    case_id=case_id,
+                )
+        except Exception as exc:
+            logger.error(
+                "reminder_task_names_load_failed",
+                case_id=case_id,
+                error=str(exc),
+            )
+
+    for task_name, result_key in [
+        (task_48hr_name, "cancelled_48hr"),
+        (task_7day_name, "cancelled_7day"),
+    ]:
+        if not task_name:
+            logger.info("reminder_task_name_missing", result_key=result_key, case_id=case_id)
+            continue
         try:
             client.delete_task(request={"name": task_name})
             results[result_key] = True
@@ -359,23 +420,28 @@ def cancel_document_reminders(case_id: str) -> dict[str, bool]:
                 "reminder_task_cancelled",
                 task_name=task_name,
                 case_id=case_id,
-                suffix=suffix,
             )
         except google.api_core.exceptions.NotFound:
-            # Task already executed or was never created — not an error.
             logger.info(
                 "reminder_task_not_found_on_cancel",
                 task_name=task_name,
                 case_id=case_id,
-                suffix=suffix,
             )
         except Exception as exc:
             logger.error(
                 "reminder_task_cancel_failed",
                 task_name=task_name,
                 case_id=case_id,
-                suffix=suffix,
                 error=str(exc),
             )
+
+    # Clean up Firestore record after cancellation attempt
+    if db:
+        try:
+            settings = get_settings()
+            await db.collection(settings.scheduled_reminders_collection).document(case_id).delete()
+            logger.info("reminder_task_record_deleted", case_id=case_id)
+        except Exception as exc:
+            logger.error("reminder_task_record_delete_failed", case_id=case_id, error=str(exc))
 
     return results

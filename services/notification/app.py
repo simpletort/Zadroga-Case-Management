@@ -359,7 +359,7 @@ async def schedule_document_reminders(
     )
 
     try:
-        result = enqueue_document_reminders(
+        result = await enqueue_document_reminders(
             case_id=payload.caseId,
             phone=payload.phone,
             client_name=payload.clientName,
@@ -367,6 +367,7 @@ async def schedule_document_reminders(
             portal_url=payload.portalUrl,
             deadline_label=payload.deadlineLabel,
             request_id=payload.requestId,
+            db=get_db(),
         )
     except Exception as exc:
         logger.error(
@@ -409,7 +410,7 @@ async def cancel_document_reminder_tasks(case_id: str, request: Request):
 
     logger.info("reminder_cancel_requested", case_id=case_id)
 
-    result = cancel_document_reminders(case_id=case_id)
+    result = await cancel_document_reminders(case_id=case_id, db=get_db())
 
     logger.info(
         "reminders_cancel_complete",
