@@ -4,25 +4,26 @@ on:
   push:
     branches: [main, dev]
     paths:
-      - "services/auth-rbac/**"
-      - ".github/workflows/deploy.yml"
+      - 'services/auth-rbac/**'
+      - '.github/workflows/deploy.yml'
   workflow_dispatch:
+
+env:
+  PROJECT_ID: simpletort-zadroga-dev
+  REGION: us-central1
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     permissions:
       contents: read
-      id-token: write   # REQUIRED for auth
+      id-token: write
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # -----------------------------
-      # GOOGLE CLOUD AUTH (NEW)
-      # -----------------------------
+      # ── GCP Auth ────────────────────────────────────────────────────────
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -32,60 +33,80 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Set project
-        run: gcloud config set project simpletort-zadroga-dev
+        run: gcloud config set project ${{ env.PROJECT_ID }}
 
-      # -----------------------------
-      # NODE + PYTHON
-      # -----------------------------
+      # ── Node + Python ────────────────────────────────────────────────────
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 20
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: '3.12'
 
-      # -----------------------------
-      # FRONTEND BUILD
-      # -----------------------------
-      - name: Install frontend dependencies
-        working-directory: services/auth-rbac/frontend
-        run: npm ci
-
-      - name: Build frontend
-        working-directory: services/auth-rbac/frontend
-        env:
-          VITE_FIREBASE_API_KEY:             ${{ secrets.VITE_FIREBASE_API_KEY }}
-          VITE_FIREBASE_AUTH_DOMAIN:         ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
-          VITE_FIREBASE_PROJECT_ID:          ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
-          VITE_FIREBASE_STORAGE_BUCKET:      ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
-          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
-          VITE_FIREBASE_APP_ID:              ${{ secrets.VITE_FIREBASE_APP_ID }}
-          VITE_API_BASE_URL:                 ${{ secrets.VITE_API_BASE_URL }}
-          VITE_USE_EMULATORS: "false"
-        run: npm run build
-
-      # -----------------------------
-      # FIREBASE CLI
-      # -----------------------------
+      # ── Firebase CLI ─────────────────────────────────────────────────────
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
 
-      # -----------------------------
-      # PYTHON FUNCTIONS ENV
-      # -----------------------------
-      - name: Create Python venv
+      # ── Python Functions Env ─────────────────────────────────────────────
+      - name: Validate Python requirements
         working-directory: services/auth-rbac/backend/functions
         run: |
           python -m venv venv
-          venv/bin/pip install --upgrade pip
-          venv/bin/pip install -r requirements.txt
+          venv/bin/pip install --upgrade pip -q
+          venv/bin/pip install -r requirements.txt -q
+          echo 'Python requirements validated'
 
-      # -----------------------------
-      # DEPLOY (NO TOKEN!)
-      # -----------------------------
-      - name: Deploy to Firebase
+      # ── Deploy in correct order ──────────────────────────────────────────
+      - name: Deploy Firestore rules and indexes
         working-directory: services/auth-rbac/backend
-        run: firebase deploy --non-interactive --project simpletort-zadroga-dev
+        run: |
+          firebase deploy --only firestore \
+            --non-interactive \
+            --project ${{ env.PROJECT_ID }}
+
+      - name: Deploy Cloud Functions
+        working-directory: services/auth-rbac/backend
+        run: |
+          firebase deploy --only functions \
+            --non-interactive \
+            --project ${{ env.PROJECT_ID }}
+
+       # ── Allow unauthenticated access on public endpoints ─────────────────
+      # IMPORTANT: 2nd gen functions run on Cloud Run. Must set IAM on the
+      # Cloud Run service directly, NOT via gcloud functions add-invoker-policy-binding.
+      - name: Allow unauthenticated access to public functions
+        run: |
+          for FUNCTION in register-fn password-reset-fn create-session-fn; do
+            gcloud run services add-iam-policy-binding $FUNCTION \
+              --region=${{ env.REGION }} \
+              --member="allUsers" \
+              --role="roles/run.invoker" \
+              --project=${{ env.PROJECT_ID }}
+          done
+
+      # ── Wait for IAM propagation ─────────────────────────────────────────
+      - name: Wait for IAM policy propagation
+        run: sleep 30
+      # ── Smoke test ───────────────────────────────────────────────────────
+      # Fix 2: Rewrote exit check to avoid hidden character bug,
+      # and added 401 as a detectable case with a clear error message.
+      - name: Smoke test — register endpoint reachable
+        run: |
+          STATUS=$(curl -s -o /dev/null -w '%{http_code}' \
+            -X POST \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"","password":"","display_name":""}' \
+            https://${{ env.REGION }}-${{ env.PROJECT_ID }}.cloudfunctions.net/register_fn)
+          echo "register_fn returned HTTP $STATUS"
+          if [ "$STATUS" = '401' ]; then
+            echo "ERROR: Got 401 — unauthenticated access not yet propagated. Try rerunning."
+            exit 1
+          fi
+          if [ "$STATUS" != '400' ] && [ "$STATUS" != '200' ]; then
+            echo "ERROR: Unexpected status $STATUS — function may not be deployed correctly."
+            exit 1
+          fi
+          echo "Smoke test passed."

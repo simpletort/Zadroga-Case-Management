@@ -23,14 +23,13 @@ from firebase_admin import auth, firestore as fs_admin
 
 from auth.rbac import Permission, Role, require_permission, has_permission, log_role_change
 from auth.auth_service import create_user as _create_user
-from middleware.http import (
-    REGION, json_ok, json_err, handle_options, db, serialise_doc, write_audit_event,
-)
+from middleware.http import REGION, json_ok, json_err, handle_options, db, serialise_doc, write_audit_event, CORS_OPTIONS
+
 from middleware.jwt_middleware import require_auth
 
 
 # ── POST /createUser ──────────────────────────────────────────────────────────
-@https_fn.on_request(region=REGION, cors=True)
+@https_fn.on_request(region=REGION, cors=CORS_OPTIONS)
 def create_user_fn(req: https_fn.Request) -> https_fn.Response:
     early = handle_options(req)
     if early:
@@ -71,7 +70,7 @@ def create_user_fn(req: https_fn.Request) -> https_fn.Response:
 
 
 # ── GET /listUsers ────────────────────────────────────────────────────────────
-@https_fn.on_request(region=REGION, cors=True)
+@https_fn.on_request(region=REGION, cors=CORS_OPTIONS)
 def list_users_fn(req: https_fn.Request) -> https_fn.Response:
     early = handle_options(req)
     if early:
@@ -122,9 +121,27 @@ def list_users_fn(req: https_fn.Request) -> https_fn.Response:
             if search not in name and search not in email:
                 continue
         # Computed: activeCaseCount per user
+        # Computed: activeCaseCount per user
         uid = d.get("userId", "")
-        active_cases = db().collection("cases")             .where("assignedTo", "==", uid)             .where("status", "in", ["open", "active", "pending_review"])             .stream()
-        d["activeCaseCount"] = sum(1 for _ in active_cases)
+        active_statuses = [
+            "Pending Paralegal Review",
+            "Pending Attorney Review",
+            "Approved for Filing",
+            "VCF - Submitted",
+        ]
+        paralegal_cases = (
+            db().collection("cases")
+            .where("assignment.assignedParalegal", "==", uid)
+            .where("status", "in", active_statuses)
+            .stream()
+        )
+        attorney_cases = (
+            db().collection("cases")
+            .where("assignment.assignedAttorney", "==", uid)
+            .where("status", "in", active_statuses)
+            .stream()
+        )
+        d["activeCaseCount"] = sum(1 for _ in paralegal_cases) + sum(1 for _ in attorney_cases)
         d["maxCaseload"]     = default_max_caseload
         users.append(d)
 
@@ -137,7 +154,7 @@ def list_users_fn(req: https_fn.Request) -> https_fn.Response:
 
 
 # ── GET /getUser?uid=xxx ──────────────────────────────────────────────────────
-@https_fn.on_request(region=REGION, cors=True)
+@https_fn.on_request(region=REGION, cors=CORS_OPTIONS)
 def get_user_fn(req: https_fn.Request) -> https_fn.Response:
     early = handle_options(req)
     if early:
@@ -165,8 +182,26 @@ def get_user_fn(req: https_fn.Request) -> https_fn.Response:
     d = serialise_doc(docs[0].to_dict(), strip_phi=strip_phi)
 
     # Computed: activeCaseCount — open cases assigned to this user
-    active_cases = db().collection("cases")         .where("assignedTo", "==", target_uid)         .where("status", "in", ["open", "active", "pending_review"])         .stream()
-    d["activeCaseCount"] = sum(1 for _ in active_cases)
+    # Computed: activeCaseCount — open cases assigned to this user
+    active_statuses = [
+        "Pending Paralegal Review",
+        "Pending Attorney Review",
+        "Approved for Filing",
+        "VCF - Submitted",
+    ]
+    paralegal_cases = (
+        db().collection("cases")
+        .where("assignment.assignedParalegal", "==", target_uid)
+        .where("status", "in", active_statuses)
+        .stream()
+    )
+    attorney_cases = (
+        db().collection("cases")
+        .where("assignment.assignedAttorney", "==", target_uid)
+        .where("status", "in", active_statuses)
+        .stream()
+    )
+    d["activeCaseCount"] = sum(1 for _ in paralegal_cases) + sum(1 for _ in attorney_cases)
 
     # Computed: maxCaseload — from firmSettings, fallback 20
     firm_doc = db().collection("firmSettings").document("default").get()
@@ -176,7 +211,7 @@ def get_user_fn(req: https_fn.Request) -> https_fn.Response:
 
 
 # ── PUT /updateUser ───────────────────────────────────────────────────────────
-@https_fn.on_request(region=REGION, cors=True)
+@https_fn.on_request(region=REGION, cors=CORS_OPTIONS)
 def update_user_fn(req: https_fn.Request) -> https_fn.Response:
     early = handle_options(req)
     if early:
@@ -222,14 +257,15 @@ def update_user_fn(req: https_fn.Request) -> https_fn.Response:
     if "isActive" in updates:
         auth.update_user(target_uid, disabled=not updates["isActive"])
 
-    # no updatedAt field in schema
+    updates['updatedAt'] = fs_admin.SERVER_TIMESTAMP
     ref.update(updates)
+
 
     return json_ok({"success": True, "updated_fields": list(updates.keys())})
 
 
 # ── DELETE /deleteUser?uid=xxx ────────────────────────────────────────────────
-@https_fn.on_request(region=REGION, cors=True)
+@https_fn.on_request(region=REGION, cors=CORS_OPTIONS)
 def delete_user_fn(req: https_fn.Request) -> https_fn.Response:
     early = handle_options(req)
     if early:

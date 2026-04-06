@@ -31,6 +31,7 @@ SORT_KEY_MAP = {
     "case_id":              lambda c: c["case_id"] or "",
     "client_name":          lambda c: (c["last_name"] or "") + (c["first_name"] or ""),
     "status":               lambda c: c["status"] or "",
+    "case_type":            lambda c: c["case_type"] or "",
     "vcf_deadline":         lambda c: (
         c["vcf_deadline"].timestamp() if c["vcf_deadline"] else float("inf")
     ),
@@ -41,11 +42,19 @@ SORT_KEY_MAP = {
     ),
 }
 
+# Normalise the case_type query param to the Firestore stored value
+_CASE_TYPE_MAP = {
+    "wtc": "WTC",
+    "vcf": "VCF",
+}
+
 
 def get_dashboard(
     db: firestore.Client,
     user: dict,
     statuses: Optional[list[str]],
+    case_type: Optional[str],
+    assignees: Optional[list[str]],
     deadline_from: Optional[datetime],
     deadline_to: Optional[datetime],
     completeness_min: Optional[float],
@@ -60,6 +69,14 @@ def get_dashboard(
     user_role = normalize_role(user.get("role", ""))
     user_uid  = user.get("uid", "")
     is_admin  = user_role in ADMIN_ROLES
+
+    # Resolve type filter to stored Firestore value ("WTC" | "VCF" | None)
+    # "all" and None both mean no type restriction
+    resolved_type = _CASE_TYPE_MAP.get((case_type or "").lower())
+
+    # assignees filter is only meaningful for admin roles; paralegals are already
+    # scoped to themselves via the assignedParalegal equality filter below
+    effective_assignees = assignees if (is_admin and assignees) else None
 
     # ── 1. Firestore query ────────────────────────────────────────────────
     query = db.collection("cases")
@@ -103,6 +120,7 @@ def get_dashboard(
             "first_name":           lead.get("firstName", ""),
             "last_name":            lead.get("lastName", ""),
             "status":               data.get("status", ""),
+            "case_type":            data.get("caseType"),
             "vcf_deadline":         vcf_deadline,
             "doc_completeness_pct": qual.get("vcfQualScore"),
             "qual_score":           qual.get("medicalQualScore"),
@@ -117,6 +135,10 @@ def get_dashboard(
         # filtered (redundant in production, but required for test correctness
         # because mocked Firestore .where() calls return all docs unchanged).
         if statuses and c["status"] not in statuses:
+            return False
+        if resolved_type and c["case_type"] != resolved_type:
+            return False
+        if effective_assignees and c["assigned_paralegal"] not in effective_assignees:
             return False
         if deadline_from and c["vcf_deadline"] and c["vcf_deadline"] < deadline_from:
             return False

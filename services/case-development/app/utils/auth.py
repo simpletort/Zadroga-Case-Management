@@ -24,10 +24,14 @@ ROLE_HIERARCHY = {
 }
 
 ENDPOINT_MIN_ROLES = {
-    "case_assign_override": "admin_staff",
-    "case_assignment_read": "paralegal",
-    "workload_view":        "paralegal",
-    "dashboard_view":       "paralegal",
+    "case_assign_override":  "admin_staff",
+    "case_assignment_read":  "paralegal",
+    "workload_view":         "paralegal",
+    "dashboard_view":        "paralegal",
+    "comm_read":             "paralegal",
+    "comm_write":            "paralegal",
+    "review_preflight":      "paralegal",
+    "review_submit":         "paralegal",
 }
 
 
