@@ -324,19 +324,18 @@ async def enqueue_document_reminders(
                 error=str(exc),
             )
 
-    # Store task names in Firestore so cancel can use exact names.
+    # Store task names inside the case document itself (no separate collection).
     if db and (results.get("task_48hr") or results.get("task_7day")):
         try:
             from google.cloud import firestore as _fs
             settings = get_settings()
-            doc_ref = db.collection(
-                settings.scheduled_reminders_collection
-            ).document(case_id)
-            await doc_ref.set({
-                "caseId": case_id,
-                "task48hr": results.get("task_48hr"),
-                "task7day": results.get("task_7day"),
-                "scheduledAt": _fs.SERVER_TIMESTAMP,
+            case_ref = db.collection(settings.cases_collection).document(case_id)
+            await case_ref.update({
+                "scheduledReminders": {
+                    "task48hr": results.get("task_48hr"),
+                    "task7day": results.get("task_7day"),
+                    "scheduledAt": _fs.SERVER_TIMESTAMP,
+                }
             })
             logger.info("reminder_task_names_stored", case_id=case_id)
         except Exception as exc:
@@ -380,14 +379,13 @@ async def cancel_document_reminders(case_id: str, db=None) -> dict[str, bool]:
     if db:
         try:
             settings = get_settings()
-            doc_ref = db.collection(
-                settings.scheduled_reminders_collection
-            ).document(case_id)
-            doc = await doc_ref.get()
+            case_ref = db.collection(settings.cases_collection).document(case_id)
+            doc = await case_ref.get()
             if doc.exists:
                 data = doc.to_dict()
-                task_48hr_name = data.get("task48hr")
-                task_7day_name = data.get("task7day")
+                reminders = data.get("scheduledReminders") or {}
+                task_48hr_name = reminders.get("task48hr")
+                task_7day_name = reminders.get("task7day")
                 logger.info(
                     "reminder_task_names_loaded",
                     case_id=case_id,
@@ -435,13 +433,15 @@ async def cancel_document_reminders(case_id: str, db=None) -> dict[str, bool]:
                 error=str(exc),
             )
 
-    # Clean up Firestore record after cancellation attempt
+    # Clear the scheduledReminders sub-field from the case document
     if db:
         try:
+            from google.cloud.firestore_v1 import DELETE_FIELD
             settings = get_settings()
-            await db.collection(settings.scheduled_reminders_collection).document(case_id).delete()
-            logger.info("reminder_task_record_deleted", case_id=case_id)
+            case_ref = db.collection(settings.cases_collection).document(case_id)
+            await case_ref.update({"scheduledReminders": DELETE_FIELD})
+            logger.info("reminder_task_record_cleared", case_id=case_id)
         except Exception as exc:
-            logger.error("reminder_task_record_delete_failed", case_id=case_id, error=str(exc))
+            logger.error("reminder_task_record_clear_failed", case_id=case_id, error=str(exc))
 
     return results
