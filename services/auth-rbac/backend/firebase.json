@@ -4,6 +4,7 @@
       "source":   "functions",
       "codebase": "default",
       "runtime":  "python312",
+      "invoker":  "public",
       "ignore":   ["venv", ".venv", "**/__pycache__", "**/*.pyc", "tests/**"]
     }
   ],

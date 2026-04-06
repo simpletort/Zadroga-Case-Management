@@ -89,7 +89,7 @@ jobs:
 
       # ── Wait for IAM propagation ─────────────────────────────────────────
       - name: Wait for IAM policy propagation
-        run: sleep 30
+        run: sleep 120
       # ── Smoke test ───────────────────────────────────────────────────────
       # Fix 2: Rewrote exit check to avoid hidden character bug,
       # and added 401 as a detectable case with a clear error message.

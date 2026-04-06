@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     # ── Firebase ──────────────────────────────────────────────────────────────
     # Used to verify Firebase Auth JWT tokens issued by auth-rbac for staff.
     firebase_project_id: str = "simpletort-zadroga-dev"
+    firestore_database: str = "simpletort-dev"
 
     # ── Firestore ─────────────────────────────────────────────────────────────
     firestore_cases_collection:        str = "cases"
