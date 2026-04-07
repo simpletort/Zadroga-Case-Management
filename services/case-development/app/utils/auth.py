@@ -32,6 +32,7 @@ ENDPOINT_MIN_ROLES = {
     "comm_write":            "paralegal",
     "review_preflight":      "paralegal",
     "review_submit":         "paralegal",
+    "search_view":           "paralegal",
 }
 
 

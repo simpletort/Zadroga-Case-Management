@@ -226,6 +226,10 @@ class TestSubmitForReview:
                 coll.document.return_value = case_ref
             elif name == "staff":
                 coll.document.return_value = MagicMock(get=MagicMock(return_value=staff_snap))
+                # No junior_partners available in the default ready-db fixture
+                # (case already has attorney="atty-1", so this is never reached in
+                #  happy-path tests; explicit iter([]) guards the no-attorney path)
+                coll.where.return_value.stream.return_value = iter([])
             elif name == "notifications":
                 coll.document.return_value = MagicMock()
             return coll
@@ -360,11 +364,13 @@ class TestReviewRoutes:
 
         client, user = self._make_client()
         mock_result = {
-            "case_id":              "ZAD-2026-04-0001",
-            "status":               TARGET_STATUS,
-            "submitted_at":         _NOW,
-            "submitted_by":         "para-uid",
-            "notified_attorney_id": "atty-1",
+            "case_id":                   "ZAD-2026-04-0001",
+            "status":                    TARGET_STATUS,
+            "submitted_at":              _NOW,
+            "submitted_by":              "para-uid",
+            "notified_attorney_id":      "atty-1",
+            "task_id":                   "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+            "auto_assigned_attorney_id": None,
         }
         with patch("app.utils.auth.get_current_user", return_value=user), \
              patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
@@ -396,3 +402,313 @@ class TestReviewRoutes:
                 headers={"Authorization": "Bearer fake-token"},
             )
         assert resp.status_code == 422
+
+
+# ── Auto-assign Junior Partner tests ──────────────────────────────────────
+
+
+def _jp_snap(uid="jp-001", display_name="Bob Junior", active_case_count=3):
+    """Mock Firestore document snapshot for a junior_partner staff member."""
+    snap = MagicMock()
+    snap.id = uid
+    snap.to_dict.return_value = {
+        "displayName":     display_name,
+        "role":            "junior_partner",
+        "activeCaseCount": active_case_count,
+    }
+    return snap
+
+
+class TestFindLeastLoadedJuniorPartner:
+    """Unit tests for the _find_least_loaded_junior_partner helper."""
+
+    def test_returns_none_when_no_junior_partners(self):
+        from app.services.review_service import _find_least_loaded_junior_partner
+
+        db = MagicMock()
+        db.collection.return_value.where.return_value.stream.return_value = iter([])
+
+        assert _find_least_loaded_junior_partner(db) is None
+
+    def test_returns_least_loaded_of_multiple_jps(self):
+        from app.services.review_service import _find_least_loaded_junior_partner
+
+        jp_busy  = _jp_snap(uid="jp-busy",  active_case_count=10)
+        jp_light = _jp_snap(uid="jp-light", active_case_count=2)
+
+        call_count = {"n": 0}
+
+        def _stream():
+            call_count["n"] += 1
+            # First call (role=="junior_partner") returns both; second returns []
+            return iter([jp_busy, jp_light]) if call_count["n"] == 1 else iter([])
+
+        db = MagicMock()
+        db.collection.return_value.where.return_value.stream.side_effect = _stream
+
+        result = _find_least_loaded_junior_partner(db)
+
+        assert result is not None
+        assert result["uid"] == "jp-light"
+        assert result["activeCaseCount"] == 2
+
+    def test_deduplicates_same_doc_across_both_role_values(self):
+        from app.services.review_service import _find_least_loaded_junior_partner
+
+        jp = _jp_snap(uid="jp-001", active_case_count=5)
+        # Both queries return the same document id — must only appear once
+        db = MagicMock()
+        db.collection.return_value.where.return_value.stream.return_value = iter([jp])
+
+        result = _find_least_loaded_junior_partner(db)
+
+        assert result is not None
+        assert result["uid"] == "jp-001"
+
+    def test_handles_none_active_case_count(self):
+        from app.services.review_service import _find_least_loaded_junior_partner
+
+        jp = MagicMock()
+        jp.id = "jp-null-count"
+        jp.to_dict.return_value = {"displayName": "Alice JP", "activeCaseCount": None}
+
+        db = MagicMock()
+        db.collection.return_value.where.return_value.stream.return_value = iter([jp])
+
+        result = _find_least_loaded_junior_partner(db)
+
+        assert result is not None
+        assert result["activeCaseCount"] == 0  # None coerced to 0
+
+
+class TestAutoAssignJuniorPartner:
+    """Integration tests for auto-assign JP + task creation inside submit_for_review."""
+
+    def _ready_db_no_attorney(self, jp=None):
+        """
+        Fully-ready case fixture with no assignedAttorney.
+        Pass a jp_snap to simulate an available junior_partner, or None for empty.
+        """
+        db = MagicMock()
+
+        case_ref = MagicMock()
+        case_ref.get.return_value = _case_snap(attorney=None)
+
+        docs_coll = MagicMock()
+        docs_coll.stream.return_value = iter(_all_clean_docs())
+
+        timeline_coll = MagicMock()
+        timeline_doc  = MagicMock()
+        timeline_doc.id = "tl-001"
+        timeline_coll.document.return_value = timeline_doc
+
+        def _case_sub(name):
+            if name == "documents":
+                return docs_coll
+            if name == "timeline":
+                return timeline_coll
+            return MagicMock()
+
+        case_ref.collection.side_effect = _case_sub
+
+        actor_staff_snap = MagicMock()
+        actor_staff_snap.exists = True
+        actor_staff_snap.to_dict.return_value = {"displayName": "Jane Paralegal"}
+
+        jp_results = iter([jp]) if jp is not None else iter([])
+
+        def _collection(name):
+            coll = MagicMock()
+            if name == "cases":
+                coll.document.return_value = case_ref
+            elif name == "staff":
+                coll.document.return_value = MagicMock(
+                    get=MagicMock(return_value=actor_staff_snap)
+                )
+                coll.where.return_value.stream.return_value = jp_results
+            elif name == "notifications":
+                coll.document.return_value = MagicMock()
+            return coll
+
+        db.collection.side_effect = _collection
+        db.batch.return_value = MagicMock()
+        return db
+
+    # ── Status transition ──────────────────────────────────────────────────
+
+    def test_full_workflow_status_transitions_to_pending_attorney_review(self):
+        from app.services.review_service import submit_for_review, TARGET_STATUS
+
+        db     = self._ready_db_no_attorney(jp=_jp_snap())
+        result = submit_for_review(db, "ZAD-2026-04-0001", actor_uid="para-uid")
+
+        assert result["status"] == TARGET_STATUS
+        assert result["status"] == "Pending Attorney Review"
+
+    # ── Auto-assign ────────────────────────────────────────────────────────
+
+    def test_auto_assigns_jp_when_no_attorney(self):
+        from app.services.review_service import submit_for_review
+
+        db     = self._ready_db_no_attorney(jp=_jp_snap(uid="jp-001"))
+        result = submit_for_review(db, "ZAD-2026-04-0001", actor_uid="para-uid")
+
+        assert result["auto_assigned_attorney_id"] == "jp-001"
+        assert result["notified_attorney_id"]      == "jp-001"
+
+    def test_no_auto_assign_when_attorney_already_set(self):
+        from app.services.review_service import submit_for_review
+
+        # Reuse the base _ready_db fixture — case has attorney="atty-1"
+        db = MagicMock()
+
+        case_ref = MagicMock()
+        case_ref.get.return_value = _case_snap(attorney="atty-1")
+
+        docs_coll = MagicMock()
+        docs_coll.stream.return_value = iter(_all_clean_docs())
+
+        timeline_coll = MagicMock()
+        timeline_coll.document.return_value = MagicMock(id="tl-002")
+
+        def _case_sub(name):
+            if name == "documents": return docs_coll
+            if name == "timeline":  return timeline_coll
+            return MagicMock()
+
+        case_ref.collection.side_effect = _case_sub
+
+        actor_snap = MagicMock()
+        actor_snap.exists = True
+        actor_snap.to_dict.return_value = {"displayName": "Jane Paralegal"}
+
+        def _collection(name):
+            coll = MagicMock()
+            if name == "cases":
+                coll.document.return_value = case_ref
+            elif name == "staff":
+                coll.document.return_value = MagicMock(get=MagicMock(return_value=actor_snap))
+                coll.where.return_value.stream.return_value = iter([])
+            elif name == "notifications":
+                coll.document.return_value = MagicMock()
+            return coll
+
+        db.collection.side_effect = _collection
+        db.batch.return_value = MagicMock()
+
+        result = submit_for_review(db, "ZAD-2026-04-0001", actor_uid="para-uid")
+
+        assert result["auto_assigned_attorney_id"] is None
+        assert result["notified_attorney_id"]      == "atty-1"
+
+    def test_submission_succeeds_when_no_jp_exists(self):
+        """Submission must not be blocked when no junior_partner record exists."""
+        from app.services.review_service import submit_for_review
+
+        db     = self._ready_db_no_attorney(jp=None)
+        result = submit_for_review(db, "ZAD-2026-04-0001", actor_uid="para-uid")
+
+        assert result["status"]                    == "Pending Attorney Review"
+        assert result["auto_assigned_attorney_id"] is None
+        assert result["notified_attorney_id"]      is None
+
+    # ── Task creation ──────────────────────────────────────────────────────
+
+    def test_task_id_always_returned(self):
+        from app.services.review_service import submit_for_review
+
+        db     = self._ready_db_no_attorney(jp=_jp_snap())
+        result = submit_for_review(db, "ZAD-2026-04-0001", actor_uid="para-uid")
+
+        assert result["task_id"] is not None
+        assert len(result["task_id"]) == 36  # UUID format
+
+    def test_task_written_to_batch_with_correct_type(self):
+        from app.services.review_service import submit_for_review
+
+        db = self._ready_db_no_attorney(jp=_jp_snap(uid="jp-001"))
+        submit_for_review(db, "ZAD-2026-04-0001", actor_uid="para-uid")
+
+        batch = db.batch.return_value
+        set_calls = batch.set.call_args_list
+
+        task_call = next(
+            (c for c in set_calls if (c[0][1] if c[0] else c[1]).get("type") == "attorney_review"),
+            None,
+        )
+        assert task_call is not None, "No batch.set call with type='attorney_review' found"
+
+        task_data = task_call[0][1]
+        assert task_data["caseId"]     == "ZAD-2026-04-0001"
+        assert task_data["assignedTo"] == "jp-001"
+        assert task_data["status"]     == "open"
+        assert task_data["priority"]   == "normal"
+
+    def test_task_assigned_to_original_attorney_when_present(self):
+        from app.services.review_service import submit_for_review
+
+        db = MagicMock()
+
+        case_ref = MagicMock()
+        case_ref.get.return_value = _case_snap(attorney="atty-original")
+
+        docs_coll = MagicMock()
+        docs_coll.stream.return_value = iter(_all_clean_docs())
+
+        timeline_coll = MagicMock()
+        timeline_coll.document.return_value = MagicMock(id="tl-003")
+
+        def _case_sub(name):
+            if name == "documents": return docs_coll
+            if name == "timeline":  return timeline_coll
+            return MagicMock()
+
+        case_ref.collection.side_effect = _case_sub
+
+        actor_snap = MagicMock()
+        actor_snap.exists = True
+        actor_snap.to_dict.return_value = {"displayName": "Jane Paralegal"}
+
+        def _collection(name):
+            coll = MagicMock()
+            if name == "cases":
+                coll.document.return_value = case_ref
+            elif name == "staff":
+                coll.document.return_value = MagicMock(get=MagicMock(return_value=actor_snap))
+                coll.where.return_value.stream.return_value = iter([])
+            elif name == "notifications":
+                coll.document.return_value = MagicMock()
+            return coll
+
+        db.collection.side_effect = _collection
+        db.batch.return_value = MagicMock()
+
+        submit_for_review(db, "ZAD-2026-04-0001", actor_uid="para-uid")
+
+        batch     = db.batch.return_value
+        set_calls = batch.set.call_args_list
+        task_call = next(
+            (c for c in set_calls if (c[0][1] if c[0] else c[1]).get("type") == "attorney_review"),
+            None,
+        )
+        assert task_call is not None
+        assert task_call[0][1]["assignedTo"] == "atty-original"
+
+    # ── Batch atomicity ────────────────────────────────────────────────────
+
+    def test_batch_committed_exactly_once(self):
+        from app.services.review_service import submit_for_review
+
+        db = self._ready_db_no_attorney(jp=_jp_snap())
+        submit_for_review(db, "ZAD-2026-04-0001", actor_uid="para-uid")
+
+        db.batch.return_value.commit.assert_called_once()
+
+    def test_batch_has_timeline_task_and_notification_writes(self):
+        """At least three batch.set calls: timeline + task + notification."""
+        from app.services.review_service import submit_for_review
+
+        db = self._ready_db_no_attorney(jp=_jp_snap())
+        submit_for_review(db, "ZAD-2026-04-0001", actor_uid="para-uid")
+
+        assert db.batch.return_value.set.call_count >= 3

@@ -14,7 +14,7 @@ from shared.middlewares.error_handler import ErrorHandlerMiddleware
 from shared.middlewares.logging import LoggingMiddleware
 
 from app.config import get_settings
-from app.routes import assignment, dashboard, communication, review
+from app.routes import assignment, dashboard, communication, review, search
 
 settings = get_settings()
 
@@ -49,7 +49,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PATCH"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
 )
 app.add_middleware(LoggingMiddleware)
@@ -65,3 +65,4 @@ app.include_router(assignment.router)
 app.include_router(dashboard.router)
 app.include_router(communication.router)
 app.include_router(review.router)
+app.include_router(search.router)
