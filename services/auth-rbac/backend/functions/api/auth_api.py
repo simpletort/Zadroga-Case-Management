@@ -48,7 +48,7 @@ def register_fn(req: https_fn.Request) -> https_fn.Response:
         email        = body.get("email", "").strip().lower()
         password     = body.get("password", "")
         display_name = body.get("display_name", "").strip()
-        role         = body.get("role", "admin_staff")
+        role         = body.get("role", "")
         portal_token = body.get("portal_token")
         if role != 'client':
             caller, auth_err = require_auth(req)

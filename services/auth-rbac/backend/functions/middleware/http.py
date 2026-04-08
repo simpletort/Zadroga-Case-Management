@@ -65,7 +65,7 @@ def db() -> Any:
     Was called as `fs_admin.client()` in 18 separate places across 6 files.
     Using this wrapper makes mocking in tests trivial (patch one symbol).
     """
-    return fs_admin.client(database="simpletort-dev")
+    return fs_admin.client(database_id="simpletort-dev")
 
 
 # ── JSON response helpers ─────────────────────────────────────────────────────
