@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from firebase_admin import firestore as fs_admin
 from firebase_functions import https_fn
-
+from config import Config
 from auth.rbac import Permission, require_permission
 from middleware.http import REGION, json_ok, json_err, handle_options, db, serialise_doc, CORS_OPTIONS
 from middleware.jwt_middleware import require_auth
@@ -34,7 +34,7 @@ def get_audit_log_fn(req: https_fn.Request) -> https_fn.Response:
     uid_filter = req.args.get("uid")
     limit      = min(int(req.args.get("limit", 50)), 200)
 
-    query = db().collection("auditLog").order_by(
+    query = db().collection(Config.AUDIT_LOGS).order_by(
         "timestamp", direction=fs_admin.Query.DESCENDING
     )
     if uid_filter:

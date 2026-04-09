@@ -20,9 +20,17 @@ Architecture:
 """
 
 # ── SDK initialisation (must run before any firebase_admin calls) ─────────────
+
+from dotenv import load_dotenv
+from pathlib import Path
+import os
+CURRENT_DIR = Path(__file__).resolve().parent
+BACKEND_DIR = CURRENT_DIR.parent
+env_path = BACKEND_DIR / ".env"
+load_dotenv(env_path)
+
 import firebase_admin
 firebase_admin.initialize_app()
-
 # ── Re-export every deployed function ─────────────────────────────────────────
 from api.users import (
     create_user_fn,

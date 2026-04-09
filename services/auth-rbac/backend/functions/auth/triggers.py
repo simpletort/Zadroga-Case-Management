@@ -7,7 +7,7 @@ import logging
 from firebase_functions import identity_fn
 from firebase_admin import firestore as fs_admin, auth as firebase_auth
 from middleware.http import db, write_audit_event
-
+from config import Config
 logger = logging.getLogger(__name__)
 
 _ROLE_LABELS = {
@@ -24,7 +24,7 @@ def on_user_created(event: identity_fn.AuthBlockingEvent) -> identity_fn.BeforeC
     user = event.data
     role = (user.custom_claims or {}).get("role", "admin_staff")
 
-    ref = db().collection("staff").document(user.uid)
+    ref = db().collection(Config.STAFF_COL).document(user.uid)
     if not ref.get().exists:
         ref.set({
             "userId":            user.uid,

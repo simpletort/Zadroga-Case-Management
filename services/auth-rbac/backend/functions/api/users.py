@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from firebase_functions import https_fn
 from firebase_admin import auth, firestore as fs_admin
-
+from config import Config
 from auth.rbac import Permission, Role, require_permission, has_permission, log_role_change
 from auth.auth_service import create_user as _create_user
 from middleware.http import REGION, json_ok, json_err, handle_options, db, serialise_doc, write_audit_event, CORS_OPTIONS
@@ -83,7 +83,7 @@ def list_users_fn(req: https_fn.Request) -> https_fn.Response:
     if guard:
         return guard
 
-    col           = db().collection("staff")
+    col           = db().collection(Config.STAFF_COL)
     role_filter   = req.args.get("role")
     status_filter = req.args.get("status")
     search        = (req.args.get("search") or "").strip().lower()
@@ -109,7 +109,7 @@ def list_users_fn(req: https_fn.Request) -> https_fn.Response:
     docs     = docs[:page_size]
 
     # Fetch maxCaseload once from firmSettings for all users
-    firm_doc = db().collection("firmSettings").document("default").get()
+    firm_doc = db().collection(Config.FIRM_SETTINGS).document("default").get()
     default_max_caseload = (firm_doc.to_dict() or {}).get("defaultMaxCaseload", 20) if firm_doc.exists else 20
 
     users = []
@@ -130,13 +130,13 @@ def list_users_fn(req: https_fn.Request) -> https_fn.Response:
             "VCF - Submitted",
         ]
         paralegal_cases = (
-            db().collection("cases")
+            db().collection(Config.CASE_COL)
             .where("assignment.assignedParalegal", "==", uid)
             .where("status", "in", active_statuses)
             .stream()
         )
         attorney_cases = (
-            db().collection("cases")
+            db().collection(Config.CASE_COL)
             .where("assignment.assignedAttorney", "==", uid)
             .where("status", "in", active_statuses)
             .stream()
@@ -174,7 +174,7 @@ def get_user_fn(req: https_fn.Request) -> https_fn.Response:
         return json_err("Forbidden.", 403)
 
     # staff docs use userId field
-    docs = list(db().collection("staff").where("userId", "==", target_uid).stream())
+    docs = list(db().collection(Config.STAFF_COL).where("userId", "==", target_uid).stream())
     if not docs:
         return json_err("User not found.", 404)
 
@@ -190,13 +190,13 @@ def get_user_fn(req: https_fn.Request) -> https_fn.Response:
         "VCF - Submitted",
     ]
     paralegal_cases = (
-        db().collection("cases")
+        db().collection(Config.CASE_COL)
         .where("assignment.assignedParalegal", "==", target_uid)
         .where("status", "in", active_statuses)
         .stream()
     )
     attorney_cases = (
-        db().collection("cases")
+        db().collection(Config.CASE_COL)
         .where("assignment.assignedAttorney", "==", target_uid)
         .where("status", "in", active_statuses)
         .stream()
@@ -204,7 +204,7 @@ def get_user_fn(req: https_fn.Request) -> https_fn.Response:
     d["activeCaseCount"] = sum(1 for _ in paralegal_cases) + sum(1 for _ in attorney_cases)
 
     # Computed: maxCaseload — from firmSettings, fallback 20
-    firm_doc = db().collection("firmSettings").document("default").get()
+    firm_doc = db().collection(Config.FIRM_SETTINGS).document("default").get()
     d["maxCaseload"] = (firm_doc.to_dict() or {}).get("defaultMaxCaseload", 20) if firm_doc.exists else 20
 
     return json_ok({"user": d})
@@ -232,7 +232,7 @@ def update_user_fn(req: https_fn.Request) -> https_fn.Response:
         return json_err("Forbidden.", 403)
 
     # staff docs use roleId as doc ID — find by uid field
-    staff_docs = list(db().collection("staff").where("userId", "==", target_uid).stream())
+    staff_docs = list(db().collection(Config.STAFF_COL).where("userId", "==", target_uid).stream())
     if not staff_docs:
         return json_err("User not found.", 404)
 
@@ -283,7 +283,7 @@ def delete_user_fn(req: https_fn.Request) -> https_fn.Response:
         return json_err("uid query param required", 400)
 
     # staff docs use roleId as doc ID — find by uid field
-    staff_docs = list(db().collection("staff").where("userId", "==", target_uid).stream())
+    staff_docs = list(db().collection(Config.STAFF_COL).where("userId", "==", target_uid).stream())
     if not staff_docs:
         return json_err("User not found.", 404)
 

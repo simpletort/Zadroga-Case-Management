@@ -20,7 +20,7 @@ from typing import Set
 
 from firebase_functions import https_fn
 from middleware.http import db, json_err, write_audit_event
-
+from config import Config
 logger = logging.getLogger(__name__)
 
 
@@ -237,7 +237,7 @@ def require_any(
 def check_case_access(user: dict, case_id: str) -> bool:
     if has_permission(user.get("role", ""), Permission.CASES_READ):
         return True
-    doc = db().collection("cases").document(case_id).get()
+    doc = db().collection(Config.CASE_COL).document(case_id).get()
     if not doc.exists:
         return False
     return doc.to_dict().get("client_uid") == user.get("uid")
