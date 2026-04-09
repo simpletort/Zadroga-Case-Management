@@ -33,6 +33,9 @@ ENDPOINT_MIN_ROLES = {
     "review_preflight":      "paralegal",
     "review_submit":         "paralegal",
     "search_view":           "paralegal",
+    "attorney_review_queue": "junior_partner",
+    "attorney_approve":      "junior_partner",
+    "attorney_bulk_approve": "junior_partner",
 }
 
 
