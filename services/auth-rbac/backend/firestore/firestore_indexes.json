@@ -1,7 +1,7 @@
 {
   "indexes": [
     {
-      "collectionGroup": "users",
+      "collectionGroup": "staff",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "role",       "order": "ASCENDING"  },
@@ -9,7 +9,7 @@
       ]
     },
     {
-      "collectionGroup": "users",
+      "collectionGroup": "staff",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "status",     "order": "ASCENDING"  },

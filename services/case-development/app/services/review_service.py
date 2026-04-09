@@ -10,6 +10,8 @@ Pre-flight checks:
 On submit (atomic batch):
   - Case status → "Pending Attorney Review"
   - cases/{caseId}.submittedForReviewAt + submittedForReviewBy set
+  - If no attorney assigned, least-loaded junior_partner is auto-assigned on the case
+  - cases/{caseId}/tasks/{taskId} created for the reviewing attorney / junior_partner
   - Timeline event appended
   - Notification document written to notifications/{notifId}
 """
@@ -114,6 +116,39 @@ def run_preflight(db: firestore.Client, case_id: str) -> dict:
     return {"all_passed": all_passed, "checks": checks}
 
 
+def _find_least_loaded_junior_partner(db: firestore.Client) -> dict | None:
+    """
+    Query staff for junior_partner members, sort by activeCaseCount in Python
+    (avoids a Firestore composite index on role + activeCaseCount), and return
+    the staff dict of the least-loaded one.
+
+    Checks both "junior_partner" and "Junior Partner" to handle mixed-case
+    role values in the collection (mirrors assignment_service.get_workload).
+
+    Returns None if no junior_partner records are found.
+    """
+    seen: set[str] = set()
+    candidates: list[dict] = []
+
+    for role_val in ("junior_partner", "Junior Partner"):
+        for doc in db.collection("staff").where("role", "==", role_val).stream():
+            if doc.id in seen:
+                continue
+            seen.add(doc.id)
+            data = doc.to_dict() or {}
+            candidates.append({
+                "uid":             doc.id,
+                "displayName":     data.get("displayName", ""),
+                "activeCaseCount": data.get("activeCaseCount") or 0,
+            })
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda x: x["activeCaseCount"])
+    return candidates[0]
+
+
 def submit_for_review(
     db: firestore.Client,
     case_id: str,
@@ -144,26 +179,48 @@ def submit_for_review(
     case_data = _check_case_exists(db, case_id)
     assigned_attorney = (case_data.get("assignment") or {}).get("assignedAttorney")
 
+    # ── Auto-assign least-loaded junior_partner if no attorney is set ──────
+    auto_assigned_attorney_id: str | None = None
+    auto_assigned_attorney_name: str | None = None
+    if assigned_attorney is None:
+        jp = _find_least_loaded_junior_partner(db)
+        if jp is not None:
+            assigned_attorney = jp["uid"]
+            auto_assigned_attorney_id = jp["uid"]
+            auto_assigned_attorney_name = jp["displayName"]
+            logger.info(
+                "Case %s: no attorney assigned — auto-assigning junior_partner %s",
+                case_id, auto_assigned_attorney_id,
+            )
+
     # Resolve actor display name
     staff_snap = db.collection("staff").document(actor_uid).get()
     actor_name = (staff_snap.to_dict() or {}).get("displayName") if staff_snap.exists else None
 
-    now = datetime.now(tz=timezone.utc)
+    now      = datetime.now(tz=timezone.utc)
     notif_id = str(uuid.uuid4())
+    task_id  = str(uuid.uuid4())
 
     case_ref     = db.collection("cases").document(case_id)
     timeline_ref = case_ref.collection("timeline").document()
+    task_ref     = case_ref.collection("tasks").document(task_id)
     notif_ref    = db.collection("notifications").document(notif_id)
 
     batch = db.batch()
 
-    # Update case status + submission metadata
-    batch.update(case_ref, {
-        "status":                TARGET_STATUS,
-        "submittedForReviewAt":  now,
-        "submittedForReviewBy":  actor_uid,
-        "updatedAt":             now,
-    })
+    # ── Update case status + submission metadata ───────────────────────────
+    case_update_payload: dict = {
+        "status":               TARGET_STATUS,
+        "submittedForReviewAt": now,
+        "submittedForReviewBy": actor_uid,
+        "updatedAt":            now,
+    }
+    if auto_assigned_attorney_id is not None:
+        case_update_payload["assignment.assignedAttorney"]     = auto_assigned_attorney_id
+        case_update_payload["assignment.assignedAttorneyName"] = auto_assigned_attorney_name
+        case_update_payload["assignment.autoAssigned"]         = True
+
+    batch.update(case_ref, case_update_payload)
 
     # Timeline event
     batch.set(timeline_ref, {
@@ -177,12 +234,26 @@ def submit_for_review(
         "performedByName":  actor_name,
         "timestamp":        now,
         "metadata": {
-            "previousStatus": case_data.get("status"),
-            "newStatus":      TARGET_STATUS,
+            "previousStatus":       case_data.get("status"),
+            "newStatus":            TARGET_STATUS,
+            "autoAssignedAttorney": auto_assigned_attorney_id,
         },
     })
 
-    # Attorney notification
+    # ── Attorney review task ───────────────────────────────────────────────
+    batch.set(task_ref, {
+        "taskId":     task_id,
+        "caseId":     case_id,
+        "type":       "attorney_review",
+        "title":      "Review Case {} for attorney approval.".format(case_id),
+        "assignedTo": assigned_attorney,
+        "status":     "open",
+        "priority":   "normal",
+        "createdAt":  now,
+        "createdBy":  actor_uid,
+    })
+
+    # ── Attorney notification ──────────────────────────────────────────────
     batch.set(notif_ref, {
         "notificationId":  notif_id,
         "type":            "review_requested",
@@ -198,14 +269,16 @@ def submit_for_review(
     batch.commit()
 
     logger.info(
-        "Case %s submitted for attorney review by %s; attorney=%s",
-        case_id, actor_uid, assigned_attorney,
+        "Case %s submitted for attorney review by %s; attorney=%s auto_jp=%s task=%s",
+        case_id, actor_uid, assigned_attorney, auto_assigned_attorney_id, task_id,
     )
 
     return {
-        "case_id":               case_id,
-        "status":                TARGET_STATUS,
-        "submitted_at":          now,
-        "submitted_by":          actor_uid,
-        "notified_attorney_id":  assigned_attorney,
+        "case_id":                   case_id,
+        "status":                    TARGET_STATUS,
+        "submitted_at":              now,
+        "submitted_by":              actor_uid,
+        "notified_attorney_id":      assigned_attorney,
+        "task_id":                   task_id,
+        "auto_assigned_attorney_id": auto_assigned_attorney_id,
     }
