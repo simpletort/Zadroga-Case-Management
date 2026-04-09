@@ -34,7 +34,7 @@ def get_audit_log_fn(req: https_fn.Request) -> https_fn.Response:
     uid_filter = req.args.get("uid")
     limit      = min(int(req.args.get("limit", 50)), 200)
 
-    query = db().collection(Config.AUDIT_LOGS).order_by(
+    query = db().collection("auditLog").order_by(
         "timestamp", direction=fs_admin.Query.DESCENDING
     )
     if uid_filter:

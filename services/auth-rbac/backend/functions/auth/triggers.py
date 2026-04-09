@@ -24,7 +24,7 @@ def on_user_created(event: identity_fn.AuthBlockingEvent) -> identity_fn.BeforeC
     user = event.data
     role = (user.custom_claims or {}).get("role", "admin_staff")
 
-    ref = db().collection(Config.STAFF_COL).document(user.uid)
+    ref = db().collection("staff").document(user.uid)
     if not ref.get().exists:
         ref.set({
             "userId":            user.uid,

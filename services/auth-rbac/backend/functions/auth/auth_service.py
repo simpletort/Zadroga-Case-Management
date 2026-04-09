@@ -120,7 +120,7 @@ def check_rate_limit(identifier: str) -> None:
 
 
 def reset_rate_limit(identifier: str) -> None:
-    db().collection(Config.RATE_LIMIT).document(_rl_key(identifier)).delete()
+    db().collection("_rate_limits").document(_rl_key(identifier)).delete()
 
 
 # ── Email dispatch ────────────────────────────────────────────────────────────
@@ -233,7 +233,7 @@ def create_user(
         "system_admin":   "System Admin",
     }
     # Firestore staff — document ID = userId (Firebase Auth UID)
-    db().collection(Config.STAFF_COL).document(user_record.uid).set({
+    db().collection("staff").document(user_record.uid).set({
         "userId":            user_record.uid,
         "email":             email,
         "displayName":       display_name,
@@ -261,7 +261,7 @@ def create_user(
 # ── Portal invites ────────────────────────────────────────────────────────────
 def generate_portal_invite(email: str, created_by_uid: str) -> str:
     token = secrets.token_urlsafe(32)
-    db().collection(Config.PORTAL_INVITES).document(token).set({
+    db().collection("_portal_invites").document(token).set({
         "email":      email,
         "created_by": created_by_uid,
         "created_at": fs_admin.SERVER_TIMESTAMP,
@@ -272,7 +272,7 @@ def generate_portal_invite(email: str, created_by_uid: str) -> str:
 
 
 def _consume_portal_token(token: str, email: str) -> None:
-    ref = db().collection(Config.PORTAL_INVITES).document(token)
+    ref = db().collection("_portal_invites").document(token)
     doc = ref.get()
     if not doc.exists:
         raise ValueError("Invalid portal invite token.")
@@ -303,7 +303,7 @@ def create_session(uid: str, id_token: str) -> dict:
     session_cookie = auth.create_session_cookie(id_token, expires_in=expires_in)
     session_id     = secrets.token_urlsafe(16)
 
-    db().collection(Config.SESSIONS).document(session_id).set({
+    db().collection("_sessions").document(session_id).set({
         "uid":           uid,
         "created_at":    fs_admin.SERVER_TIMESTAMP,
         "last_activity": fs_admin.SERVER_TIMESTAMP,
@@ -312,7 +312,7 @@ def create_session(uid: str, id_token: str) -> dict:
     })
 
     # Update lastLoginAt on the staff profile
-    staff_docs = list(db().collection(Config.STAFF_COL).where("userId", "==", uid).stream())
+    staff_docs = list(db().collection("staff").where("userId", "==", uid).stream())
     if staff_docs:
         staff_docs[0].reference.update({"lastLoginAt": fs_admin.SERVER_TIMESTAMP})
 
@@ -328,7 +328,7 @@ def refresh_session(session_id: str) -> None:
     F-02: Slide the session expiry window forward on every active request.
     Called by jwt_middleware.require_auth() on every successful session-cookie auth.
     """
-    db().collection(Config.SESSIONS).document(session_id).update({
+    db().collection("_sessions").document(session_id).update({
         "last_activity": fs_admin.SERVER_TIMESTAMP,
         "expires_at":    datetime.now(timezone.utc) + timedelta(minutes=SESSION_TIMEOUT_MINUTES),
     })
