@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 # ── Deployment region ─────────────────────────────────────────────────────────
 # Single source of truth — was copy-pasted in api/users.py, api/auth_api.py,
 # and api/audit.py as `REGION = "us-central1"`.
-REGION: str = Config.REGION
+REGION: str = "us-central1"
 
 # ── CORS headers ──────────────────────────────────────────────────────────────
 # Was defined in middleware/jwt_middleware.py and imported by every API file.
