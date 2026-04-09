@@ -42,6 +42,18 @@ class Settings(BaseSettings):
     cases_collection: str = Field(
         "cases", alias="FIRESTORE_CASES_COLLECTION"
     )
+    email_delivery_records_collection: str = Field(
+        "email_delivery_records", alias="FIRESTORE_EMAIL_DELIVERY_RECORDS_COLLECTION"
+    )
+
+    # ── SendGrid ──────────────────────────────────────────────────────────
+    sendgrid_api_key: str = Field("", alias="SENDGRID_API_KEY")
+    sendgrid_from_email: str = Field(
+        "notifications@zadroga.com", alias="SENDGRID_FROM_EMAIL"
+    )
+    sendgrid_from_name: str = Field(
+        "Zadroga Law", alias="SENDGRID_FROM_NAME"
+    )
 
     # ── Twilio ────────────────────────────────────────────────────────────
     twilio_account_sid: str = Field(..., alias="TWILIO_ACCOUNT_SID")

@@ -74,17 +74,18 @@ def _get_firestore_client(project: str, database: str):
 
 def _get_token(audience: str) -> str:
     """Get a Google ID token for calling Cloud Run services."""
-    # Method 1: gcloud CLI (most reliable for local dev)
-    try:
-        result = subprocess.run(
-            ["gcloud", "auth", "print-identity-token"],
-            capture_output=True, text=True, check=True,
-        )
-        token = result.stdout.strip()
-        if token:
-            return token
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        pass
+    # Method 1: gcloud CLI — try both "gcloud" and "gcloud.cmd" (Windows)
+    for cmd in (["gcloud", "auth", "print-identity-token"],
+                ["gcloud.cmd", "auth", "print-identity-token"]):
+        try:
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, check=True,
+            )
+            token = result.stdout.strip()
+            if token:
+                return token
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            continue
 
     # Method 2: google-auth library (works on GCP metadata server)
     try:

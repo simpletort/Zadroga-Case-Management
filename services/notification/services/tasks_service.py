@@ -176,6 +176,89 @@ def enqueue_sms(
     return response.name
 
 
+def enqueue_email(
+    to: str,
+    template_id: str,
+    variables: dict,
+    *,
+    case_id: Optional[str] = None,
+    request_id: Optional[str] = None,
+    delay_seconds: int = 0,
+) -> str:
+    """
+    Enqueue an email dispatch task in Cloud Tasks.
+
+    Parameters
+    ----------
+    to:
+        Recipient email address.
+    template_id:
+        Firestore email template document ID.
+    variables:
+        Template variable substitution dict.
+    case_id:
+        Optional case ID — forwarded to email_service for delivery record.
+    request_id:
+        Upstream trace ID — forwarded for correlation.
+    delay_seconds:
+        Schedule the task this many seconds in the future (default: immediate).
+
+    Returns
+    -------
+    str
+        The Cloud Tasks task name (resource path).
+
+    Raises
+    ------
+    google.api_core.exceptions.GoogleAPICallError
+        On Cloud Tasks API failure.
+    """
+    settings = get_settings()
+
+    payload = {
+        "to": to,
+        "templateId": template_id,
+        "variables": variables,
+        "caseId": case_id,
+        "requestId": request_id,
+    }
+
+    task: dict = {
+        "http_request": {
+            "http_method": tasks_v2.HttpMethod.POST,
+            "url": f"{settings.notification_service_url}/tasks/email",
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps(payload).encode("utf-8"),
+            "oidc_token": {
+                "service_account_email": settings.notification_sa_email,
+                "audience": settings.notification_service_url,
+            },
+        }
+    }
+
+    if delay_seconds > 0:
+        schedule_time = timestamp_pb2.Timestamp()
+        schedule_time.FromSeconds(int(time.time()) + delay_seconds)
+        task["schedule_time"] = schedule_time
+
+    client = _get_tasks_client()
+    response = client.create_task(
+        request={"parent": _queue_path(), "task": task}
+    )
+
+    logger.info(
+        "email_task_enqueued",
+        task_name=response.name,
+        template_id=template_id,
+        case_id=case_id,
+        request_id=request_id,
+        delay_seconds=delay_seconds,
+        to_masked="[REDACTED]",
+    )
+
+    return response.name
+
+
 # ── Document reminder constants ────────────────────────────────────────────────
 
 _REMINDER_48HR_SECONDS = 48 * 3600       # 48 hours in seconds
