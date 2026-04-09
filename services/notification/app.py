@@ -54,8 +54,10 @@ from config import get_settings
 from logging_config import get_logger, setup_logging
 from services.firestore_client import get_db
 from services.opt_out_service import clear_opt_out, record_opt_out
+from services.email_service import EmailDispatchResult, send_email
+from services.template_service import render_template, TemplateNotFoundError, TemplateDisabledError, MissingVariableError
 from services.sms_service import SmsDispatchResult, send_sms
-from services.tasks_service import cancel_document_reminders, enqueue_document_reminders
+from services.tasks_service import cancel_document_reminders, enqueue_document_reminders, enqueue_email
 
 logger = get_logger(__name__)
 
@@ -93,6 +95,15 @@ class SmsTaskPayload(BaseModel):
     """Payload sent by Cloud Tasks (and by lead-intake when enqueueing)."""
     to: str = Field(..., description="E.164 destination phone number")
     templateId: str = Field(..., description="Firestore SMS template document ID")
+    variables: dict = Field(default_factory=dict)
+    caseId: Optional[str] = Field(None)
+    requestId: Optional[str] = Field(None)
+
+
+class EmailTaskPayload(BaseModel):
+    """Payload sent by Cloud Tasks for email dispatch."""
+    to: str = Field(..., description="Recipient email address")
+    templateId: str = Field(..., description="Firestore email template document ID")
     variables: dict = Field(default_factory=dict)
     caseId: Optional[str] = Field(None)
     requestId: Optional[str] = Field(None)
@@ -232,6 +243,207 @@ async def handle_sms_task(request: Request, payload: SmsTaskPayload):
         "success": result.success,
         "messageSid": result.message_sid,
         "segmentCount": result.segment_count,
+    }
+
+
+# ── Email task handler ────────────────────────────────────────────────────────
+
+@app.post("/tasks/email", status_code=status.HTTP_200_OK)
+async def handle_email_task(request: Request, payload: EmailTaskPayload):
+    """
+    Cloud Tasks HTTP handler — dispatch a single email.
+
+    Returns 200 whether or not SendGrid succeeded — the outcome is recorded
+    in the delivery record.  A 5xx would cause Cloud Tasks to retry and
+    potentially double-send.
+    """
+    _verify_oidc_token(request)
+
+    logger.info(
+        "email_task_received",
+        template_id=payload.templateId,
+        case_id=payload.caseId,
+        request_id=payload.requestId,
+        to_masked="[REDACTED]",
+    )
+
+    db = get_db()
+
+    result: EmailDispatchResult = await send_email(
+        to=payload.to,
+        template_id=payload.templateId,
+        variables=payload.variables,
+        db=db,
+        case_id=payload.caseId,
+        request_id=payload.requestId,
+    )
+
+    return {
+        "deliveryId": result.delivery_id,
+        "status": result.status,
+        "success": result.success,
+        "messageId": result.message_id,
+    }
+
+
+# ── Direct email dispatch (internal / testing) ────────────────────────────────
+
+class EmailSendPayload(BaseModel):
+    """Payload for POST /internal/email/send — direct dispatch without Cloud Tasks."""
+    to: str = Field(..., description="Recipient email address")
+    templateId: str = Field(..., description="Firestore email template document ID")
+    variables: dict = Field(default_factory=dict)
+    caseId: Optional[str] = Field(None)
+    requestId: Optional[str] = Field(None)
+
+
+class EmailEnqueuePayload(BaseModel):
+    """Payload for POST /internal/email/enqueue — async via Cloud Tasks."""
+    to: str = Field(..., description="Recipient email address")
+    templateId: str = Field(..., description="Firestore email template document ID")
+    variables: dict = Field(default_factory=dict)
+    caseId: Optional[str] = Field(None)
+    requestId: Optional[str] = Field(None)
+    delaySeconds: int = Field(0, description="Schedule delay in seconds (0 = immediate)")
+
+
+class EmailPreviewPayload(BaseModel):
+    """Payload for POST /internal/email/preview — renders template, no sending."""
+    templateId: str = Field(..., description="Firestore email template document ID")
+    variables: dict = Field(default_factory=dict)
+    caseId: Optional[str] = Field(None)
+
+
+@app.post("/internal/email/preview", status_code=status.HTTP_200_OK)
+async def preview_email(request: Request, payload: EmailPreviewPayload):
+    """
+    Render an email template and return the full output — no email is sent.
+
+    Use this to verify:
+    * Template exists in Firestore
+    * Variables are substituted correctly
+    * Subject and HTML body look right
+
+    Returns the rendered subject, plain-text body, and HTML body.
+    """
+    _verify_oidc_token(request)
+
+    logger.info(
+        "email_preview_requested",
+        template_id=payload.templateId,
+        case_id=payload.caseId,
+    )
+
+    try:
+        rendered = await render_template(payload.templateId, payload.variables, get_db())
+    except TemplateNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except TemplateDisabledError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except MissingVariableError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    settings = get_settings()
+    return {
+        "templateId": payload.templateId,
+        "from": f"{settings.sendgrid_from_name} <{settings.sendgrid_from_email}>",
+        "subject": rendered.subject,
+        "htmlBody": rendered.html_body,
+        "smsSafe": rendered.sms_safe,
+        "charCount": len(rendered.sms_safe),
+    }
+
+
+@app.post("/internal/email/send", status_code=status.HTTP_200_OK)
+async def send_email_direct(request: Request, payload: EmailSendPayload):
+    """
+    Send an email directly (synchronous — waits for SendGrid response).
+
+    Use this endpoint for:
+    * Testing / verification without Cloud Tasks
+    * Internal services that need immediate confirmation
+
+    For production high-volume dispatch use ``POST /internal/email/enqueue``
+    which queues via Cloud Tasks and returns instantly.
+
+    Authentication: OIDC Bearer token (skipped in dev).
+    """
+    _verify_oidc_token(request)
+
+    logger.info(
+        "email_send_direct_requested",
+        template_id=payload.templateId,
+        case_id=payload.caseId,
+        request_id=payload.requestId,
+        to_masked="[REDACTED]",
+    )
+
+    result: EmailDispatchResult = await send_email(
+        to=payload.to,
+        template_id=payload.templateId,
+        variables=payload.variables,
+        db=get_db(),
+        case_id=payload.caseId,
+        request_id=payload.requestId,
+    )
+
+    return {
+        "deliveryId": result.delivery_id,
+        "status": result.status,
+        "success": result.success,
+        "messageId": result.message_id,
+        "statusCode": result.status_code,
+        "errorMessage": result.error_message,
+    }
+
+
+@app.post("/internal/email/enqueue", status_code=status.HTTP_200_OK)
+async def enqueue_email_task(request: Request, payload: EmailEnqueuePayload):
+    """
+    Enqueue an email via Cloud Tasks (async — returns immediately).
+
+    Cloud Tasks will call ``POST /tasks/email`` with the payload.
+    Retries automatically on failure (up to queue max-attempts).
+
+    Authentication: OIDC Bearer token (skipped in dev).
+    """
+    _verify_oidc_token(request)
+
+    logger.info(
+        "email_enqueue_requested",
+        template_id=payload.templateId,
+        case_id=payload.caseId,
+        request_id=payload.requestId,
+        delay_seconds=payload.delaySeconds,
+        to_masked="[REDACTED]",
+    )
+
+    try:
+        task_name = enqueue_email(
+            to=payload.to,
+            template_id=payload.templateId,
+            variables=payload.variables,
+            case_id=payload.caseId,
+            request_id=payload.requestId,
+            delay_seconds=payload.delaySeconds,
+        )
+    except Exception as exc:
+        logger.error(
+            "email_enqueue_failed",
+            template_id=payload.templateId,
+            case_id=payload.caseId,
+            error=str(exc),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to enqueue email: {exc}",
+        )
+
+    return {
+        "queued": True,
+        "taskName": task_name,
+        "caseId": payload.caseId,
+        "templateId": payload.templateId,
     }
 
 
