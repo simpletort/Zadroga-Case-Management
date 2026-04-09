@@ -70,17 +70,6 @@ service cloud.firestore {
     // ════════════════════════════════════════════════════════════════════
     // USERS / STAFF
     // ════════════════════════════════════════════════════════════════════
-    match /users/{uid} {
-      allow read:   if validUser() && (request.auth.uid == uid || isStaff());
-      allow create: if hasPerm('staff.manage');
-      allow update: if validUser() && (
-        (request.auth.uid == uid &&
-          request.resource.data.diff(resource.data).changedKeys().hasOnly(['displayName','updatedAt']))
-        || hasPerm('staff.manage')
-      );
-      allow delete: if false;
-    }
-
     match /staff/{uid} {
       allow read:   if validUser() && (request.auth.uid == uid || isStaff());
       allow create: if hasPerm('staff.manage');
