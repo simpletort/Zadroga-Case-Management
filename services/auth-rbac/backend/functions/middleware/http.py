@@ -22,7 +22,7 @@ from firebase_functions import https_fn
 from firebase_functions.options import CorsOptions
 import os
 ALLOWED_ORIGIN = os.environ.get(
-    "ALLOWED_ORIGIN", Config.ALLOWED_ORIGIN
+    "ALLOWED_ORIGIN", "https://simpletort-zadroga-dev.web.app"
     
 )
 
