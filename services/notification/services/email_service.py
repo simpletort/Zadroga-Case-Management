@@ -58,6 +58,10 @@ from services.template_service import (
     TemplateNotFoundError,
     render_template,
 )
+from services.delivery_tracking_service import (
+    CHANNEL_EMAIL,
+    write_notification_record,
+)
 
 logger = get_logger(__name__)
 
@@ -275,6 +279,34 @@ async def send_email(
             delivery_id=delivery_id,
             error=str(exc),
         )
+
+    # ── Step 4: Write to unified notifications schema ─────────────────────
+    # Writes to cases/{caseId}/notifications/{notificationId} + notifications/{id}
+    if case_id:
+        try:
+            await write_notification_record(
+                notification_id=delivery_id,
+                case_id=case_id,
+                client_id=variables.get("clientName", ""),
+                channel=CHANNEL_EMAIL,
+                template_id=template_id,
+                status=status,
+                request_id=request_id,
+                sent_at=attempted_at.isoformat() + "Z",
+                error_message=email_result.error_message if email_result else None,
+                error_code=None,
+                retry_count=0,
+                provider_message_id=email_result.message_id if email_result else None,
+                email_subject=variables.get("subject", ""),
+                sendgrid_status_code=email_result.status_code if email_result else None,
+                db=db,
+            )
+        except Exception as exc:
+            logger.error(
+                "notification_tracking_write_failed",
+                delivery_id=delivery_id,
+                error=str(exc),
+            )
 
     return EmailDispatchResult(
         success=email_result.success,

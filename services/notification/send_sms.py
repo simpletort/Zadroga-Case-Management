@@ -166,7 +166,7 @@ async def run(args: argparse.Namespace) -> None:
         char_count = len(rendered.sms_safe)
         under_160  = char_count <= 160
         print(f"PASS  Template rendered successfully")
-        print(f"      Char count   : {char_count} ({'✓ under 160' if under_160 else '✗ OVER 160 — multi-segment'})")
+        print(f"      Char count   : {char_count} ({'OK under 160' if under_160 else 'OVER 160 - multi-segment'})")
         print(f"      Rendered SMS : {rendered.sms_safe}")
         if not under_160:
             print(f"\nWARN  SMS exceeds 160 chars — will send as {-(-char_count // 153)} segments")
@@ -223,20 +223,20 @@ async def run(args: argparse.Namespace) -> None:
     # ── Summary ───────────────────────────────────────────────────────────
     print("\n" + "=" * 60)
     if result.status == "sent":
-        print("  ✅  ALL CHECKS PASSED — SMS sent successfully")
+        print("  ALL CHECKS PASSED - SMS sent successfully")
         print(f"      Sent to         : {phone}")
         print(f"      Case            : {args.case_id}")
         print(f"      Twilio Console  : https://console.twilio.com/us1/monitor/logs/sms")
     elif result.status == "failed":
-        print(f"  ⚠️   SMS FAILED — Twilio rejected the send")
+        print(f"  SMS FAILED - Twilio rejected the send")
         print(f"      Error           : {result.error_message}")
         print(f"      Check Twilio    : https://console.twilio.com/us1/monitor/logs/sms")
     elif result.status == "template_error":
-        print(f"  ❌  TEMPLATE ERROR — {result.error_message}")
+        print(f"  TEMPLATE ERROR - {result.error_message}")
     elif result.status == "opted_out":
-        print(f"  ℹ️   OPTED OUT — {phone} has opted out of SMS")
+        print(f"  OPTED OUT - {phone} has opted out of SMS")
     else:
-        print(f"  ⚠️   STATUS: {result.status}")
+        print(f"  STATUS: {result.status}")
     print("=" * 60)
 
 

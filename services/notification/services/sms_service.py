@@ -59,6 +59,10 @@ from services.template_service import (
     TemplateNotFoundError,
     render_template,
 )
+from services.delivery_tracking_service import (
+    CHANNEL_SMS,
+    write_notification_record,
+)
 from services.twilio_client import SmsResult, send_sms_via_twilio
 
 logger = get_logger(__name__)
@@ -320,11 +324,6 @@ async def send_sms(
     )
 
     # ── Step 4: Write delivery record ─────────────────────────────────────
-    # Non-fatal: the SMS may already be delivered.  A write failure here must
-    # never surface to the Cloud Tasks caller (which would cause a retry and a
-    # duplicate send).  _write_delivery_record has its own internal guard, but
-    # we also wrap the outer call so a fully-mocked side_effect in tests and
-    # any unexpected propagation from the function itself are both absorbed.
     try:
         await _write_delivery_record(
             delivery_id=delivery_id,
@@ -344,6 +343,35 @@ async def send_sms(
             delivery_id=delivery_id,
             error=str(exc),
         )
+
+    # ── Step 5: Write to unified notifications schema ─────────────────────
+    # Writes to cases/{caseId}/notifications/{notificationId} + notifications/{id}
+    if case_id:
+        try:
+            await write_notification_record(
+                notification_id=delivery_id,
+                case_id=case_id,
+                client_id=variables.get("clientName", ""),
+                channel=CHANNEL_SMS,
+                template_id=template_id,
+                status=status,
+                request_id=request_id,
+                sent_at=attempted_at.isoformat() + "Z",
+                error_message=twilio_result.error_message if twilio_result else None,
+                error_code=twilio_result.error_code if twilio_result else None,
+                retry_count=0,
+                provider_message_id=twilio_result.message_sid if twilio_result else None,
+                sms_segment_count=twilio_result.segment_count if twilio_result else 0,
+                sms_char_count=twilio_result.char_count if twilio_result else 0,
+                twilio_status=twilio_result.status if twilio_result else None,
+                db=db,
+            )
+        except Exception as exc:
+            logger.error(
+                "notification_tracking_write_failed",
+                delivery_id=delivery_id,
+                error=str(exc),
+            )
 
     return SmsDispatchResult(
         success=twilio_result.success,

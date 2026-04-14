@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     email_delivery_records_collection: str = Field(
         "email_delivery_records", alias="FIRESTORE_EMAIL_DELIVERY_RECORDS_COLLECTION"
     )
+    notifications_collection: str = Field(
+        "notifications", alias="FIRESTORE_NOTIFICATIONS_COLLECTION"
+    )
 
     # ── SendGrid ──────────────────────────────────────────────────────────
     sendgrid_api_key: str = Field("", alias="SENDGRID_API_KEY")
