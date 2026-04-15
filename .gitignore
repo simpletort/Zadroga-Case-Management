@@ -11,6 +11,7 @@ Thumbs.db
 *.swp
 *.swo
 .claude/
+openapi.yaml
 
 # =========================
 
