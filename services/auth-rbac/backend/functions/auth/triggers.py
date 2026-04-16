@@ -7,7 +7,7 @@ import logging
 from firebase_functions import identity_fn
 from firebase_admin import firestore as fs_admin, auth as firebase_auth
 from middleware.http import db, write_audit_event
-
+from config import Config
 logger = logging.getLogger(__name__)
 
 _ROLE_LABELS = {

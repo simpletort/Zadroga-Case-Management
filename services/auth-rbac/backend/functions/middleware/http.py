@@ -16,14 +16,14 @@ from __future__ import annotations
 import json
 import logging
 from typing import Any
-
+from config import Config
 from firebase_admin import firestore as fs_admin
 from firebase_functions import https_fn
 from firebase_functions.options import CorsOptions
 import os
 ALLOWED_ORIGIN = os.environ.get(
-    "ALLOWED_ORIGIN",
-    "https://simpletort-zadroga-dev.web.app"
+    "ALLOWED_ORIGIN", "https://simpletort-zadroga-dev.web.app"
+    
 )
 
 
@@ -65,7 +65,7 @@ def db() -> Any:
     Was called as `fs_admin.client()` in 18 separate places across 6 files.
     Using this wrapper makes mocking in tests trivial (patch one symbol).
     """
-    return fs_admin.client(database_id="simpletort-dev")
+    return fs_admin.client(database_id=Config.DATABASE_ID)
 
 
 # ── JSON response helpers ─────────────────────────────────────────────────────

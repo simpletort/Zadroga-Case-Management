@@ -15,3 +15,5 @@ firestore-debug.log
 ui-debug.log
 .DS_Store
 *.log
+backend/functions/set_claims.py
+backend/functions/service-account.json

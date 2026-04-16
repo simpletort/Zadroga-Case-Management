@@ -20,7 +20,7 @@ from typing import Set
 
 from firebase_functions import https_fn
 from middleware.http import db, json_err, write_audit_event
-
+from config import Config
 logger = logging.getLogger(__name__)
 
 

@@ -26,7 +26,7 @@ import secrets
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-
+from config import Config
 from firebase_admin import auth, firestore as fs_admin
 
 from middleware.http import db
