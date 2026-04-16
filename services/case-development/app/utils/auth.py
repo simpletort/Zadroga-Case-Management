@@ -38,6 +38,9 @@ ENDPOINT_MIN_ROLES = {
     "attorney_review_queue": "junior_partner",
     "attorney_approve":      "junior_partner",
     "attorney_bulk_approve": "junior_partner",
+    "case_escalate":         "junior_partner",
+    "escalation_queue":      "senior_partner",
+    "escalation_decide":     "senior_partner",
 }
 
 
