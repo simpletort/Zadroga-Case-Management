@@ -14,7 +14,7 @@ from shared.middlewares.error_handler import ErrorHandlerMiddleware
 from shared.middlewares.logging import LoggingMiddleware
 
 from app.config import get_settings
-from app.routes import assignment, dashboard, communication, review, search, attorney_review, escalation
+from app.routes import assignment, dashboard, communication, review, search, attorney_review, escalation, rejection
 
 settings = get_settings()
 
@@ -68,3 +68,4 @@ app.include_router(review.router)
 app.include_router(search.router)
 app.include_router(attorney_review.router)
 app.include_router(escalation.router)
+app.include_router(rejection.router)

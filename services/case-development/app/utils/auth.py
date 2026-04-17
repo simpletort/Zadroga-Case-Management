@@ -41,6 +41,8 @@ ENDPOINT_MIN_ROLES = {
     "case_escalate":         "junior_partner",
     "escalation_queue":      "senior_partner",
     "escalation_decide":     "senior_partner",
+    "case_reject":           "junior_partner",
+    "case_resubmit":         "paralegal",
 }
 
 
