@@ -144,7 +144,7 @@ def _make_resubmit_db(
         status=case_status,
         assigned_attorney=assigned_attorney,
         assigned_paralegal=assigned_paralegal,
-        rejection=rejection_data or {"rejectionId": "rej-001", "reason": "incomplete_documentation"},
+        rejection=rejection_data if rejection_data is not None else {"rejectionId": "rej-001", "reason": "incomplete_documentation"},
         exists=case_exists,
     )
     case_ref.collection.side_effect = _case_sub
@@ -457,8 +457,8 @@ class TestRejectCase:
         db = _make_reject_db(assigned_paralegal=None)
         self._call(db)
         batch = db.batch.return_value
-        # Only 2 set() calls: rejection sub-doc + timeline (no notification)
-        assert len(batch.set.call_args_list) == 2
+        # 3 set() calls: rejection sub-doc + timeline + decision_audit (no notification)
+        assert len(batch.set.call_args_list) == 3
 
     def test_actor_name_fallback_when_staff_doc_missing(self):
         db = _make_reject_db()
@@ -714,39 +714,26 @@ class TestRejectionRBAC:
 
 class TestRejectionRoutes:
 
-    def _get_client(self, reject_user=None, resubmit_user=None):
+    def _get_client(self, role="junior_partner", uid=_ATTY):
+        """Return (client, user_dict) — auth is bypassed via get_current_user patch."""
         from main import app
-        from app.utils.auth import require_min_role
-        from app.utils.firestore import get_firestore_client
-
-        overrides = {}
-        if reject_user:
-            overrides[require_min_role("case_reject")]   = lambda: reject_user
-        if resubmit_user:
-            overrides[require_min_role("case_resubmit")] = lambda: resubmit_user
-
-        app.dependency_overrides = overrides
-        return TestClient(app)
-
-    def _atty_user(self):
-        return {"uid": _ATTY, "role": "junior_partner"}
-
-    def _para_user(self):
-        return {"uid": _PARA, "role": "paralegal"}
+        user = {"uid": uid, "role": role}
+        app.dependency_overrides = {}   # clear any previous overrides
+        client = TestClient(app, raise_server_exceptions=False)
+        return client, user
 
     # ── Reject endpoint ───────────────────────────────────────────────────────
 
     def test_reject_endpoint_returns_200_on_happy_path(self):
-        from app.utils.firestore import get_firestore_client
-        from main import app
-
         db = _make_reject_db()
-        client = self._get_client(reject_user=self._atty_user())
+        client, user = self._get_client(role="junior_partner", uid=_ATTY)
 
-        with patch("app.routes.rejection.get_firestore_client", return_value=db):
+        with patch("app.utils.auth.get_current_user", return_value=user), \
+             patch("app.routes.rejection.get_firestore_client", return_value=db):
             resp = client.post(
                 f"/api/v1/cases/{_CASE}/reject",
                 json={"reason": "incomplete_documentation"},
+                headers={"Authorization": "Bearer fake-token"},
             )
         assert resp.status_code == 200
         data = resp.json()
@@ -755,12 +742,11 @@ class TestRejectionRoutes:
         assert "rejection_id" in data
 
     def test_reject_endpoint_passes_reason_and_notes_to_service(self):
-        from main import app
-
         db = _make_reject_db()
-        client = self._get_client(reject_user=self._atty_user())
+        client, user = self._get_client(role="junior_partner", uid=_ATTY)
 
-        with patch("app.routes.rejection.get_firestore_client", return_value=db), \
+        with patch("app.utils.auth.get_current_user", return_value=user), \
+             patch("app.routes.rejection.get_firestore_client", return_value=db), \
              patch("app.routes.rejection.reject_case") as mock_svc:
             mock_svc.return_value = {
                 "case_id": _CASE,
@@ -772,6 +758,7 @@ class TestRejectionRoutes:
             client.post(
                 f"/api/v1/cases/{_CASE}/reject",
                 json={"reason": "client_unresponsive", "notes": "No reply in 60 days."},
+                headers={"Authorization": "Bearer fake-token"},
             )
         mock_svc.assert_called_once()
         kwargs = mock_svc.call_args.kwargs
@@ -779,62 +766,64 @@ class TestRejectionRoutes:
         assert kwargs["notes"]  == "No reply in 60 days."
 
     def test_reject_422_propagates_from_service(self):
-        from main import app
-
-        client = self._get_client(reject_user=self._atty_user())
-        with patch("app.routes.rejection.get_firestore_client"), \
+        client, user = self._get_client(role="junior_partner", uid=_ATTY)
+        with patch("app.utils.auth.get_current_user", return_value=user), \
+             patch("app.routes.rejection.get_firestore_client"), \
              patch("app.routes.rejection.reject_case",
                    side_effect=HTTPException(status_code=422, detail="wrong status")):
             resp = client.post(
                 f"/api/v1/cases/{_CASE}/reject",
                 json={"reason": "incomplete_documentation"},
+                headers={"Authorization": "Bearer fake-token"},
             )
         assert resp.status_code == 422
 
     def test_reject_404_propagates_from_service(self):
-        from main import app
-
-        client = self._get_client(reject_user=self._atty_user())
-        with patch("app.routes.rejection.get_firestore_client"), \
+        client, user = self._get_client(role="junior_partner", uid=_ATTY)
+        with patch("app.utils.auth.get_current_user", return_value=user), \
+             patch("app.routes.rejection.get_firestore_client"), \
              patch("app.routes.rejection.reject_case",
                    side_effect=HTTPException(status_code=404, detail="not found")):
             resp = client.post(
                 f"/api/v1/cases/{_CASE}/reject",
                 json={"reason": "incomplete_documentation"},
+                headers={"Authorization": "Bearer fake-token"},
             )
         assert resp.status_code == 404
 
     def test_reject_model_validation_error_returns_422(self):
-        from main import app
-
-        client = self._get_client(reject_user=self._atty_user())
-        with patch("app.routes.rejection.get_firestore_client"):
+        client, user = self._get_client(role="junior_partner", uid=_ATTY)
+        with patch("app.utils.auth.get_current_user", return_value=user), \
+             patch("app.routes.rejection.get_firestore_client"):
             resp = client.post(
                 f"/api/v1/cases/{_CASE}/reject",
                 json={"reason": "other"},   # other without notes → 422
+                headers={"Authorization": "Bearer fake-token"},
             )
         assert resp.status_code == 422
 
     # ── Resubmit endpoint ─────────────────────────────────────────────────────
 
     def test_resubmit_endpoint_returns_200_on_happy_path(self):
-        from main import app
-
         db = _make_resubmit_db()
-        client = self._get_client(resubmit_user=self._para_user())
+        client, user = self._get_client(role="paralegal", uid=_PARA)
 
-        with patch("app.routes.rejection.get_firestore_client", return_value=db):
-            resp = client.post(f"/api/v1/cases/{_CASE}/resubmit", json={})
+        with patch("app.utils.auth.get_current_user", return_value=user), \
+             patch("app.routes.rejection.get_firestore_client", return_value=db):
+            resp = client.post(
+                f"/api/v1/cases/{_CASE}/resubmit",
+                json={},
+                headers={"Authorization": "Bearer fake-token"},
+            )
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "Pending Paralegal Review"
         assert data["case_id"] == _CASE
 
     def test_resubmit_passes_notes_to_service(self):
-        from main import app
-
-        client = self._get_client(resubmit_user=self._para_user())
-        with patch("app.routes.rejection.get_firestore_client"), \
+        client, user = self._get_client(role="paralegal", uid=_PARA)
+        with patch("app.utils.auth.get_current_user", return_value=user), \
+             patch("app.routes.rejection.get_firestore_client"), \
              patch("app.routes.rejection.resubmit_case") as mock_svc:
             mock_svc.return_value = {
                 "case_id": _CASE,
@@ -845,26 +834,33 @@ class TestRejectionRoutes:
             client.post(
                 f"/api/v1/cases/{_CASE}/resubmit",
                 json={"notes": "All docs uploaded."},
+                headers={"Authorization": "Bearer fake-token"},
             )
         mock_svc.assert_called_once()
         assert mock_svc.call_args.kwargs["notes"] == "All docs uploaded."
 
     def test_resubmit_422_propagates_from_service(self):
-        from main import app
-
-        client = self._get_client(resubmit_user=self._para_user())
-        with patch("app.routes.rejection.get_firestore_client"), \
+        client, user = self._get_client(role="paralegal", uid=_PARA)
+        with patch("app.utils.auth.get_current_user", return_value=user), \
+             patch("app.routes.rejection.get_firestore_client"), \
              patch("app.routes.rejection.resubmit_case",
                    side_effect=HTTPException(status_code=422, detail="wrong status")):
-            resp = client.post(f"/api/v1/cases/{_CASE}/resubmit", json={})
+            resp = client.post(
+                f"/api/v1/cases/{_CASE}/resubmit",
+                json={},
+                headers={"Authorization": "Bearer fake-token"},
+            )
         assert resp.status_code == 422
 
     def test_resubmit_404_propagates_from_service(self):
-        from main import app
-
-        client = self._get_client(resubmit_user=self._para_user())
-        with patch("app.routes.rejection.get_firestore_client"), \
+        client, user = self._get_client(role="paralegal", uid=_PARA)
+        with patch("app.utils.auth.get_current_user", return_value=user), \
+             patch("app.routes.rejection.get_firestore_client"), \
              patch("app.routes.rejection.resubmit_case",
                    side_effect=HTTPException(status_code=404, detail="not found")):
-            resp = client.post(f"/api/v1/cases/{_CASE}/resubmit", json={})
+            resp = client.post(
+                f"/api/v1/cases/{_CASE}/resubmit",
+                json={},
+                headers={"Authorization": "Bearer fake-token"},
+            )
         assert resp.status_code == 404

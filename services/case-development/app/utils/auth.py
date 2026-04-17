@@ -43,6 +43,9 @@ ENDPOINT_MIN_ROLES = {
     "escalation_decide":     "senior_partner",
     "case_reject":           "junior_partner",
     "case_resubmit":         "paralegal",
+    "audit_decisions_read":  "junior_partner",
+    "audit_metrics_read":    "senior_partner",
+    "audit_report_export":   "senior_partner",
 }
 
 

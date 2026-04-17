@@ -33,6 +33,19 @@ from google.cloud import firestore
 
 from app.services.attorney_review_service import _approve_single, SENIOR_ROLES
 from app.utils.roles import normalize_role
+from app.utils.decision_audit import (
+    write_decision_audit_event,
+    DECISION_TYPE_ESCALATE,
+    DECISION_TYPE_ESCALATION_APPROVE,
+    DECISION_TYPE_ESCALATION_REJECT,
+    DECISION_TYPE_ESCALATION_RETURN,
+)
+
+_ESCALATION_DECISION_TYPES = {
+    "approve":             DECISION_TYPE_ESCALATION_APPROVE,
+    "reject":              DECISION_TYPE_ESCALATION_REJECT,
+    "return_to_paralegal": DECISION_TYPE_ESCALATION_RETURN,
+}
 
 logger = logging.getLogger(__name__)
 
@@ -226,7 +239,27 @@ def escalate_case(
         "daysToResolve": None,
     })
 
-    # ── 5. Notify all senior partners ──────────────────────────────────────
+    # ── 5. Decision audit (immutable cross-case record) ───────────────────
+    write_decision_audit_event(
+        batch=batch,
+        db=db,
+        event_id=timeline_id,
+        case_id=case_id,
+        decision_type=DECISION_TYPE_ESCALATE,
+        event_type="Escalation",
+        performed_by=actor_uid,
+        performed_by_name=actor_name,
+        performed_by_role=actor_role,
+        timestamp=now,
+        previous_status=REVIEW_STATUS,
+        new_status=ESCALATED_STATUS,
+        reason=reason,
+        notes=notes,
+        case_submitted_for_review_at=case_data.get("submittedForReviewAt"),
+        related_doc_id=escalation_id,
+    )
+
+    # ── 6. Notify all senior partners ──────────────────────────────────────
     for sp in senior_partners:
         notif_id  = str(uuid.uuid4())
         notif_ref = db.collection("notifications").document(notif_id)
@@ -521,6 +554,25 @@ def decide_escalation(
             "createdByName": actor_name,
         })
 
+    # Decision audit (immutable cross-case record)
+    write_decision_audit_event(
+        batch=batch,
+        db=db,
+        event_id=timeline_ref.id,
+        case_id=case_id,
+        decision_type=_ESCALATION_DECISION_TYPES[decision],
+        event_type="EscalationDecision",
+        performed_by=actor_uid,
+        performed_by_name=actor_name,
+        performed_by_role=actor_role,
+        timestamp=now,
+        previous_status=ESCALATED_STATUS,
+        new_status=new_status,
+        notes=notes,
+        case_submitted_for_review_at=(case_data.get("escalation") or {}).get("escalatedAt"),
+        related_doc_id=escalation_id,
+    )
+
     # Also notify paralegal when returning to paralegal queue
     if decision == "return_to_paralegal" and assigned_paralegal:
         notif_id  = str(uuid.uuid4())
@@ -710,6 +762,25 @@ def _decide_approve(
             "escalationId":   escalation_id,
         },
     })
+
+    # Decision audit (immutable cross-case record — uses escalatedAt as review start)
+    write_decision_audit_event(
+        batch=batch,
+        db=db,
+        event_id=timeline_ref.id,
+        case_id=case_id,
+        decision_type=DECISION_TYPE_ESCALATION_APPROVE,
+        event_type="EscalationDecision",
+        performed_by=actor_uid,
+        performed_by_name=actor_name,
+        performed_by_role=actor_role,
+        timestamp=now,
+        previous_status=ESCALATED_STATUS,
+        new_status=APPROVED_STATUS,
+        notes=notes,
+        case_submitted_for_review_at=(case_data.get("escalation") or {}).get("escalatedAt"),
+        related_doc_id=escalation_id,
+    )
 
     batch.commit()
 

@@ -28,6 +28,10 @@ from fastapi import HTTPException, status
 from google.cloud import firestore
 
 from app.utils.roles import normalize_role
+from app.utils.decision_audit import (
+    write_decision_audit_event,
+    DECISION_TYPE_REJECT_CASE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -193,6 +197,26 @@ def reject_case(
             "createdByName":   actor_name,
         })
         notified_paralegal = True
+
+    # ── Write 5: Decision audit (immutable cross-case record) ─────────────────
+    write_decision_audit_event(
+        batch=batch,
+        db=db,
+        event_id=rejection_id,
+        case_id=case_id,
+        decision_type=DECISION_TYPE_REJECT_CASE,
+        event_type="CaseRejection",
+        performed_by=actor_uid,
+        performed_by_name=actor_name,
+        performed_by_role=actor_role,
+        timestamp=now,
+        previous_status=REVIEW_STATUS,
+        new_status=REJECTED_STATUS,
+        reason=reason,
+        notes=notes,
+        case_submitted_for_review_at=case_data.get("submittedForReviewAt"),
+        related_doc_id=rejection_id,
+    )
 
     batch.commit()
 
