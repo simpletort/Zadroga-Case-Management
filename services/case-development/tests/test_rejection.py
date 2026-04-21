@@ -457,8 +457,8 @@ class TestRejectCase:
         db = _make_reject_db(assigned_paralegal=None)
         self._call(db)
         batch = db.batch.return_value
-        # 3 set() calls: rejection sub-doc + timeline + decision_audit (no notification)
-        assert len(batch.set.call_args_list) == 3
+        # 4 set() calls: rejection sub-doc + timeline + decision_audit global + decision_audit case-scoped (no notification)
+        assert len(batch.set.call_args_list) == 4
 
     def test_actor_name_fallback_when_staff_doc_missing(self):
         db = _make_reject_db()
