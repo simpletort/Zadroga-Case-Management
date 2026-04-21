@@ -2,7 +2,8 @@
 Tests for the Decision Audit Trail.
 
 Covers:
-  - write_decision_audit_event helper: field correctness, duration math, immutability
+  - write_decision_audit_event helper: field correctness, duration math, immutability,
+    dual-write to global audit_events + cases/{caseId}/audit_events
   - decision_audit_service: get_decisions, get_case_decisions, get_decision_metrics,
     generate_compliance_report
   - Route integration via FastAPI TestClient (RBAC + response shapes)
@@ -31,6 +32,12 @@ _EVENT_ID = "evt-uuid-001"
 # ── Firestore mock helpers ────────────────────────────────────────────────────
 
 def _make_db():
+    """Mock Firestore client for write-helper tests.
+
+    Handles:
+      db.collection("audit_events").document(X)              → audit_ref
+      db.collection("cases").document(Y).collection(...).document(X) → nested via MagicMock chain
+    """
     db = MagicMock()
     db.batch.return_value = MagicMock()
     audit_ref = MagicMock()
@@ -63,27 +70,37 @@ def _audit_doc(
     review_duration_seconds=3600,
     case_submitted_for_review_at=None,
     related_doc_id=None,
-    created_at=None,
 ):
+    """Return a Firestore document dict in the Common Audit Log Schema format."""
     ts = timestamp or _NOW
     return {
-        "eventId":                  event_id,
-        "caseId":                   case_id,
-        "service":                  "case-development",
-        "decisionType":             decision_type,
-        "eventType":                event_type,
-        "performedBy":              performed_by,
-        "performedByName":          performed_by_name,
-        "performedByRole":          performed_by_role,
-        "timestamp":                ts,
-        "previousStatus":           previous_status,
-        "newStatus":                new_status,
-        "reason":                   reason,
-        "notes":                    notes,
-        "reviewDurationSeconds":    review_duration_seconds,
-        "caseSubmittedForReviewAt": case_submitted_for_review_at,
-        "relatedDocId":             related_doc_id,
-        "createdAt":                created_at or ts,
+        "id":            event_id,
+        "case_id":       case_id,
+        "service":       "case-management",
+        "actor_id":      performed_by,
+        "actor_type":    "staff",
+        "actor_role":    performed_by_role,
+        "action":        "STATUS_CHANGED",
+        "resource_type": "case",
+        "resource_id":   case_id,
+        "timestamp":     ts,
+        "outcome":       "success",
+        "changes": {
+            "status": {
+                "before": previous_status,
+                "after":  new_status,
+            }
+        },
+        "metadata": {
+            "decision_type":               decision_type,
+            "event_type":                  event_type,
+            "performed_by_name":           performed_by_name,
+            "reason":                      reason,
+            "notes":                       notes,
+            "review_duration_seconds":     review_duration_seconds,
+            "case_submitted_for_review_at": case_submitted_for_review_at,
+            "related_doc_id":              related_doc_id,
+        },
     }
 
 
@@ -94,15 +111,38 @@ def _doc_snap(data: dict):
 
 
 def _make_query_db(docs: list[dict]):
-    """Firestore mock that returns a list of docs from any collection query."""
-    db = MagicMock()
-    snaps = [_doc_snap(d) for d in docs]
+    """
+    Firestore mock for read-service tests.
 
-    def _collection(name):
+    Handles both query paths used by decision_audit_service:
+      - db.collection("audit_events").where(...).stream()          (global query)
+      - db.collection("cases").document(X).collection("audit_events").stream()  (case sub-collection)
+
+    Both paths return the same `docs` list so Python-side filters are exercised.
+    """
+    db = MagicMock()
+
+    def _make_streamable():
         coll = MagicMock()
         coll.where.return_value = coll
-        coll.stream.return_value = iter(snaps)
+        coll.stream.side_effect = lambda: iter([_doc_snap(d) for d in docs])
         return coll
+
+    audit_events_sub = _make_streamable()
+    case_doc = MagicMock()
+    case_doc.collection.return_value = audit_events_sub
+    cases_coll = MagicMock()
+    cases_coll.document.return_value = case_doc
+
+    audit_events_coll = _make_streamable()
+
+    def _collection(name):
+        if name == "cases":
+            return cases_coll
+        if name == "audit_events":
+            return audit_events_coll
+        c = _make_streamable()
+        return c
 
     db.collection.side_effect = _collection
     return db
@@ -136,38 +176,97 @@ class TestWriteDecisionAuditEvent:
         write_decision_audit_event(batch=batch, db=db, **defaults)
         return batch, db
 
-    # ── Correctness ───────────────────────────────────────────────────────────
+    def _written_doc(self, batch):
+        """Return the doc payload from the first (global) batch.set call."""
+        return batch.set.call_args_list[0][0][1]
 
-    def test_adds_exactly_one_batch_set_call(self):
-        batch, _ = self._call()
-        assert batch.set.call_count == 1
+    # ── Dual-write ────────────────────────────────────────────────────────────
 
-    def test_written_doc_has_all_required_fields(self):
+    def test_adds_exactly_two_batch_set_calls(self):
         batch, _ = self._call()
-        written = batch.set.call_args[0][1]
+        assert batch.set.call_count == 2
+
+    def test_both_writes_carry_identical_payload(self):
+        batch, _ = self._call()
+        doc1 = batch.set.call_args_list[0][0][1]
+        doc2 = batch.set.call_args_list[1][0][1]
+        assert doc1 == doc2
+
+    def test_global_collection_is_audit_events(self):
+        batch, db = self._call()
+        # First set() writes to audit_events/{event_id}
+        first_ref = batch.set.call_args_list[0][0][0]
+        db.collection.assert_any_call("audit_events")
+
+    def test_case_scoped_collection_written(self):
+        batch, db = self._call()
+        # Second set() is on the cases/{caseId}/audit_events sub-collection
+        db.collection.assert_any_call("cases")
+
+    # ── Field correctness (Common Audit Log Schema) ────────────────────────────
+
+    def test_written_doc_has_all_schema_fields(self):
+        batch, _ = self._call()
+        written = self._written_doc(batch)
         for field in (
-            "eventId", "caseId", "service", "decisionType", "eventType",
-            "performedBy", "performedByName", "performedByRole",
-            "timestamp", "previousStatus", "newStatus",
-            "reason", "notes", "reviewDurationSeconds",
-            "caseSubmittedForReviewAt", "relatedDocId", "createdAt",
+            "id", "timestamp", "actor_id", "actor_type", "actor_role",
+            "action", "resource_type", "resource_id", "case_id",
+            "service", "outcome", "changes", "metadata",
         ):
             assert field in written, f"Missing field: {field}"
 
-    def test_event_id_matches_document_key(self):
-        batch, _ = self._call(event_id=_EVENT_ID)
-        written = batch.set.call_args[0][1]
-        assert written["eventId"] == _EVENT_ID
-
-    def test_service_name_is_case_development(self):
+    def test_metadata_has_all_service_specific_fields(self):
         batch, _ = self._call()
-        written = batch.set.call_args[0][1]
-        assert written["service"] == "case-development"
+        meta = self._written_doc(batch)["metadata"]
+        for field in (
+            "decision_type", "event_type", "performed_by_name",
+            "reason", "notes", "review_duration_seconds",
+            "case_submitted_for_review_at", "related_doc_id",
+        ):
+            assert field in meta, f"Missing metadata field: {field}"
 
-    def test_created_at_equals_timestamp(self):
-        batch, _ = self._call(timestamp=_NOW)
-        written = batch.set.call_args[0][1]
-        assert written["createdAt"] == _NOW
+    def test_id_field_matches_event_id(self):
+        batch, _ = self._call(event_id=_EVENT_ID)
+        assert self._written_doc(batch)["id"] == _EVENT_ID
+
+    def test_service_is_case_management(self):
+        batch, _ = self._call()
+        assert self._written_doc(batch)["service"] == "case-management"
+
+    def test_actor_type_is_staff(self):
+        batch, _ = self._call()
+        assert self._written_doc(batch)["actor_type"] == "staff"
+
+    def test_action_is_status_changed(self):
+        batch, _ = self._call()
+        assert self._written_doc(batch)["action"] == "STATUS_CHANGED"
+
+    def test_resource_type_is_case(self):
+        batch, _ = self._call()
+        assert self._written_doc(batch)["resource_type"] == "case"
+
+    def test_outcome_is_success(self):
+        batch, _ = self._call()
+        assert self._written_doc(batch)["outcome"] == "success"
+
+    def test_changes_status_before_after(self):
+        batch, _ = self._call(
+            previous_status="Pending Attorney Review",
+            new_status="Approved for Filing",
+        )
+        changes = self._written_doc(batch)["changes"]
+        assert changes["status"]["before"] == "Pending Attorney Review"
+        assert changes["status"]["after"] == "Approved for Filing"
+
+    def test_actor_id_and_role_stored_correctly(self):
+        batch, _ = self._call(performed_by=_ATTY, performed_by_role="junior_partner")
+        written = self._written_doc(batch)
+        assert written["actor_id"] == _ATTY
+        assert written["actor_role"] == "junior_partner"
+
+    def test_decision_type_in_metadata(self):
+        batch, _ = self._call(decision_type="escalate")
+        assert self._written_doc(batch)["metadata"]["decision_type"] == "escalate"
 
     # ── Duration calculation ──────────────────────────────────────────────────
 
@@ -177,40 +276,33 @@ class TestWriteDecisionAuditEvent:
             timestamp=_NOW,
             case_submitted_for_review_at=submitted,
         )
-        written = batch.set.call_args[0][1]
-        assert written["reviewDurationSeconds"] == 7200
+        assert self._written_doc(batch)["metadata"]["review_duration_seconds"] == 7200
 
     def test_review_duration_none_when_no_submitted_at(self):
         batch, _ = self._call(case_submitted_for_review_at=None)
-        written = batch.set.call_args[0][1]
-        assert written["reviewDurationSeconds"] is None
+        assert self._written_doc(batch)["metadata"]["review_duration_seconds"] is None
 
     def test_review_duration_zero_when_instantaneous(self):
         batch, _ = self._call(
             timestamp=_NOW,
             case_submitted_for_review_at=_NOW,
         )
-        written = batch.set.call_args[0][1]
-        assert written["reviewDurationSeconds"] == 0
+        assert self._written_doc(batch)["metadata"]["review_duration_seconds"] == 0
 
     def test_review_duration_clamped_to_zero_on_clock_skew(self):
-        # decision timestamp is before submitted_at (clock skew)
         batch, _ = self._call(
             timestamp=_NOW,
             case_submitted_for_review_at=_NOW + timedelta(hours=1),
         )
-        written = batch.set.call_args[0][1]
-        assert written["reviewDurationSeconds"] == 0
+        assert self._written_doc(batch)["metadata"]["review_duration_seconds"] == 0
 
     def test_naive_submitted_at_gets_utc_tzinfo(self):
-        naive_dt = datetime(2026, 4, 17, 10, 0, 0)   # no tzinfo
+        naive_dt = datetime(2026, 4, 17, 10, 0, 0)
         batch, _ = self._call(
             timestamp=_NOW,
             case_submitted_for_review_at=naive_dt,
         )
-        written = batch.set.call_args[0][1]
-        # Should compute 2 hours = 7200 seconds without raising
-        assert written["reviewDurationSeconds"] == 7200
+        assert self._written_doc(batch)["metadata"]["review_duration_seconds"] == 7200
 
     # ── Immutability ──────────────────────────────────────────────────────────
 
@@ -224,24 +316,23 @@ class TestWriteDecisionAuditEvent:
 
     # ── Optional fields ───────────────────────────────────────────────────────
 
-    def test_reason_and_notes_passed_through(self):
+    def test_reason_and_notes_in_metadata(self):
         batch, _ = self._call(reason="incomplete_documentation", notes="Missing W-2s.")
-        written = batch.set.call_args[0][1]
-        assert written["reason"] == "incomplete_documentation"
-        assert written["notes"] == "Missing W-2s."
+        meta = self._written_doc(batch)["metadata"]
+        assert meta["reason"] == "incomplete_documentation"
+        assert meta["notes"] == "Missing W-2s."
 
-    def test_related_doc_id_passed_through(self):
+    def test_related_doc_id_in_metadata(self):
         batch, _ = self._call(related_doc_id="rej-001")
-        written = batch.set.call_args[0][1]
-        assert written["relatedDocId"] == "rej-001"
+        assert self._written_doc(batch)["metadata"]["related_doc_id"] == "rej-001"
 
-    def test_none_fields_written_explicitly(self):
-        """None fields must be written (not omitted) for Firestore schema consistency."""
+    def test_none_optional_fields_written_explicitly_in_metadata(self):
+        """None values must be written (not omitted) for Firestore schema consistency."""
         batch, _ = self._call(reason=None, notes=None, related_doc_id=None)
-        written = batch.set.call_args[0][1]
-        assert written["reason"] is None
-        assert written["notes"] is None
-        assert written["relatedDocId"] is None
+        meta = self._written_doc(batch)["metadata"]
+        assert meta["reason"] is None
+        assert meta["notes"] is None
+        assert meta["related_doc_id"] is None
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -483,10 +574,9 @@ class TestGenerateComplianceReport:
 class TestDecisionAuditRoutes:
 
     def _get_client(self, role="junior_partner", uid=_ATTY):
-        """Return (client, user_dict) — auth is bypassed via get_current_user patch."""
         from main import app
         user = {"uid": uid, "role": role}
-        app.dependency_overrides = {}   # clear any previous overrides
+        app.dependency_overrides = {}
         client = TestClient(app, raise_server_exceptions=False)
         return client, user
 
@@ -857,7 +947,6 @@ class TestExistingServicesWriteAuditEvents:
             )
         mock_audit.assert_called_once()
         assert mock_audit.call_args.kwargs["decision_type"] == "escalation_reject"
-        # Verify escalatedAt used as the review-start proxy
         assert mock_audit.call_args.kwargs["case_submitted_for_review_at"] == esc_at
 
 

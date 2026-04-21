@@ -1,16 +1,19 @@
 """
 Decision Audit Query Service
 
-Reads from the top-level `decision_audit` collection.  This service is
-intentionally read-only: no .set(), .update(), or .delete() calls.
+Reads from the global `audit_events` collection, always filtered to
+service == "case-management" so cross-service writes are excluded.
 
-Query strategy (mirrors the existing codebase pattern):
-  - Primary server-side filter: date range on `timestamp` field.
-  - Secondary Python-side filters: caseId, performedBy, decisionType.
+This service is intentionally read-only: no .set(), .update(), or .delete() calls.
+
+Query strategy:
+  - Primary server-side filter: service == "case-management" (always applied).
+  - Secondary server-side filter: date range on `timestamp` when provided.
+  - Tertiary Python-side filters: case_id, actor_id, decision_type.
   - Sorting and pagination are Python-side (avoids composite index requirements).
 
-Production note: Without a date-range filter the query becomes a full collection
-scan.  Callers should always supply at least one of date_from / date_to / case_id.
+For single-case queries, prefer the case-scoped sub-collection
+(cases/{caseId}/audit_events) to avoid a full collection scan.
 """
 
 from __future__ import annotations
@@ -24,49 +27,54 @@ from google.cloud import firestore
 
 logger = logging.getLogger(__name__)
 
+_SERVICE_FILTER = "case-management"
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Internal helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _to_item(doc_data: dict) -> dict:
-    """Normalise a Firestore document dict to a snake_case API shape."""
+    """Normalise an audit_events document to the snake_case API shape."""
+    meta = doc_data.get("metadata") or {}
+    changes = doc_data.get("changes") or {}
+    status_change = changes.get("status") or {}
+
     return {
-        "event_id":                    doc_data.get("eventId", ""),
-        "case_id":                     doc_data.get("caseId", ""),
-        "decision_type":               doc_data.get("decisionType", ""),
-        "event_type":                  doc_data.get("eventType", ""),
-        "performed_by":                doc_data.get("performedBy", ""),
-        "performed_by_name":           doc_data.get("performedByName"),
-        "performed_by_role":           doc_data.get("performedByRole", ""),
+        "event_id":                    doc_data.get("id", ""),
+        "case_id":                     doc_data.get("case_id", ""),
+        "decision_type":               meta.get("decision_type", ""),
+        "event_type":                  meta.get("event_type", ""),
+        "performed_by":                doc_data.get("actor_id", ""),
+        "performed_by_name":           meta.get("performed_by_name"),
+        "performed_by_role":           doc_data.get("actor_role", ""),
         "timestamp":                   doc_data.get("timestamp"),
-        "previous_status":             doc_data.get("previousStatus", ""),
-        "new_status":                  doc_data.get("newStatus", ""),
-        "reason":                      doc_data.get("reason"),
-        "notes":                       doc_data.get("notes"),
-        "review_duration_seconds":     doc_data.get("reviewDurationSeconds"),
-        "case_submitted_for_review_at": doc_data.get("caseSubmittedForReviewAt"),
-        "related_doc_id":              doc_data.get("relatedDocId"),
-        "created_at":                  doc_data.get("createdAt"),
+        "previous_status":             status_change.get("before", ""),
+        "new_status":                  status_change.get("after", ""),
+        "reason":                      meta.get("reason"),
+        "notes":                       meta.get("notes"),
+        "review_duration_seconds":     meta.get("review_duration_seconds"),
+        "case_submitted_for_review_at": meta.get("case_submitted_for_review_at"),
+        "related_doc_id":              meta.get("related_doc_id"),
+        "created_at":                  doc_data.get("timestamp"),
     }
 
 
-def _avg(values: list[int]) -> Optional[float]:
-    """Return the average of a non-empty list, or None."""
+def _avg(values: list) -> Optional[float]:
     cleaned = [v for v in values if v is not None]
     return round(sum(cleaned) / len(cleaned), 2) if cleaned else None
 
 
-def _build_query(
+def _build_base_query(
     db: firestore.Client,
     date_from: Optional[datetime],
     date_to: Optional[datetime],
 ) -> firestore.Query:
     """
-    Build the base Firestore query with optional date-range filters.
-    Both filters combined require only a single-field index on `timestamp`.
+    Base query: always scoped to case-management, optionally date-ranged.
+    Both filters on different fields require only simple single-field indexes.
     """
-    query = db.collection("decision_audit")
+    query = db.collection("audit_events").where("service", "==", _SERVICE_FILTER)
     if date_from is not None:
         if date_from.tzinfo is None:
             date_from = date_from.replace(tzinfo=timezone.utc)
@@ -85,11 +93,14 @@ def _apply_python_filters(
     decision_type: Optional[str],
 ) -> list[dict]:
     if case_id:
-        docs = [d for d in docs if d.get("caseId") == case_id]
+        docs = [d for d in docs if d.get("case_id") == case_id]
     if performed_by:
-        docs = [d for d in docs if d.get("performedBy") == performed_by]
+        docs = [d for d in docs if d.get("actor_id") == performed_by]
     if decision_type:
-        docs = [d for d in docs if d.get("decisionType") == decision_type]
+        docs = [
+            d for d in docs
+            if (d.get("metadata") or {}).get("decision_type") == decision_type
+        ]
     return docs
 
 
@@ -108,20 +119,23 @@ def get_decisions(
     page_size: int = 20,
 ) -> dict:
     """
-    Return a paginated, filtered list of decision audit events.
+    Return a paginated, filtered list of case-management audit events.
     Sorted: timestamp DESC (newest first).
     """
-    query = _build_query(db, date_from, date_to)
+    query = _build_base_query(db, date_from, date_to)
 
-    # If case_id provided and no date range, use Firestore filter directly
-    # (avoids full scan when caller knows the case).
-    if case_id and date_from is None and date_to is None:
-        query = query.where("caseId", "==", case_id)
+    # When only case_id is provided (no date range), use the case-scoped
+    # sub-collection to avoid a full audit_events scan.
+    if case_id and date_from is None and date_to is None and performed_by is None and decision_type is None:
+        query = (
+            db.collection("cases")
+            .document(case_id)
+            .collection("audit_events")
+        )
 
     raw_docs = [doc.to_dict() or {} for doc in query.stream()]
     raw_docs = _apply_python_filters(raw_docs, case_id, performed_by, decision_type)
 
-    # Sort newest-first
     raw_docs.sort(key=lambda d: (d.get("timestamp") or datetime.min), reverse=True)
 
     total = len(raw_docs)
@@ -129,12 +143,10 @@ def get_decisions(
     start = (page - 1) * page_size
     page_docs = raw_docs[start: start + page_size]
 
-    items = [_to_item(d) for d in page_docs]
-
     return {
         "total_decisions": total,
         "page": {
-            "items":       items,
+            "items":       [_to_item(d) for d in page_docs],
             "total":       total,
             "page":        page,
             "page_size":   page_size,
@@ -148,21 +160,21 @@ def get_case_decisions(
     case_id: str,
 ) -> dict:
     """
-    Return all decision audit events for a single case, sorted chronologically
-    (oldest-first — gives a natural timeline of the case history).
+    Return all audit events for a single case using the case-scoped sub-collection.
+    Sorted chronologically (oldest-first — natural case timeline).
     """
-    query = db.collection("decision_audit").where("caseId", "==", case_id)
+    query = (
+        db.collection("cases")
+        .document(case_id)
+        .collection("audit_events")
+    )
     raw_docs = [doc.to_dict() or {} for doc in query.stream()]
-
-    # Sort oldest-first for chronological case history
     raw_docs.sort(key=lambda d: (d.get("timestamp") or datetime.min))
-
-    items = [_to_item(d) for d in raw_docs]
 
     return {
         "case_id":   case_id,
-        "decisions": items,
-        "total":     len(items),
+        "decisions": [_to_item(d) for d in raw_docs],
+        "total":     len(raw_docs),
     }
 
 
@@ -173,60 +185,54 @@ def get_decision_metrics(
     performed_by: Optional[str] = None,
     decision_type: Optional[str] = None,
 ) -> dict:
-    """
-    Aggregate time-to-decision metrics over a date range.
-
-    Returns:
-      - total_decisions
-      - by_decision_type: count per type
-      - avg_review_duration_seconds: overall average (None if no duration data)
-      - avg_review_duration_by_type: per-type averages
-      - by_attorney: per-actor breakdown
-    """
-    query = _build_query(db, date_from, date_to)
+    """Aggregate time-to-decision metrics over a date range."""
+    query = _build_base_query(db, date_from, date_to)
     raw_docs = [doc.to_dict() or {} for doc in query.stream()]
     raw_docs = _apply_python_filters(raw_docs, None, performed_by, decision_type)
 
-    # ── Aggregate ──────────────────────────────────────────────────────────────
     by_type: dict[str, list[dict]] = {}
     by_actor: dict[str, list[dict]] = {}
 
     for d in raw_docs:
-        dt = d.get("decisionType", "unknown")
+        dt = (d.get("metadata") or {}).get("decision_type", "unknown")
         by_type.setdefault(dt, []).append(d)
 
-        actor = d.get("performedBy", "unknown")
+        actor = d.get("actor_id", "unknown")
         by_actor.setdefault(actor, []).append(d)
 
     by_decision_type_counts = {k: len(v) for k, v in by_type.items()}
 
-    all_durations = [d.get("reviewDurationSeconds") for d in raw_docs]
+    def _duration(d: dict) -> Optional[int]:
+        return (d.get("metadata") or {}).get("review_duration_seconds")
+
+    all_durations = [_duration(d) for d in raw_docs]
     avg_overall = _avg(all_durations)
 
-    avg_by_type: dict[str, Optional[float]] = {}
-    for dt, docs in by_type.items():
-        avg_by_type[dt] = _avg([d.get("reviewDurationSeconds") for d in docs])
+    avg_by_type: dict[str, Optional[float]] = {
+        dt: _avg([_duration(d) for d in docs])
+        for dt, docs in by_type.items()
+    }
 
     attorney_metrics = []
     for actor_uid, docs in by_actor.items():
         actor_name = next(
-            (d.get("performedByName") for d in docs if d.get("performedByName")),
+            ((d.get("metadata") or {}).get("performed_by_name") for d in docs
+             if (d.get("metadata") or {}).get("performed_by_name")),
             None,
         )
         type_counts: dict[str, int] = {}
         for d in docs:
-            dt = d.get("decisionType", "unknown")
+            dt = (d.get("metadata") or {}).get("decision_type", "unknown")
             type_counts[dt] = type_counts.get(dt, 0) + 1
 
         attorney_metrics.append({
             "performed_by":                actor_uid,
             "performed_by_name":           actor_name,
             "decision_count":              len(docs),
-            "avg_review_duration_seconds": _avg([d.get("reviewDurationSeconds") for d in docs]),
+            "avg_review_duration_seconds": _avg([_duration(d) for d in docs]),
             "decisions_by_type":           type_counts,
         })
 
-    # Sort by decision_count desc
     attorney_metrics.sort(key=lambda a: a["decision_count"], reverse=True)
 
     return {
@@ -249,22 +255,22 @@ def generate_compliance_report(
     decision_type: Optional[str] = None,
 ) -> dict:
     """
-    Return a full (non-paginated) audit dump for compliance export.
-
-    The response envelope includes `generated_at` and `filters_applied` so the
-    export is self-describing — the consumer does not need to reconstruct context.
+    Full non-paginated audit dump for compliance export.
     Sorted: timestamp ASC (chronological, suitable for a compliance log).
     """
     now = datetime.now(tz=timezone.utc)
 
-    query = _build_query(db, date_from, date_to)
     if case_id and date_from is None and date_to is None:
-        query = query.where("caseId", "==", case_id)
+        query = (
+            db.collection("cases")
+            .document(case_id)
+            .collection("audit_events")
+        )
+    else:
+        query = _build_base_query(db, date_from, date_to)
 
     raw_docs = [doc.to_dict() or {} for doc in query.stream()]
     raw_docs = _apply_python_filters(raw_docs, case_id, performed_by, decision_type)
-
-    # Chronological order for compliance logs
     raw_docs.sort(key=lambda d: (d.get("timestamp") or datetime.min))
 
     records = [_to_item(d) for d in raw_docs]
