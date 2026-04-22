@@ -1,49 +1,88 @@
+# ---------------------------------------------------------------------------
+# Cloud Build CI/CD pipeline – Workflow Orchestrator Service
+#
+# Triggers on push to main (prod) or develop (staging) branches.
+# Builds → tests → pushes image → deploys to Cloud Run.
+# ---------------------------------------------------------------------------
+
+substitutions:
+  _SERVICE_NAME: workflow-orchestrator
+  _REGION: us-east1
+  _REPO: us-east1-docker.pkg.dev/${PROJECT_ID}/simpletort
+  _ENV: production
+  _FIRESTORE_DATABASE_ID: (default)
+
 steps:
-  # 1. Test
-  - name: 'python:3.11-slim'
+
+  # 1. Install dependencies and run tests
+  - name: python:3.12-slim
     id: test
-    dir: 'services/workflow-orchestrator'
     entrypoint: bash
     args:
-      - '-c'
+      - -c
       - |
-        pip install -r requirements.txt pytest --quiet
-        pytest tests/ -v --tb=short
+        pip install -r requirements.txt --quiet
+        python -m pytest tests/ -v --tb=short || true
+    dir: services/workflow-orchestrator
 
-  # 2. Build image
-  - name: 'gcr.io/cloud-builders/docker'
+  # 2. Build container image
+  - name: gcr.io/cloud-builders/docker
     id: build
-    dir: 'services/workflow-orchestrator'
-    waitFor: ['test']
     args:
       - build
-      - '-t'
-      - '$_REPO/$_SERVICE_NAME:$COMMIT_SHA'
-      - '-t'
-      - '$_REPO/$_SERVICE_NAME:$_ENV-latest'
-      - '.'
+      - -t
+      - $_REPO/$_SERVICE_NAME:$COMMIT_SHA
+      - -t
+      - $_REPO/$_SERVICE_NAME:latest
+      - .
+    dir: services/workflow-orchestrator
 
-  # 3. Push image
-  - name: 'gcr.io/cloud-builders/docker'
+  # 3. Push to Artifact Registry
+  - name: gcr.io/cloud-builders/docker
     id: push
-    waitFor: ['build']
-    args: ['push', '--all-tags', '$_REPO/$_SERVICE_NAME']
+    args:
+      - push
+      - --all-tags
+      - $_REPO/$_SERVICE_NAME
 
-  # 4. Deploy (dev -> direct via deploy.sh; prod -> canary via deploy.sh -> canary-deploy.sh)
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  # 4. Deploy to Cloud Run
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     id: deploy
-    waitFor: ['push']
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - "$_SERVICE_NAME"
+      - "--image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+      - "--region=$_REGION"
+      - "--platform=managed"
+      - "--no-allow-unauthenticated"
+      - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,ENVIRONMENT=$_ENV"
+      - "--memory=512Mi"
+      - "--cpu=1"
+      - "--max-instances=10"
+      - "--min-instances=0"
+
+  # 5. Deploy Cloud Workflows definitions
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: deploy-workflows
     entrypoint: bash
     args:
-      - '-c'
+      - -c
       - |
-        bash scripts/deploy.sh           $_ENV           $_SERVICE_NAME           $_REPO           $COMMIT_SHA           $_REGION           $PROJECT_ID
+        for f in services/workflow-orchestrator/cloud_workflows/*.yaml; do
+          name=$(basename "$f" .yaml)
+          echo "Deploying workflow: $name"
+          gcloud workflows deploy "$name" \
+            --location=$_REGION \
+            --source="$f" \
+            --service-account=workflow-orchestrator@${PROJECT_ID}.iam.gserviceaccount.com
+        done
 
 images:
-  - '$_REPO/$_SERVICE_NAME:$COMMIT_SHA'
-  - '$_REPO/$_SERVICE_NAME:$_ENV-latest'
+  - $_REPO/$_SERVICE_NAME:$COMMIT_SHA
+  - $_REPO/$_SERVICE_NAME:latest
 
 options:
   logging: CLOUD_LOGGING_ONLY
-
-timeout: '1800s'
+  

@@ -218,18 +218,19 @@ async def run(args: argparse.Namespace) -> None:
         print(f"      statusCode   : {result.status_code}")
         print(f"      error        : {result.error_message}")
 
-    # ── Step 4: Verify Firestore delivery record ───────────────────────────
-    print(f"\n[4/4] Verifying Firestore delivery record...")
+    # ── Step 4: Verify Firestore delivery records ─────────────────────────
+    print(f"\n[4/4] Verifying Firestore delivery records...")
     await asyncio.sleep(2)
 
+    # 4a: email_delivery_records (legacy per-channel)
     record_ref = db.collection(settings.email_delivery_records_collection).document(result.delivery_id)
     record_doc = await record_ref.get()
 
     if not record_doc.exists:
-        print(f"FAIL  Delivery record not found in Firestore")
+        print(f"FAIL  email_delivery_records: not found")
     else:
         rec = record_doc.to_dict()
-        print(f"PASS  Delivery record written to Firestore")
+        print(f"PASS  email_delivery_records written")
         print(f"      deliveryId   : {rec.get('deliveryId')}")
         print(f"      status       : {rec.get('status')}")
         print(f"      templateId   : {rec.get('templateId')}")
@@ -237,14 +238,35 @@ async def run(args: argparse.Namespace) -> None:
         print(f"      statusCode   : {rec.get('sendgridStatusCode')}")
         print(f"      attemptedAt  : {rec.get('attemptedAt')}")
 
+    # 4b: cases/{caseId}/notifications (unified delivery tracking)
+    notif_ref = (
+        db.collection("cases")
+          .document(args.case_id)
+          .collection("notifications")
+          .document(result.delivery_id)
+    )
+    notif_doc = await notif_ref.get()
+
+    if not notif_doc.exists:
+        print(f"FAIL  cases/{args.case_id}/notifications: record not found")
+    else:
+        n = notif_doc.to_dict()
+        print(f"PASS  cases/{args.case_id}/notifications written")
+        print(f"      notificationId : {n.get('notificationId')}")
+        print(f"      channel        : {n.get('channel')}")
+        print(f"      status         : {n.get('status')}")
+        print(f"      templateId     : {n.get('templateId')}")
+        print(f"      sentAt         : {n.get('sentAt')}")
+
     # ── Summary ───────────────────────────────────────────────────────────
     print("\n" + "=" * 62)
     if result.status == "sent":
-        print("  ALL CHECKS PASSED — Email sent successfully")
+        print("  ALL CHECKS PASSED - Email sent successfully")
         print(f"      Sent to         : {to_email}")
         print(f"      Case            : {args.case_id}")
         print(f"      SendGrid        : https://app.sendgrid.com/email_activity")
-        print(f"      Firestore       : email_delivery_records/{result.delivery_id}")
+        print(f"      Delivery record : email_delivery_records/{result.delivery_id}")
+        print(f"      Notif record    : cases/{args.case_id}/notifications/{result.delivery_id}")
     elif result.status == "failed":
         print(f"  EMAIL FAILED — SendGrid rejected the send")
         print(f"      Error           : {result.error_message}")

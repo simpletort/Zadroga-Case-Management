@@ -1,7 +1,9 @@
+import base64
+import json
 import sys
 from typing import Optional
 
-from fastapi import HTTPException, Security, status
+from fastapi import HTTPException, Request, Security, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from firebase_admin import auth as firebase_auth
 import logging
@@ -36,13 +38,48 @@ ENDPOINT_MIN_ROLES = {
     "attorney_review_queue": "junior_partner",
     "attorney_approve":      "junior_partner",
     "attorney_bulk_approve": "junior_partner",
+    "case_escalate":         "junior_partner",
+    "escalation_queue":      "senior_partner",
+    "escalation_decide":     "senior_partner",
+    "case_reject":           "junior_partner",
+    "case_resubmit":         "paralegal",
+    "audit_decisions_read":  "junior_partner",
+    "audit_metrics_read":    "senior_partner",
+    "audit_report_export":   "senior_partner",
 }
 
 
 def get_current_user(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = None,
 ) -> dict:
-    """Verify a Firebase ID token and return the decoded claims dict."""
+    """Verify auth and return the decoded claims dict.
+
+    When called via Google Cloud API Gateway the original Firebase token is
+    replaced by a Google-signed OIDC token.  The gateway forwards the already-
+    verified Firebase JWT payload in the X-Apigateway-Api-Userinfo header
+    (Base64URL-encoded JSON).  Read from that header first so we don't
+    double-verify using the wrong token type.
+    """
+    userinfo = request.headers.get("x-apigateway-api-userinfo")
+    if userinfo:
+        try:
+            padded = userinfo + "=" * (-len(userinfo) % 4)
+            claims = json.loads(base64.urlsafe_b64decode(padded))
+            # Firebase Admin SDK adds 'uid' mapped from 'sub'/'user_id'.
+            # The raw JWT payload uses 'sub'/'user_id' — normalise so callers
+            # can always use claims["uid"].
+            if "uid" not in claims:
+                claims["uid"] = claims.get("sub") or claims.get("user_id", "")
+            return claims
+        except Exception as e:
+            logger.error("Failed to decode X-Apigateway-Api-Userinfo: %s", e)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid gateway auth header.",
+            )
+
+    # Direct call (no gateway) — verify the Firebase ID token normally.
     if credentials is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -78,11 +115,12 @@ def require_min_role(endpoint_key: str):
     needing ``app.dependency_overrides``.
     """
     def _check(
+        request: Request,
         credentials: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme),
     ) -> dict:
         # Dynamic module lookup — picks up any patch applied to the attribute.
         _get_user = sys.modules[__name__].get_current_user
-        user = _get_user(credentials)
+        user = _get_user(request, credentials)
 
         user_role     = normalize_role(user.get("role", ""))
         required_role = ENDPOINT_MIN_ROLES.get(endpoint_key, "senior_partner")
