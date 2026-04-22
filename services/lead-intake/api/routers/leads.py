@@ -292,7 +292,7 @@ async def list_leads(
             "phone":           d.get("phone"),
             "marketingSource": d.get("marketingSource"),
             "partnerId":       d.get("partnerId"),
-            "assignedTo":      d.get("assignedTo"),
+            "assignment":      d.get("assignment"),
             "createdAt":       d.get("createdAt"),
             "updatedAt":       d.get("updatedAt"),
         }
@@ -319,23 +319,27 @@ async def bulk_assign(
 ) -> dict:
     body      = await request.json()
     case_ids  = body.get("caseIds", [])
-    assign_to = body.get("assignTo", "")
+    assignment = body.get("assignment", "")
 
-    if not case_ids or not assign_to:
+    if not case_ids or not assignment:
         raise HTTPException(status_code=400, detail={
-            "error": "INVALID_REQUEST", "message": "caseIds and assignTo are required", "details": [],
+            "error": "INVALID_REQUEST", "message": "caseIds and assignment are required", "details": [],
+        })
+    if '@' in assignment:
+        raise HTTPException(status_code=400, detail={
+            "error": "INVALID_REQUEST", "message": "assignment must be a uid not email"
         })
     if len(case_ids) > 100:
         raise HTTPException(status_code=400, detail={
             "error": "INVALID_REQUEST", "message": "Maximum 100 cases per bulk operation", "details": [],
         })
 
-    cfg            = get_settings()
+    cfg= get_settings()
     updated, failed = [], []
     for case_id in case_ids:
         try:
             await db.collection(cfg.firestore_cases_collection).document(case_id).update(
-                {"assignedTo": assign_to, "updatedAt": firestore.SERVER_TIMESTAMP}
+                {"assignment.assignedParalegal": assignment, "assignment.assignmentDate": firestore.SERVER_TIMESTAMP}
             )
             updated.append(case_id)
         except Exception as exc:

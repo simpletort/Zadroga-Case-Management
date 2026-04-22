@@ -1,0 +1,245 @@
+# enrollment.yaml — Cloud Workflows definition for program certification
+# and registration enrollment sub-workflow.
+#
+# Triggered by: workflow-orchestrator (vcf-enrollment workflow) when a case
+# needs to go through the certification + registration pipeline.
+#
+# This workflow uses the GENERIC adapter endpoints exposed by the
+# enrollment-workflow service. The paths use WTC/VCF terminology because
+# the workflow-orchestrator's vcf-enrollment.yaml was written using those
+# terms — the enrollment service provides adapter endpoints at those exact
+# paths that internally delegate to the generic certification/registration logic.
+#
+# Steps:
+#   1. Fetch configurable step parameters from orchestrator config endpoint
+#   2. Check if certification is already complete
+#   3. Trigger certification enrollment workflow if not enrolled
+#   4. Poll for certification completion (Application Pending → Enrolled)
+#   5. Check if registration is already initiated
+#   6. Trigger registration workflow once enrolled
+#   7. Poll for registration completion
+#   8. Fetch deadline dates and return summary
+#
+# Adapter endpoints used (on enrollment-workflow service):
+#   GET  /api/v1/enrollment/wtc-status?case_id={}    → { wtc_enrolled: bool }
+#   PUT  /api/v1/enrollment/wtc-status               → trigger certification
+#   GET  /api/v1/enrollment/vcf-status?case_id={}    → { vcf_registered: bool }
+#   PUT  /api/v1/enrollment/vcf-status               → trigger registration
+#   GET  /api/v1/enrollment/deadlines?case_id={}     → { vcf_submission_deadline }
+#
+# Edge cases:
+#   - Already certified: skip certification, proceed to registration
+#   - Already registered: return early with existing state
+#   - Certification timeout (30 days): escalate with warning
+#   - Registration timeout (60 days): escalate with warning
+
+main:
+  params: [args]
+  steps:
+    - init:
+        assign:
+          - case_id: ${args.case_id}
+          - enrollment_svc_url: ${args.enrollment_service_url}
+          - orchestrator_url: ${args.orchestrator_url}
+          - updated_by: ${"workflow-orchestrator"}
+          - max_cert_wait_days: 30
+          - max_reg_wait_days: 60
+          - poll_interval_seconds: 86400  # 24-hour polling interval
+
+    # ── Step 1: Fetch configurable step parameters ────────────────────────
+    # The orchestrator exposes GET /internal/workflow-step-config/{workflow_id}
+    # which returns task templates and step parameters we can use at runtime.
+    - get_step_config:
+        call: http.get
+        args:
+          url: ${orchestrator_url + "/internal/workflow-step-config/vcf-enrollment"}
+          auth:
+            type: OIDC
+        result: step_config
+        next: check_certification_status
+
+    # ── Step 2: Check current certification status ────────────────────────
+    - check_certification_status:
+        call: http.get
+        args:
+          url: ${enrollment_svc_url + "/api/v1/enrollment/wtc-status"}
+          query:
+            case_id: ${case_id}
+          auth:
+            type: OIDC
+        result: cert_status_response
+
+    - evaluate_cert_status:
+        switch:
+          - condition: ${cert_status_response.body.wtc_enrolled == true}
+            next: check_registration_status   # already enrolled — skip to registration
+          - condition: ${true}
+            next: trigger_certification
+
+    # ── Step 3: Trigger certification enrollment ──────────────────────────
+    - trigger_certification:
+        call: http.put
+        args:
+          url: ${enrollment_svc_url + "/api/v1/enrollment/wtc-status"}
+          auth:
+            type: OIDC
+          headers:
+            Content-Type: application/json
+          body:
+            case_id: ${case_id}
+            action: "initiate_enrollment"
+            updated_by: ${updated_by}
+        result: cert_trigger_response
+
+    - init_cert_poll:
+        assign:
+          - cert_wait_days: 0
+        next: poll_certification_status
+
+    # ── Step 4: Poll for certification completion ─────────────────────────
+    - poll_certification_status:
+        call: http.get
+        args:
+          url: ${enrollment_svc_url + "/api/v1/enrollment/wtc-status"}
+          query:
+            case_id: ${case_id}
+          auth:
+            type: OIDC
+        result: cert_poll_response
+
+    - evaluate_cert_poll:
+        switch:
+          - condition: ${cert_poll_response.body.wtc_enrolled == true}
+            next: check_registration_status
+          - condition: ${cert_wait_days >= max_cert_wait_days}
+            next: certification_timeout
+          - condition: ${true}
+            next: sleep_cert_poll
+
+    - sleep_cert_poll:
+        call: sys.sleep
+        args:
+          seconds: ${poll_interval_seconds}
+        next: increment_cert_wait
+
+    - increment_cert_wait:
+        assign:
+          - cert_wait_days: ${cert_wait_days + 1}
+        next: poll_certification_status
+
+    # ── Step 5: Check current registration status ─────────────────────────
+    - check_registration_status:
+        call: http.get
+        args:
+          url: ${enrollment_svc_url + "/api/v1/enrollment/vcf-status"}
+          query:
+            case_id: ${case_id}
+          auth:
+            type: OIDC
+        result: reg_status_response
+
+    - evaluate_reg_status:
+        switch:
+          - condition: ${reg_status_response.body.vcf_registered == true}
+            next: get_deadline_dates   # already registered — fetch deadline and return
+          - condition: ${true}
+            next: trigger_registration
+
+    # ── Step 6: Trigger registration workflow ─────────────────────────────
+    - trigger_registration:
+        call: http.put
+        args:
+          url: ${enrollment_svc_url + "/api/v1/enrollment/vcf-status"}
+          auth:
+            type: OIDC
+          headers:
+            Content-Type: application/json
+          body:
+            case_id: ${case_id}
+            action: "submit_registration"
+            updated_by: ${updated_by}
+        result: reg_trigger_response
+
+    - init_reg_poll:
+        assign:
+          - reg_wait_days: 0
+        next: poll_registration_status
+
+    # ── Step 7: Poll for registration completion ──────────────────────────
+    - poll_registration_status:
+        call: http.get
+        args:
+          url: ${enrollment_svc_url + "/api/v1/enrollment/vcf-status"}
+          query:
+            case_id: ${case_id}
+          auth:
+            type: OIDC
+        result: reg_poll_response
+
+    - evaluate_reg_poll:
+        switch:
+          - condition: ${reg_poll_response.body.vcf_registered == true}
+            next: get_deadline_dates
+          - condition: ${reg_wait_days >= max_reg_wait_days}
+            next: registration_timeout
+          - condition: ${true}
+            next: sleep_reg_poll
+
+    - sleep_reg_poll:
+        call: sys.sleep
+        args:
+          seconds: ${poll_interval_seconds}
+        next: increment_reg_wait
+
+    - increment_reg_wait:
+        assign:
+          - reg_wait_days: ${reg_wait_days + 1}
+        next: poll_registration_status
+
+    # ── Step 8: Fetch deadline dates ──────────────────────────────────────
+    - get_deadline_dates:
+        call: http.get
+        args:
+          url: ${enrollment_svc_url + "/api/v1/enrollment/deadlines"}
+          query:
+            case_id: ${case_id}
+          auth:
+            type: OIDC
+        result: deadline_response
+
+    - workflow_complete:
+        return:
+          case_id: ${case_id}
+          result: "enrollment_complete"
+          wtc_enrolled: true
+          vcf_registered: ${reg_poll_response.body.vcf_registered}
+          vcf_submission_deadline: ${deadline_response.body.vcf_submission_deadline}
+          message: "Certification enrollment and registration workflow complete."
+
+    # ── Timeout / error returns ───────────────────────────────────────────
+
+    - certification_timeout:
+        steps:
+          - log_cert_timeout:
+              call: sys.log
+              args:
+                text: ${"Certification timeout for case " + case_id + " after " + string(max_cert_wait_days) + " days"}
+                severity: WARNING
+          - return_cert_timeout:
+              return:
+                case_id: ${case_id}
+                result: "certification_timeout"
+                message: ${"Certification not confirmed after " + string(max_cert_wait_days) + " days. Manual review required."}
+
+    - registration_timeout:
+        steps:
+          - log_reg_timeout:
+              call: sys.log
+              args:
+                text: ${"Registration timeout for case " + case_id + " after " + string(max_reg_wait_days) + " days"}
+                severity: WARNING
+          - return_reg_timeout:
+              return:
+                case_id: ${case_id}
+                result: "registration_timeout"
+                message: ${"Registration not confirmed after " + string(max_reg_wait_days) + " days. Attorney review required."}
