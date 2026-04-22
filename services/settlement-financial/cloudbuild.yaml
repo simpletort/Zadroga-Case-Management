@@ -7,8 +7,8 @@ steps:
     args:
       - '-c'
       - |
-        pip install -r requirements.txt pytest --quiet
-        pytest tests/ -v --tb=short
+        pip install -r requirements.txt pytest pytest-asyncio pytest-mock httpx --quiet
+        pytest tests/ -v --tb=short -m "unit"
 
   # 2. Build image
   - name: 'gcr.io/cloud-builders/docker'
