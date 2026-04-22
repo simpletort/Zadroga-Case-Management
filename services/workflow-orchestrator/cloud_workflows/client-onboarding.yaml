@@ -1,0 +1,160 @@
+# SimpleTort - Client Onboarding Workflow
+# Deployed as a GCP Cloud Workflow resource named: client-onboarding
+#
+# Arguments: { case_id: string, client_email: string }
+
+main:
+  params: [args]
+  steps:
+
+    - init:
+        assign:
+          - case_id: ${args.case_id}
+          - client_email: ${args.client_email}
+          - workflow_id: "client-onboarding"
+          - deploy_env: ${sys.get_env("DEPLOY_ENV")}
+          - portal_url: ${"https://client-portal-" + deploy_env + "-" + default(default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed"), "not-deployed")}
+          - ext_sync_url: ${"https://external-sync-" + deploy_env + "-" + default(default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed"), "not-deployed")}
+          - orchestrator_url: ${"https://workflow-orchestrator-" + deploy_env + "-" + default(default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed"), "not-deployed")}
+          - notification_url: ${"https://notification-" + deploy_env + "-" + default(default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed"), "not-deployed")}
+
+    # Fetch configurable step parameters from Firestore via the orchestrator.
+    - fetch_step_config:
+        call: http.get
+        args:
+          url: ${orchestrator_url + "/internal/workflow-step-config/" + workflow_id}
+          auth:
+            type: OIDC
+        result: step_config_response
+
+    - set_config:
+        assign:
+          - config: ${step_config_response.body}
+
+    - create_portal_account:
+        call: http.post
+        args:
+          url: ${portal_url + "/api/v1/portal/auth"}
+          auth:
+            type: OIDC
+          body:
+            case_id: ${case_id}
+            email: ${client_email}
+            action: "create_account"
+        result: portal_response
+
+    - check_portal_created:
+        switch:
+          - condition: ${portal_response.code == 200 or portal_response.code == 201}
+            next: send_retainer
+        next: portal_creation_failed
+
+    - send_retainer:
+        call: http.post
+        args:
+          url: ${ext_sync_url + "/api/v1/integrations/docusign/send-retainer"}
+          auth:
+            type: OIDC
+          body:
+            case_id: ${case_id}
+            client_email: ${client_email}
+            template: ${config.step_parameters.send_retainer.docusign_template_id}
+        result: docusign_response
+
+    - build_document_checklist:
+        call: http.post
+        args:
+          url: ${portal_url + "/api/v1/portal/checklist"}
+          auth:
+            type: OIDC
+          body:
+            case_id: ${case_id}
+            checklist_type: "standard_vcf"
+        result: checklist_response
+
+    - send_welcome_notification:
+        call: http.post
+        args:
+          url: ${notification_url + "/api/v1/notifications/email"}
+          auth:
+            type: OIDC
+          body:
+            template: "client_welcome"
+            case_id: ${case_id}
+            client_email: ${client_email}
+            portal_url: ${portal_response.body.portal_login_url}
+        result: welcome_notify_response
+
+    - send_sms_notification:
+        call: http.post
+        args:
+          url: ${notification_url + "/api/v1/notifications/sms"}
+          auth:
+            type: OIDC
+          body:
+            template: "client_welcome_sms"
+            case_id: ${case_id}
+        result: sms_response
+
+    - wait_for_retainer:
+        call: sys.sleep
+        args:
+          seconds: 60
+
+    - check_retainer_status:
+        call: http.get
+        args:
+          url: ${ext_sync_url + "/api/v1/integrations/status?case_id=" + case_id + "&type=retainer"}
+          auth:
+            type: OIDC
+        result: retainer_status
+
+    - evaluate_retainer:
+        switch:
+          - condition: ${retainer_status.body.signed == true}
+            next: trigger_vcf_enrollment
+        next: send_retainer_followup
+
+    - send_retainer_followup:
+        call: http.post
+        args:
+          url: ${notification_url + "/api/v1/notifications/email"}
+          auth:
+            type: OIDC
+          body:
+            template: "retainer_reminder"
+            case_id: ${case_id}
+            client_email: ${client_email}
+        result: followup_response
+
+    - trigger_vcf_enrollment:
+        call: http.post
+        args:
+          url: ${orchestrator_url + "/api/v1/workflows/trigger"}
+          auth:
+            type: OIDC
+          body:
+            case_id: ${case_id}
+            workflow_type: "vcf-enrollment"
+            triggered_by: "client-onboarding-workflow"
+            arguments:
+              case_id: ${case_id}
+        result: enrollment_trigger_response
+
+    - portal_creation_failed:
+        steps:
+          - build_portal_error_msg:
+              assign:
+                - portal_error_msg: '${"Failed to create portal account for case: " + case_id}'
+          - raise_portal_error:
+              raise:
+                code: 500
+                message: ${portal_error_msg}
+
+    - return_success:
+        return:
+          status: "onboarding_initiated"
+          case_id: ${case_id}
+          client_email: ${client_email}
+          retainer_sent: true
+          checklist_created: true

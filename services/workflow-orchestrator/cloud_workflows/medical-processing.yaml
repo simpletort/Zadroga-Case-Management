@@ -1,0 +1,175 @@
+# SimpleTort – Medical Document Processing Workflow
+# Deployed as a GCP Cloud Workflow resource named: medical-processing
+#
+# Arguments: { case_id: string, document_ids: list[string] }
+#
+# Steps:
+#   1. Submit documents to Evidence Management Service (Document AI OCR)
+#   2. Poll until processing is complete
+#   3. Retrieve AI qualification score from MedLM
+#   4. If score >= threshold → advance case to review
+#   5. If score < threshold → flag for manual attorney review
+#   6. Notify assigned paralegal / attorney
+
+main:
+  params: [args]
+  steps:
+
+    - init:
+        assign:
+          - case_id: ${args.case_id}
+          - document_ids: ${args.document_ids}
+          - workflow_id: "medical-processing"
+          - deploy_env: ${sys.get_env("DEPLOY_ENV")}
+          - evidence_url: ${"https://evidence-management-" + deploy_env + "-" + default(default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed"), "not-deployed")}
+          - case_dev_url: ${"https://case-development-" + deploy_env + "-" + default(default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed"), "not-deployed")}
+          - notification_url: ${"https://notification-" + deploy_env + "-" + default(default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed"), "not-deployed")}
+          - orchestrator_url: ${"https://workflow-orchestrator-" + deploy_env + "-" + default(default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed"), "not-deployed")}
+          - poll_attempts: 0
+          - max_poll_attempts: 20
+          - processing_job_id: ""
+
+    # Fetch configurable step parameters from Firestore via the orchestrator.
+    # This allows non-technical users to edit thresholds without redeploying.
+    - fetch_step_config:
+        call: http.get
+        args:
+          url: ${orchestrator_url + "/internal/workflow-step-config/" + workflow_id}
+          auth:
+            type: OIDC
+        result: step_config_response
+
+    - set_config:
+        assign:
+          - config: ${step_config_response.body}
+
+    - submit_for_processing:
+        call: http.post
+        args:
+          url: ${evidence_url + "/api/v1/documents/process"}
+          auth:
+            type: OIDC
+          body:
+            case_id: ${case_id}
+            document_ids: ${document_ids}
+        result: process_response
+
+    - capture_job_id:
+        assign:
+          - processing_job_id: ${process_response.body.job_id}
+
+    - poll_processing_status:
+        call: http.get
+        args:
+          url: ${evidence_url + "/api/v1/documents/" + processing_job_id + "/summary"}
+          auth:
+            type: OIDC
+        result: status_response
+
+    - check_processing_done:
+        switch:
+          - condition: ${status_response.body.status == "completed"}
+            next: fetch_qualification_score
+          - condition: ${poll_attempts >= max_poll_attempts}
+            next: processing_timeout
+        next: wait_and_retry
+
+    - wait_and_retry:
+        steps:
+          - increment_attempts:
+              assign:
+                - poll_attempts: ${poll_attempts + 1}
+          - sleep:
+              call: sys.sleep
+              args:
+                seconds: 30
+        next: poll_processing_status
+
+    - fetch_qualification_score:
+        call: http.get
+        args:
+          url: ${evidence_url + "/api/v1/documents/" + processing_job_id + "/score"}
+          auth:
+            type: OIDC
+        result: score_response
+
+    - evaluate_score:
+        switch:
+          - condition: ${score_response.body.qualification_score >= config.step_parameters.check_qualification_score.qualification_threshold}
+            next: advance_to_review
+        next: flag_for_manual_review
+
+    - advance_to_review:
+        call: http.put
+        args:
+          url: ${case_dev_url + "/api/v1/cases/" + case_id + "/status"}
+          auth:
+            type: OIDC
+          body:
+            status: "attorney_review"
+            qualification_score: ${score_response.body.qualification_score}
+            updated_by: "workflow-orchestrator"
+        result: status_update_response
+
+    - notify_attorney_review:
+        call: http.post
+        args:
+          url: ${notification_url + "/api/v1/notifications/email"}
+          auth:
+            type: OIDC
+          body:
+            template: "case_ready_for_attorney_review"
+            case_id: ${case_id}
+            qualification_score: ${score_response.body.qualification_score}
+        result: attorney_notify_response
+        next: return_success_high_score
+
+    - flag_for_manual_review:
+        call: http.put
+        args:
+          url: ${case_dev_url + "/api/v1/cases/" + case_id + "/status"}
+          auth:
+            type: OIDC
+          body:
+            status: "manual_review_required"
+            qualification_score: ${score_response.body.qualification_score}
+            flag_reason: "AI score below threshold"
+            updated_by: "workflow-orchestrator"
+        result: manual_review_response
+
+    - notify_manual_review:
+        call: http.post
+        args:
+          url: ${notification_url + "/api/v1/notifications/email"}
+          auth:
+            type: OIDC
+          body:
+            template: "case_manual_review_required"
+            case_id: ${case_id}
+            qualification_score: ${score_response.body.qualification_score}
+        result: manual_notify_response
+        next: return_success_low_score
+
+    - processing_timeout:
+        steps:
+          - build_timeout_msg:
+              assign:
+                - timeout_message: '${"Medical document processing timed out for case: " + case_id}'
+          - raise_timeout:
+              raise:
+                code: 504
+                message: ${timeout_message}
+
+    - return_success_high_score:
+        return:
+          status: "attorney_review"
+          case_id: ${case_id}
+          qualification_score: ${score_response.body.qualification_score}
+          above_threshold: true
+
+    - return_success_low_score:
+        return:
+          status: "manual_review_required"
+          case_id: ${case_id}
+          qualification_score: ${score_response.body.qualification_score}
+          above_threshold: false

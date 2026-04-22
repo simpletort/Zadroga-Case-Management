@@ -1,0 +1,153 @@
+# SimpleTort – WTC / VCF Enrollment Workflow
+# Deployed as a GCP Cloud Workflow resource named: vcf-enrollment
+#
+# Arguments: { case_id: string }
+#
+# Steps:
+#   1. Fetch current enrollment status from Enrollment Workflow Service
+#   2. Ensure WTC Health Program is enrolled (prerequisite for VCF)
+#   3. Submit VCF registration if not already done
+#   4. Calculate and store enrollment deadlines
+#   5. Schedule deadline alerts via Workflow Orchestrator Cloud Tasks
+
+main:
+  params: [args]
+  steps:
+
+    - init:
+        assign:
+          - case_id: ${args.case_id}
+          - workflow_id: "vcf-enrollment"
+          - deploy_env: ${sys.get_env("DEPLOY_ENV")}
+          - enrollment_url: ${"https://enrollment-workflow-" + deploy_env + "-" + default(default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed"), "not-deployed")}
+          - orchestrator_url: ${"https://workflow-orchestrator-" + deploy_env + "-" + default(default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed"), "not-deployed")}
+          - notification_url: ${"https://notification-" + deploy_env + "-" + default(default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed"), "not-deployed")}
+
+    # Fetch configurable step parameters from Firestore via the orchestrator.
+    - fetch_step_config:
+        call: http.get
+        args:
+          url: ${orchestrator_url + "/internal/workflow-step-config/" + workflow_id}
+          auth:
+            type: OIDC
+        result: step_config_response
+
+    - set_config:
+        assign:
+          - config: ${step_config_response.body}
+
+    - fetch_enrollment_status:
+        call: http.get
+        args:
+          url: ${enrollment_url + "/api/v1/enrollment/wtc-status?case_id=" + case_id}
+          auth:
+            type: OIDC
+        result: wtc_response
+
+    - check_wtc_enrolled:
+        switch:
+          - condition: ${wtc_response.body.wtc_enrolled == true}
+            next: check_vcf_status
+        next: initiate_wtc_enrollment
+
+    - initiate_wtc_enrollment:
+        call: http.put
+        args:
+          url: ${enrollment_url + "/api/v1/enrollment/wtc-status"}
+          auth:
+            type: OIDC
+          body:
+            case_id: ${case_id}
+            action: "initiate_enrollment"
+            updated_by: "workflow-orchestrator"
+        result: wtc_init_response
+
+    - notify_wtc_action_required:
+        call: http.post
+        args:
+          url: ${notification_url + "/api/v1/notifications/email"}
+          auth:
+            type: OIDC
+          body:
+            template: "wtc_enrollment_required"
+            case_id: ${case_id}
+        result: wtc_notify_response
+
+    - check_vcf_status:
+        call: http.get
+        args:
+          url: ${enrollment_url + "/api/v1/enrollment/vcf-status?case_id=" + case_id}
+          auth:
+            type: OIDC
+        result: vcf_response
+
+    - evaluate_vcf_status:
+        switch:
+          - condition: ${vcf_response.body.vcf_registered == true}
+            next: fetch_deadlines
+        next: submit_vcf_registration
+
+    - submit_vcf_registration:
+        call: http.put
+        args:
+          url: ${enrollment_url + "/api/v1/enrollment/vcf-status"}
+          auth:
+            type: OIDC
+          body:
+            case_id: ${case_id}
+            action: "submit_registration"
+            updated_by: "workflow-orchestrator"
+        result: vcf_submit_response
+
+    - notify_vcf_submitted:
+        call: http.post
+        args:
+          url: ${notification_url + "/api/v1/notifications/email"}
+          auth:
+            type: OIDC
+          body:
+            template: "vcf_registration_submitted"
+            case_id: ${case_id}
+        result: vcf_notify_response
+
+    - fetch_deadlines:
+        call: http.get
+        args:
+          url: ${enrollment_url + "/api/v1/enrollment/deadlines?case_id=" + case_id}
+          auth:
+            type: OIDC
+        result: deadlines_response
+
+    - schedule_wtc_deadline_alerts:
+        call: http.post
+        args:
+          url: ${orchestrator_url + "/internal/deadline-alerts"}
+          auth:
+            type: OIDC
+          body:
+            case_id: ${case_id}
+            deadline_type: "wtc"
+            deadline: ${deadlines_response.body.wtc_deadline}
+            days_remaining: 90
+        result: wtc_alert_response
+
+    - schedule_vcf_deadline_alerts:
+        call: http.post
+        args:
+          url: ${orchestrator_url + "/internal/deadline-alerts"}
+          auth:
+            type: OIDC
+          body:
+            case_id: ${case_id}
+            deadline_type: "vcf"
+            deadline: ${deadlines_response.body.vcf_submission_deadline}
+            days_remaining: 90
+        result: vcf_alert_response
+
+    - return_success:
+        return:
+          status: "enrollment_tracked"
+          case_id: ${case_id}
+          wtc_enrolled: ${wtc_response.body.wtc_enrolled}
+          vcf_registered: ${vcf_response.body.vcf_registered}
+          deadlines: ${deadlines_response.body}

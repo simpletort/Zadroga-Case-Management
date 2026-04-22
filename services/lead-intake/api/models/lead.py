@@ -164,6 +164,13 @@ class ErrorResponse(BaseModel):
 
 # ── Firestore document model ──────────────────────────────────────────────────
 
+
+class Assignment(BaseModel):
+    assignedAdmin : Optional[str] = None,
+    assignedAttorney : Optional[str] = None,
+    assignedParalegal : Optional[str] = None,
+    assignmentDate : Optional[datetime] = None
+        
 class CaseDocument(BaseModel):
     """
     Mirrors a Firestore /cases/{caseId} document.
@@ -191,8 +198,11 @@ class CaseDocument(BaseModel):
     referralCode:    Optional[str] = None
     partnerId:       str
 
+    #Assignment
+    assignment: Optional[Assignment] = None
+
     # Workflow
-    assignedTo:          Optional[str]      = None
+    #assignedTo:          Optional[str]      = None
     portalLoginAt:       Optional[datetime] = None
     followupTaskCreated: bool               = False
     followupTaskId:      Optional[str]      = None

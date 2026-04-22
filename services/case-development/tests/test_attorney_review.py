@@ -253,7 +253,9 @@ class TestGetReviewQueue:
         no_dl   = _case_snap(case_id="ZAD-2026-04-0003", vcf_deadline=None)
 
         db     = _make_queue_db([overdue, future, no_dl])
-        result = self._call(db)
+        with patch("app.services.attorney_review_service.datetime") as mock_dt:
+            mock_dt.now.return_value = _NOW
+            result = self._call(db)
 
         assert result["overdue_count"] == 1
 

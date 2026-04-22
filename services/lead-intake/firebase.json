@@ -1,0 +1,7 @@
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "database": "simpletort-dev",
+    "indexes": "firestore.indexes.json"
+  }
+}

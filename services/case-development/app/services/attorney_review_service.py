@@ -27,6 +27,10 @@ from fastapi import HTTPException, status
 from google.cloud import firestore
 
 from app.utils.roles import normalize_role
+from app.utils.decision_audit import (
+    write_decision_audit_event,
+    DECISION_TYPE_APPROVE_FOR_FILING,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -280,6 +284,24 @@ def _approve_single(
             "taskIds":        task_ids,
         },
     })
+
+    # ── 5. Decision audit (immutable cross-case record) ───────────────────────
+    write_decision_audit_event(
+        batch=batch,
+        db=db,
+        event_id=timeline_id,
+        case_id=case_id,
+        decision_type=DECISION_TYPE_APPROVE_FOR_FILING,
+        event_type="StatusChange",
+        performed_by=actor_uid,
+        performed_by_name=actor_name,
+        performed_by_role=actor_role,
+        timestamp=now,
+        previous_status=REVIEW_STATUS,
+        new_status=APPROVED_STATUS,
+        notes=notes,
+        case_submitted_for_review_at=case_data.get("submittedForReviewAt"),
+    )
 
     batch.commit()
 
