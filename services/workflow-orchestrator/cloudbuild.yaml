@@ -57,7 +57,7 @@ steps:
       - "--region=$_REGION"
       - "--platform=managed"
       - "--no-allow-unauthenticated"
-      - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,ENV=$_ENV"
+      - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,ENVIRONMENT=$_ENV"
       - "--memory=512Mi"
       - "--cpu=1"
       - "--max-instances=10"

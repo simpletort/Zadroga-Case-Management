@@ -22,10 +22,10 @@ class Settings(BaseSettings):
 
     # Cloud Tasks queue
     cloud_tasks_queue: str = "workflow-deadlines"
-    cloud_tasks_service_url: str  # URL of this Cloud Run service
+    cloud_tasks_service_url: Optional[str] = None  # URL of this Cloud Run service; set after first deploy
 
     # Cloud Workflows
-    workflows_location: str = "us-east1"
+    workflows_location: str = "us-central1"
 
     # Service identity (for service-to-service auth)
     service_account_email: Optional[str] = None
