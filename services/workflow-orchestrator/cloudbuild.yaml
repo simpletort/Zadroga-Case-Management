@@ -10,7 +10,7 @@ substitutions:
   _REGION: us-east1
   _REPO: us-east1-docker.pkg.dev/${PROJECT_ID}/simpletort
   _ENV: production
-  _FIRESTORE_DATABASE_ID: (default)
+  _CLOUDBUILD_SA: 292736139819@cloudbuild.gserviceaccount.com
 
 steps:
 
@@ -76,7 +76,7 @@ steps:
           gcloud workflows deploy "$name" \
             --location=$_REGION \
             --source="$f" \
-            --service-account=workflow-orchestrator@${PROJECT_ID}.iam.gserviceaccount.com
+            --service-account=$_CLOUDBUILD_SA
         done
 
 images:
