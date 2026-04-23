@@ -5,12 +5,6 @@
 # Builds → tests → pushes image → deploys to Cloud Run.
 # ---------------------------------------------------------------------------
 
-substitutions:
-  _SERVICE_NAME: workflow-orchestrator
-  _REGION: us-east1
-  _REPO: us-east1-docker.pkg.dev/${PROJECT_ID}/simpletort
-  _ENV: production
-  _CLOUDBUILD_SA: 292736139819@cloudbuild.gserviceaccount.com
 
 steps:
 
@@ -76,7 +70,7 @@ steps:
           gcloud workflows deploy "$name" \
             --location=$_REGION \
             --source="$f" \
-            --service-account=$_CLOUDBUILD_SA
+            --service-account=$_WORKFLOWS_SA
         done
 
 images:
