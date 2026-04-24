@@ -508,6 +508,445 @@ paths:
         401:
           description: Unauthorized
 
+  # --- Rejection ---
+
+  /api/v1/cases/{caseId}/reject:
+    post:
+      summary: "Reject a case from Pending Attorney Review (min role: junior_partner)"
+      operationId: rejectCase
+      parameters:
+        - { name: caseId, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Case rejected
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient role
+
+  /api/v1/cases/{caseId}/resubmit:
+    post:
+      summary: "Resubmit a rejected case back to Pending Paralegal Review (min role: paralegal)"
+      operationId: resubmitCase
+      parameters:
+        - { name: caseId, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Case resubmitted
+        401:
+          description: Unauthorized
+
+  # --- Decision Audit ---
+
+  /api/v1/audit/decisions:
+    get:
+      summary: "Query all decisions across cases (min role: junior_partner)"
+      operationId: listAuditDecisions
+      parameters:
+        - { name: case_id, in: query, type: string }
+        - { name: performed_by, in: query, type: string }
+        - { name: date_from, in: query, type: string }
+        - { name: date_to, in: query, type: string }
+        - { name: decision_type, in: query, type: string }
+        - { name: page, in: query, type: integer }
+        - { name: page_size, in: query, type: integer }
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Paginated decision records
+        401:
+          description: Unauthorized
+
+  /api/v1/cases/{caseId}/audit/decisions:
+    get:
+      summary: "Chronological decision history for a single case (min role: junior_partner)"
+      operationId: getCaseAuditDecisions
+      parameters:
+        - { name: caseId, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Decision history
+        401:
+          description: Unauthorized
+
+  /api/v1/audit/decisions/metrics:
+    get:
+      summary: "Time-to-decision metrics (min role: junior_partner)"
+      operationId: getAuditDecisionMetrics
+      parameters:
+        - { name: decision_type, in: query, type: string }
+        - { name: attorney, in: query, type: string }
+        - { name: date_from, in: query, type: string }
+        - { name: date_to, in: query, type: string }
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Metrics
+        401:
+          description: Unauthorized
+
+  /api/v1/audit/decisions/report:
+    get:
+      summary: "Compliance audit export — all decisions chronological (min role: senior_partner)"
+      operationId: exportAuditDecisions
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Full audit report
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient role
+
+  # ============================================================
+  # LEAD INTAKE SERVICE
+  # Cloud Run: https://lead-intake-292736139819.us-central1.run.app
+  # External partner endpoints use Partner JWT (not Firebase JWT).
+  # Internal task handler uses Cloud Tasks OIDC — gateway passes through,
+  # backend enforces its own auth.
+  # Admin/partner-management endpoints require senior_partner or system_admin.
+  # ============================================================
+
+  # --- Leads ---
+
+  /api/v1/leads:
+    post:
+      summary: Ingest a new lead from a marketing partner
+      operationId: createLead
+      security: []
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        201:
+          description: Lead created
+        400:
+          description: Validation error
+        409:
+          description: Duplicate lead
+        429:
+          description: Rate limit exceeded
+    get:
+      summary: "List leads with filters and pagination (min role: paralegal)"
+      operationId: listLeads
+      parameters:
+        - { name: status, in: query, type: string }
+        - { name: vcfEligibility, in: query, type: string }
+        - { name: source, in: query, type: string }
+        - { name: dateFrom, in: query, type: string }
+        - { name: dateTo, in: query, type: string }
+        - { name: search, in: query, type: string }
+        - { name: pageSize, in: query, type: integer }
+        - { name: pageToken, in: query, type: string }
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Paginated lead list
+        401:
+          description: Unauthorized
+
+  /api/v1/leads/bulk-assign:
+    post:
+      summary: "Bulk assign up to 100 leads to a staff member (min role: admin_staff)"
+      operationId: bulkAssignLeads
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Assignments updated
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient role
+
+  /api/v1/leads/export/csv:
+    get:
+      summary: "Export filtered leads as CSV — max 5,000 rows (min role: paralegal)"
+      operationId: exportLeadsCsv
+      parameters:
+        - { name: status, in: query, type: string }
+        - { name: vcfEligibility, in: query, type: string }
+        - { name: dateFrom, in: query, type: string }
+        - { name: dateTo, in: query, type: string }
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: CSV file download
+        401:
+          description: Unauthorized
+
+  /api/v1/leads/internal/tasks/followup:
+    post:
+      summary: "Cloud Tasks handler — 48h follow-up trigger (internal, Cloud Tasks OIDC)"
+      operationId: leadFollowupTask
+      security: []
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app/api/v1/leads/internal/tasks/followup
+        path_translation: CONSTANT_ADDRESS
+      responses:
+        200:
+          description: Follow-up task processed
+
+  /api/v1/leads/{lead_id}:
+    get:
+      summary: "Get full case detail for a lead (min role: paralegal)"
+      operationId: getLead
+      parameters:
+        - { name: lead_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Lead detail
+        401:
+          description: Unauthorized
+        404:
+          description: Not found
+
+  /api/v1/leads/{lead_id}/status:
+    patch:
+      summary: "Update case status (min role: admin_staff)"
+      operationId: updateLeadStatus
+      parameters:
+        - { name: lead_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Status updated
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient role
+
+  # --- Partner Management ---
+
+  /api/v1/admin/partners:
+    post:
+      summary: "Create a new marketing partner (min role: senior_partner)"
+      operationId: createPartner
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        201:
+          description: Partner created
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient role
+    get:
+      summary: "List all partners with usage stats (min role: senior_partner)"
+      operationId: listPartners
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Partner list
+        401:
+          description: Unauthorized
+
+  /api/v1/admin/partners/{partner_id}/keys:
+    post:
+      summary: "Generate a new API key for a partner (min role: senior_partner)"
+      operationId: createPartnerKey
+      parameters:
+        - { name: partner_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        201:
+          description: API key created — raw key returned once
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient role
+
+  /api/v1/admin/partners/{partner_id}/keys/{key_id}:
+    delete:
+      summary: "Revoke a partner API key (min role: senior_partner)"
+      operationId: revokePartnerKey
+      parameters:
+        - { name: partner_id, in: path, required: true, type: string }
+        - { name: key_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Key revoked
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient role
+
+  /api/v1/admin/partners/{partner_id}/stats:
+    get:
+      summary: "Partner usage stats — request count, last request, active keys (min role: senior_partner)"
+      operationId: getPartnerStats
+      parameters:
+        - { name: partner_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Partner stats
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient role
+
+  # ============================================================
+  # NOTIFICATION SERVICE
+  # Cloud Run: https://notification-dev-292736139819.us-central1.run.app
+  # /tasks/*     — Cloud Tasks OIDC auth (security: [], backend enforces)
+  # /webhooks/*  — Twilio signature auth (security: [], backend enforces)
+  # /internal/*  — OIDC auth (security: [], backend enforces)
+  # ============================================================
+
+  # --- SMS / Email Task Handlers ---
+
+  /tasks/sms:
+    post:
+      summary: "Cloud Tasks handler — dispatch SMS via Twilio (Cloud Tasks OIDC)"
+      operationId: smsTaskHandler
+      security: []
+      x-google-backend:
+        address: https://notification-dev-292736139819.us-central1.run.app/tasks/sms
+        path_translation: CONSTANT_ADDRESS
+      responses:
+        200:
+          description: Task processed (outcome recorded in Firestore)
+
+  /tasks/email:
+    post:
+      summary: "Cloud Tasks handler — dispatch email via SendGrid (Cloud Tasks OIDC)"
+      operationId: emailTaskHandler
+      security: []
+      x-google-backend:
+        address: https://notification-dev-292736139819.us-central1.run.app/tasks/email
+        path_translation: CONSTANT_ADDRESS
+      responses:
+        200:
+          description: Task processed
+
+  # --- Internal Email ---
+
+  /internal/email/preview:
+    post:
+      summary: "Render email template without sending — returns subject, HTML, SMS text (OIDC)"
+      operationId: previewEmail
+      security: []
+      x-google-backend:
+        address: https://notification-dev-292736139819.us-central1.run.app/internal/email/preview
+        path_translation: CONSTANT_ADDRESS
+      responses:
+        200:
+          description: Rendered template
+
+  /internal/email/send:
+    post:
+      summary: "Synchronous email dispatch — for immediate confirmation flows (OIDC)"
+      operationId: sendEmailSync
+      security: []
+      x-google-backend:
+        address: https://notification-dev-292736139819.us-central1.run.app/internal/email/send
+        path_translation: CONSTANT_ADDRESS
+      responses:
+        200:
+          description: Email dispatched
+
+  /internal/email/enqueue:
+    post:
+      summary: "Async email via Cloud Tasks — production send path, returns immediately (OIDC)"
+      operationId: enqueueEmail
+      security: []
+      x-google-backend:
+        address: https://notification-dev-292736139819.us-central1.run.app/internal/email/enqueue
+        path_translation: CONSTANT_ADDRESS
+      responses:
+        200:
+          description: Email enqueued
+
+  # --- Twilio Webhooks ---
+
+  /webhooks/twilio/status:
+    post:
+      summary: "Twilio status callback — updates delivery record (Twilio signature auth)"
+      operationId: twilioStatusCallback
+      security: []
+      x-google-backend:
+        address: https://notification-dev-292736139819.us-central1.run.app/webhooks/twilio/status
+        path_translation: CONSTANT_ADDRESS
+      responses:
+        204:
+          description: Acknowledged
+
+  /webhooks/twilio/inbound:
+    post:
+      summary: "Inbound SMS handler — manages STOP/START/HELP opt-out (Twilio signature auth)"
+      operationId: twilioInboundSms
+      security: []
+      x-google-backend:
+        address: https://notification-dev-292736139819.us-central1.run.app/webhooks/twilio/inbound
+        path_translation: CONSTANT_ADDRESS
+      responses:
+        200:
+          description: Response TwiML
+
+  # --- Document Reminder Scheduling ---
+
+  /internal/reminders/schedule:
+    post:
+      summary: "Schedule 48h and 7-day document reminder SMS tasks (OIDC)"
+      operationId: scheduleReminders
+      security: []
+      x-google-backend:
+        address: https://notification-dev-292736139819.us-central1.run.app/internal/reminders/schedule
+        path_translation: CONSTANT_ADDRESS
+      responses:
+        200:
+          description: Reminder tasks enqueued
+
+  /internal/reminders/{case_id}:
+    delete:
+      summary: "Cancel pending reminder tasks when client uploads all documents (OIDC)"
+      operationId: cancelReminders
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://notification-dev-292736139819.us-central1.run.app/internal/reminders/{case_id}
+        path_translation: CONSTANT_ADDRESS
+      responses:
+        200:
+          description: Reminders cancelled
+
 securityDefinitions:
   firebase:
     authorizationUrl: ""
