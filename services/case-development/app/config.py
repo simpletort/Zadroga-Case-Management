@@ -15,10 +15,7 @@ class Settings(BaseSettings):
     firebase_service_account_key_path: str = "/secrets/firebase-sa-key.json"
     environment: str = "production"
     log_level: str = "INFO"
-    allowed_origins: str =  [
-  "https://simpletort-zadroga-dev.web.app",
-  "https://simpletort-zadroga-dev.firebaseapp.com"
-]
+    allowed_origins: str = "https://staff.simpletort.com"
 
     model_config = {"env_file": _ENV_FILE, "case_sensitive": False}
 
