@@ -15,11 +15,10 @@
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Query
 
 from app.models.dashboard import DashboardResponse, DashboardSummary, DashboardPage, CaseSummary
 from app.services.dashboard_service import get_dashboard
-from app.utils.auth import require_min_role
 from app.utils.firestore import get_firestore_client
 
 router = APIRouter(prefix="/api/v1", tags=["Paralegal Dashboard"])
@@ -63,12 +62,11 @@ def paralegal_dashboard(
     sort_dir: str = Query(default="desc", pattern="^(asc|desc)$"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
-    user: dict = Depends(require_min_role("dashboard_view")),
 ):
     db = get_firestore_client()
     result = get_dashboard(
         db=db,
-        user=user,
+        user={},
         statuses=statuses,
         case_type=case_type,
         assignees=assignees,

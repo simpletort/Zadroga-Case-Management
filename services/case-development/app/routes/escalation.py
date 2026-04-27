@@ -3,7 +3,7 @@
 #   GET  /api/v1/attorney/escalation-queue           — senior partner queue       (min: senior_partner)
 #   POST /api/v1/cases/{caseId}/escalation-decision  — approve / reject / return  (min: senior_partner)
 
-from fastapi import APIRouter, Depends, Path, Query
+from fastapi import APIRouter, Path, Query
 
 from app.models.escalation import (
     EscalateRequest,
@@ -19,9 +19,7 @@ from app.services.escalation_service import (
     escalate_case,
     get_escalation_queue,
 )
-from app.utils.auth import require_min_role
 from app.utils.firestore import get_firestore_client
-from app.utils.roles import normalize_role
 
 router = APIRouter(prefix="/api/v1", tags=["Escalation"])
 
@@ -37,14 +35,13 @@ router = APIRouter(prefix="/api/v1", tags=["Escalation"])
 def post_escalate_case(
     body: EscalateRequest,
     caseId: str = Path(..., description="Case ID (e.g. ZAD-2024-01-0001)"),
-    user: dict = Depends(require_min_role("case_escalate")),
 ):
     db     = get_firestore_client()
     result = escalate_case(
         db=db,
         case_id=caseId,
-        actor_uid=user["uid"],
-        actor_role=normalize_role(user.get("role", "")),
+        actor_uid="system",
+        actor_role="",
         reason=body.reason,
         notes=body.notes,
     )
@@ -59,10 +56,9 @@ def post_escalate_case(
 def get_senior_escalation_queue(
     page: int = Query(default=1, ge=1, description="Page number"),
     page_size: int = Query(default=20, ge=1, le=100, description="Items per page"),
-    user: dict = Depends(require_min_role("escalation_queue")),
 ):
     db     = get_firestore_client()
-    result = get_escalation_queue(db=db, user=user, page=page, page_size=page_size)
+    result = get_escalation_queue(db=db, user={}, page=page, page_size=page_size)
 
     page_data = result["page"]
     return EscalationQueueResponse(
@@ -87,14 +83,13 @@ def get_senior_escalation_queue(
 def post_escalation_decision(
     body: EscalationDecideRequest,
     caseId: str = Path(..., description="Case ID (e.g. ZAD-2024-01-0001)"),
-    user: dict = Depends(require_min_role("escalation_decide")),
 ):
     db     = get_firestore_client()
     result = decide_escalation(
         db=db,
         case_id=caseId,
-        actor_uid=user["uid"],
-        actor_role=normalize_role(user.get("role", "")),
+        actor_uid="system",
+        actor_role="",
         decision=body.decision,
         notes=body.notes,
     )

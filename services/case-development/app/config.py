@@ -12,7 +12,6 @@ _ENV_FILE = f".env.{_ENV}" if _ENV != "production" else ".env.production"
 class Settings(BaseSettings):
     gcp_project_id: str = "simpletort-prod"
     firestore_database_id: str = "(default)"
-    firebase_service_account_key_path: str = "/secrets/firebase-sa-key.json"
     environment: str = "production"
     log_level: str = "INFO"
     allowed_origins: str = "https://staff.simpletort.com"
