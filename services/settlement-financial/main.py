@@ -88,7 +88,19 @@ from models.settlement import (
     LoanUpdateRequest,
     SavedCalculation,
 )
+from models.fee_config import (
+    CaseFeeOverride,
+    CaseFeeOverrideRequest,
+    FeeCalculationDetail,
+    FeeConfigAuditEntry,
+    FeeConfigAuditResponse,
+    FeeConfigData,
+    FeePreviewRequest,
+    FirmFeeConfig,
+    FirmFeeConfigRequest,
+)
 from services.calculator import run_calculation
+from services.fee_calculator import calculate_attorney_fee
 from services.firestore_client import get_db
 
 logger = get_logger(__name__)
@@ -96,6 +108,9 @@ logger = get_logger(__name__)
 # Single settlement subcollection — inputs doc + calculation docs
 _SETTLEMENT_SUB = "settlement"
 _INPUTS_DOC     = "inputs"
+
+# Documents inside settlement/ that are NOT saved calculations
+_SETTLEMENT_RESERVED = {"inputs", "expenses", "liens", "loans", "disbursements", "fee_override"}
 
 
 # ── Firestore reference helpers ───────────────────────────────────────────────
@@ -120,6 +135,15 @@ def _loans_ref(db, case_id: str):
 
 def _disbursements_ref(db, case_id: str):
     return _settlement_ref(db, case_id).document("disbursements")
+
+def _case_fee_override_ref(db, case_id: str):
+    return _settlement_ref(db, case_id).document("fee_override")
+
+def _firm_fee_config_ref(db):
+    return db.collection("firmSettings").document("fee_config")
+
+def _fee_audit_ref(db):
+    return db.collection("firmSettings").document("fee_config").collection("audit")
 
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
@@ -502,7 +526,7 @@ async def list_calculations(
 
     docs = []
     async for doc in _calcs_ref(db, case_id).stream():
-        if doc.id == _INPUTS_DOC:
+        if doc.id in _SETTLEMENT_RESERVED:
             continue
         docs.append(_doc_to_saved(doc.id, doc.to_dict()))
 
@@ -522,7 +546,7 @@ async def get_latest_calculation(case_id: str = Path(..., description="Case ID")
     db   = get_db()
     docs = []
     async for doc in _calcs_ref(db, case_id).stream():
-        if doc.id == _INPUTS_DOC:
+        if doc.id in _SETTLEMENT_RESERVED:
             continue
         docs.append(_doc_to_saved(doc.id, doc.to_dict()))
 
@@ -923,6 +947,353 @@ async def list_disbursements(case_id: str = Path(..., description="Case ID")):
     items         = snap.to_dict().get("items", [])
     disbursements = [_doc_to_disbursement(i["disbursementId"], i) for i in items]
     return DisbursementListResponse(case_id=case_id, total=len(disbursements), disbursements=disbursements)
+
+
+# ── Fee config Firestore converters ──────────────────────────────────────────
+
+def _doc_to_fee_config_data(data: dict) -> FeeConfigData:
+    from models.fee_config import FeeStructureType, FeeCapType, GraduatedTier
+    tiers = [
+        GraduatedTier(
+            up_to=Decimal(t["up_to"]) if t.get("up_to") else None,
+            percentage=Decimal(t["percentage"]),
+        )
+        for t in data.get("graduated_tiers", [])
+    ]
+    return FeeConfigData(
+        structure_type  = FeeStructureType(data.get("structure_type", "flat")),
+        flat_percentage = Decimal(data["flat_percentage"]) if data.get("flat_percentage") else None,
+        graduated_tiers = tiers,
+        cap_type        = FeeCapType(data.get("cap_type", "none")),
+        cap_amount      = Decimal(data["cap_amount"]) if data.get("cap_amount") else None,
+        cap_percentage  = Decimal(data["cap_percentage"]) if data.get("cap_percentage") else None,
+    )
+
+
+def _fee_config_data_to_doc(config: FeeConfigData) -> dict:
+    return {
+        "structure_type":  config.structure_type.value,
+        "flat_percentage": str(config.flat_percentage) if config.flat_percentage is not None else None,
+        "graduated_tiers": [
+            {"up_to": str(t.up_to) if t.up_to is not None else None, "percentage": str(t.percentage)}
+            for t in config.graduated_tiers
+        ],
+        "cap_type":        config.cap_type.value,
+        "cap_amount":      str(config.cap_amount)    if config.cap_amount    is not None else None,
+        "cap_percentage":  str(config.cap_percentage) if config.cap_percentage is not None else None,
+    }
+
+
+def _doc_to_firm_fee_config(data: dict) -> FirmFeeConfig:
+    return FirmFeeConfig(
+        config_id      = data["config_id"],
+        config         = _doc_to_fee_config_data(data),
+        effective_date = _to_dt(data.get("effective_date")) or datetime.now(tz=timezone.utc),
+        notes          = data.get("notes"),
+        updated_by     = data.get("updated_by", ""),
+        updated_at     = _to_dt(data.get("updated_at")) or datetime.now(tz=timezone.utc),
+    )
+
+
+def _doc_to_audit_entry(doc_id: str, data: dict) -> FeeConfigAuditEntry:
+    return FeeConfigAuditEntry(
+        audit_id        = doc_id,
+        changed_at      = _to_dt(data.get("changed_at")) or datetime.now(tz=timezone.utc),
+        changed_by      = data.get("changed_by", ""),
+        previous_config = _doc_to_fee_config_data(data["previous_config"]) if data.get("previous_config") else None,
+        new_config      = _doc_to_fee_config_data(data["new_config"]),
+        notes           = data.get("notes"),
+    )
+
+
+def _doc_to_case_fee_override(case_id: str, data: dict) -> CaseFeeOverride:
+    return CaseFeeOverride(
+        case_id = case_id,
+        config  = _doc_to_fee_config_data(data),
+        reason  = data.get("reason", ""),
+        set_by  = data.get("set_by", ""),
+        set_at  = _to_dt(data.get("set_at")) or datetime.now(tz=timezone.utc),
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FEE CONFIGURATION ROUTES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ── Firm-wide fee config ──────────────────────────────────────────────────────
+
+@app.get(
+    "/api/v1/fee-config",
+    response_model=FirmFeeConfig,
+    status_code=status.HTTP_200_OK,
+    summary="Get current firm-wide fee configuration",
+    tags=["Fee Configuration"],
+)
+async def get_firm_fee_config():
+    """
+    Returns the current firm-wide attorney fee configuration.
+    Returns **404** if no configuration has been set yet.
+    """
+    db  = get_db()
+    doc = await _firm_fee_config_ref(db).get()
+    if not doc.exists:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No firm fee configuration found. Use PUT /api/v1/fee-config to create one.",
+        )
+    return _doc_to_firm_fee_config(doc.to_dict())
+
+
+@app.put(
+    "/api/v1/fee-config",
+    response_model=FirmFeeConfig,
+    status_code=status.HTTP_200_OK,
+    summary="Create or update firm-wide fee configuration",
+    tags=["Fee Configuration"],
+)
+async def upsert_firm_fee_config(request: FirmFeeConfigRequest):
+    """
+    Set the firm-wide default attorney fee structure.  Supports flat percentage,
+    graduated tiers, and optional fee caps.  Every change is written to the
+    audit log at ``firm_settings/fee_config/audit/{uuid}``.
+    """
+    db         = get_db()
+    config_ref = _firm_fee_config_ref(db)
+    audit_ref  = _fee_audit_ref(db)
+
+    # Read existing config for audit trail
+    existing_doc  = await config_ref.get()
+    previous_data = existing_doc.to_dict() if existing_doc.exists else None
+
+    config_id      = str(uuid.uuid4())
+    effective_date = request.effective_date or datetime.now(tz=timezone.utc)
+
+    doc_data = {
+        "config_id":      config_id,
+        "effective_date": effective_date,
+        "notes":          request.notes,
+        "updated_by":     request.updated_by,
+        "updated_at":     _fs.SERVER_TIMESTAMP,
+        **_fee_config_data_to_doc(request.config),
+    }
+    await config_ref.set(doc_data)
+
+    # Write audit entry
+    audit_id   = str(uuid.uuid4())
+    audit_data = {
+        "audit_id":        audit_id,
+        "changed_at":      _fs.SERVER_TIMESTAMP,
+        "changed_by":      request.updated_by,
+        "previous_config": _fee_config_data_to_doc(_doc_to_fee_config_data(previous_data))
+                           if previous_data else None,
+        "new_config":      _fee_config_data_to_doc(request.config),
+        "notes":           request.notes,
+    }
+    await audit_ref.document(audit_id).set(audit_data)
+    logger.info("firm_fee_config_updated", config_id=config_id, updated_by=request.updated_by)
+
+    snap = await config_ref.get()
+    return _doc_to_firm_fee_config(snap.to_dict())
+
+
+@app.get(
+    "/api/v1/fee-config/audit",
+    response_model=FeeConfigAuditResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get fee configuration audit trail",
+    tags=["Fee Configuration"],
+)
+async def get_fee_config_audit(limit: int = 20):
+    """
+    Returns the history of all firm-wide fee configuration changes,
+    newest first.  Useful for compliance and change tracking.
+    """
+    limit = min(limit, 100)
+    db    = get_db()
+
+    entries = []
+    async for doc in _fee_audit_ref(db).stream():
+        entries.append(_doc_to_audit_entry(doc.id, doc.to_dict()))
+
+    entries.sort(key=lambda e: e.changed_at, reverse=True)
+    return FeeConfigAuditResponse(total=len(entries), entries=entries[:limit])
+
+
+# ── Real-time fee preview ─────────────────────────────────────────────────────
+
+@app.post(
+    "/api/v1/fee-config/calculate",
+    response_model=FeeCalculationDetail,
+    status_code=status.HTTP_200_OK,
+    summary="Preview attorney fee for a given award (not saved)",
+    tags=["Fee Configuration"],
+)
+async def preview_fee(request: FeePreviewRequest):
+    """
+    Instantly compute the attorney fee for *gross_award*.
+
+    - If **config** is supplied in the body, that config is used directly
+      (labelled ``manual``).
+    - Otherwise, the firm-wide default is fetched and applied
+      (labelled ``firm_default``).
+
+    Returns **404** if no config supplied and no firm default has been set.
+    Returns **422** if *gross_award* ≤ 0.
+    """
+    db = get_db()
+
+    if request.config is not None:
+        config = request.config
+        label  = "manual"
+    else:
+        doc = await _firm_fee_config_ref(db).get()
+        if not doc.exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No firm fee configuration found. "
+                       "Pass a 'config' in the request body or set a firm default first.",
+            )
+        config = _doc_to_fee_config_data(doc.to_dict())
+        label  = "firm_default"
+
+    try:
+        result = calculate_attorney_fee(request.gross_award, config, structure_label=label)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+
+    logger.info("fee_preview_computed", gross_award=str(request.gross_award), label=label)
+    return result
+
+
+# ── Per-case fee override ─────────────────────────────────────────────────────
+
+@app.get(
+    "/api/v1/settlement/cases/{case_id}/fee-override",
+    response_model=CaseFeeOverride,
+    status_code=status.HTTP_200_OK,
+    summary="Get per-case fee override",
+    tags=["Case Fee Override"],
+)
+async def get_case_fee_override(case_id: str = Path(..., description="Case ID")):
+    """
+    Returns the per-case fee override for *case_id*.
+    Returns **404** if no override has been set (case uses firm default).
+    """
+    db  = get_db()
+    doc = await _case_fee_override_ref(db, case_id).get()
+    if not doc.exists:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No fee override found for case '{case_id}'. "
+                   "The firm default applies.",
+        )
+    return _doc_to_case_fee_override(case_id, doc.to_dict())
+
+
+@app.put(
+    "/api/v1/settlement/cases/{case_id}/fee-override",
+    response_model=CaseFeeOverride,
+    status_code=status.HTTP_200_OK,
+    summary="Set or update per-case fee override",
+    tags=["Case Fee Override"],
+)
+async def upsert_case_fee_override(
+    case_id: str = Path(..., description="Case ID"),
+    request: CaseFeeOverrideRequest = ...,
+):
+    """
+    Override the firm-wide fee structure for a specific case.
+    Requires a *reason* explaining the business justification.
+    """
+    db      = get_db()
+    doc_ref = _case_fee_override_ref(db, case_id)
+
+    doc_data = {
+        "case_id": case_id,
+        "reason":  request.reason,
+        "set_by":  request.set_by,
+        "set_at":  _fs.SERVER_TIMESTAMP,
+        **_fee_config_data_to_doc(request.config),
+    }
+    await doc_ref.set(doc_data)
+    logger.info("case_fee_override_set", case_id=case_id, set_by=request.set_by)
+
+    snap = await doc_ref.get()
+    return _doc_to_case_fee_override(case_id, snap.to_dict())
+
+
+@app.delete(
+    "/api/v1/settlement/cases/{case_id}/fee-override",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Remove per-case fee override (revert to firm default)",
+    tags=["Case Fee Override"],
+)
+async def delete_case_fee_override(case_id: str = Path(..., description="Case ID")):
+    """
+    Removes the per-case fee override.  The case will then use the firm default.
+    Returns **404** if no override exists.
+    """
+    db      = get_db()
+    doc_ref = _case_fee_override_ref(db, case_id)
+    doc     = await doc_ref.get()
+    if not doc.exists:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No fee override found for case '{case_id}'.",
+        )
+    await doc_ref.delete()
+    logger.info("case_fee_override_deleted", case_id=case_id)
+
+
+@app.post(
+    "/api/v1/settlement/cases/{case_id}/fee-config/calculate",
+    response_model=FeeCalculationDetail,
+    status_code=status.HTTP_200_OK,
+    summary="Preview fee for a case using its effective config (override or firm default)",
+    tags=["Case Fee Override"],
+)
+async def preview_case_fee(
+    case_id: str = Path(..., description="Case ID"),
+    request: FeePreviewRequest = ...,
+):
+    """
+    Compute the attorney fee for *gross_award* using the **effective** config
+    for this case:
+
+    1. If the case has a fee override → use it (labelled ``case_override``).
+    2. Else if the firm has a default  → use it (labelled ``firm_default``).
+    3. Else if *config* is in the body → use it (labelled ``manual``).
+    4. Otherwise → **404**.
+    """
+    db = get_db()
+
+    override_doc = await _case_fee_override_ref(db, case_id).get()
+    if override_doc.exists:
+        config = _doc_to_fee_config_data(override_doc.to_dict())
+        label  = "case_override"
+    else:
+        firm_doc = await _firm_fee_config_ref(db).get()
+        if firm_doc.exists:
+            config = _doc_to_fee_config_data(firm_doc.to_dict())
+            label  = "firm_default"
+        elif request.config is not None:
+            config = request.config
+            label  = "manual"
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No fee configuration found for case '{case_id}' "
+                       "and no firm default is set.",
+            )
+
+    try:
+        result = calculate_attorney_fee(request.gross_award, config, structure_label=label)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+
+    logger.info("case_fee_preview_computed",
+                case_id=case_id, gross_award=str(request.gross_award), label=label)
+    return result
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
