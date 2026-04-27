@@ -65,7 +65,7 @@ def post_approve_for_filing(
         db=db,
         case_id=caseId,
         actor_uid="system",
-        actor_role="",
+        actor_role="system_admin",
         notes=body.notes,
     )
     return ApproveForFilingResponse(**result)
@@ -85,7 +85,7 @@ def post_bulk_approve(
         db=db,
         case_ids=body.case_ids,
         actor_uid="system",
-        actor_role="",
+        actor_role="system_admin",
         notes=body.notes,
     )
     return BulkApproveResponse(**result)

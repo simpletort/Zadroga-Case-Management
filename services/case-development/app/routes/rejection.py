@@ -33,7 +33,7 @@ def post_reject_case(
         db=db,
         case_id=caseId,
         actor_uid="system",
-        actor_role="",
+        actor_role="system_admin",
         reason=body.reason,
         notes=body.notes,
     )
@@ -55,7 +55,7 @@ def post_resubmit_case(
         db=db,
         case_id=caseId,
         actor_uid="system",
-        actor_role="",
+        actor_role="system_admin",
         notes=body.notes,
     )
     return ResubmitCaseResponse(**result)

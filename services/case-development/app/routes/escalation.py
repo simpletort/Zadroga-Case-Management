@@ -41,7 +41,7 @@ def post_escalate_case(
         db=db,
         case_id=caseId,
         actor_uid="system",
-        actor_role="",
+        actor_role="system_admin",
         reason=body.reason,
         notes=body.notes,
     )
@@ -89,7 +89,7 @@ def post_escalation_decision(
         db=db,
         case_id=caseId,
         actor_uid="system",
-        actor_role="",
+        actor_role="system_admin",
         decision=body.decision,
         notes=body.notes,
     )
