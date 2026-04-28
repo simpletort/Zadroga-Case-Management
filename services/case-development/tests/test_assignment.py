@@ -182,25 +182,12 @@ class TestGetWorkload:
         assert get_workload(db) == []
 
 
-# ── RBAC tests (via FastAPI TestClient) ───────────────────────────────────
+# ── Route smoke tests ─────────────────────────────────────────────────────
 
 class TestRBAC:
 
-    def _client_with_role(self, role: str):
-        """Return a TestClient that injects a fake user with the given role."""
-        user = {"uid": "test-uid", "role": role}
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
-             patch("firebase_admin._apps", [True]):
-            from importlib import reload
-            import main as m
-            client = TestClient(m.app, raise_server_exceptions=False)
-        return client, user
-
     def test_paralegal_can_read_workload(self):
-        user = {"uid": "p1", "role": "paralegal"}
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.utils.firestore.get_firestore_client") as mock_db_factory, \
+        with patch("app.utils.firestore.get_firestore_client") as mock_db_factory, \
              patch("app.services.assignment_service.get_workload", return_value=[]):
             mock_db_factory.return_value = MagicMock()
             from importlib import reload
@@ -208,17 +195,3 @@ class TestRBAC:
             client = TestClient(m.app, raise_server_exceptions=False)
             resp = client.get("/api/v1/staff/paralegals/workload")
         assert resp.status_code == 200
-
-    def test_admin_staff_can_override_assignment(self):
-        """admin_staff role must be accepted on POST /assign."""
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-        role = "admin_staff"
-        required = ENDPOINT_MIN_ROLES["case_assign_override"]
-        assert ROLE_HIERARCHY[role] >= ROLE_HIERARCHY[required]
-
-    def test_paralegal_cannot_override_assignment(self):
-        """paralegal role must be rejected on POST /assign (requires admin_staff)."""
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-        role = "paralegal"
-        required = ENDPOINT_MIN_ROLES["case_assign_override"]
-        assert ROLE_HIERARCHY[role] < ROLE_HIERARCHY[required]

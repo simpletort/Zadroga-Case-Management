@@ -9,8 +9,14 @@ All file access in SimpleTort goes through signed URLs so that:
 
 import datetime
 import logging
+import urllib.request
+from functools import lru_cache
 from typing import Optional
 
+import google.auth
+import google.auth.transport.requests
+import google.oauth2.service_account
+from google.auth import iam
 from google.cloud import storage as gcs
 
 from app.config import get_settings
@@ -55,6 +61,45 @@ def build_blob_path(
     return "{}/{}".format(path, file_name)
 
 
+def _fetch_metadata_email() -> str:
+    """Fetch the default service account email from the GCE metadata server."""
+    url = (
+        "http://metadata.google.internal/computeMetadata/v1"
+        "/instance/service-accounts/default/email"
+    )
+    req = urllib.request.Request(url, headers={"Metadata-Flavor": "Google"})
+    with urllib.request.urlopen(req, timeout=2) as resp:
+        return resp.read().decode().strip()
+
+
+@lru_cache(maxsize=1)
+def _get_signing_credentials() -> google.oauth2.service_account.Credentials:
+    """
+    Build IAM-backed signing credentials for Cloud Run environments.
+
+    Cloud Run uses Compute Engine tokens (no embedded private key), so we
+    delegate signing to the IAM signBlob API.  The service account must have
+    the 'Service Account Token Creator' role on itself.
+    """
+    sa_email = settings.gcs_service_account_email or _fetch_metadata_email()
+
+    auth_request = google.auth.transport.requests.Request()
+    credentials, _ = google.auth.default()
+    credentials.refresh(auth_request)
+
+    signer = iam.Signer(
+        request=auth_request,
+        credentials=credentials,
+        service_account_email=sa_email,
+    )
+    return google.oauth2.service_account.Credentials(
+        signer=signer,
+        service_account_email=sa_email,
+        token_uri="https://oauth2.googleapis.com/token",
+        scopes=["https://www.googleapis.com/auth/devstorage.read_write"],
+    )
+
+
 def generate_signed_url(
     gcs_client: gcs.Client,
     blob_path: str,
@@ -85,6 +130,7 @@ def generate_signed_url(
         "version": "v4",
         "expiration": expiration,
         "method": http_method,
+        "credentials": _get_signing_credentials(),
     }
     if action == UrlAction.write and content_type:
         kwargs["content_type"] = content_type

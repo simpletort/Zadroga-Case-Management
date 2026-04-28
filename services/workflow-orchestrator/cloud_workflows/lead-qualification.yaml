@@ -26,10 +26,10 @@ main:
           - case_id: ${args.case_id}
           - workflow_id: "lead-qualification"
           - deploy_env: ${sys.get_env("DEPLOY_ENV")}
-          - lead_service_url: ${"https://lead-intake-" + deploy_env + "-" + default(default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed"), "not-deployed")}
-          - case_dev_url: ${"https://case-development-" + deploy_env + "-" + default(default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed"), "not-deployed")}
-          - orchestrator_url: ${"https://workflow-orchestrator-" + deploy_env + "-" + default(default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed"), "not-deployed")}
-          - notification_url: ${"https://notification-" + deploy_env + "-" + default(default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed"), "not-deployed")}
+          - lead_service_url: "https://lead-intake-292736139819.us-central1.run.app"
+          - case_dev_url: "https://case-development-292736139819.us-central1.run.app"
+          - orchestrator_url: "https://workflow-orchestrator-dev-292736139819.us-central1.run.app"
+          - notification_url: "https://notification-dev-292736139819.us-central1.run.app"
 
     # Fetch configurable step parameters from Firestore via the orchestrator.
     - fetch_step_config:

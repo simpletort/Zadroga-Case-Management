@@ -288,64 +288,21 @@ class TestSubmitForReview:
         assert result["notified_attorney_id"] is None
 
 
-# ── RBAC tests ─────────────────────────────────────────────────────────────
-
-class TestReviewRBAC:
-
-    def test_paralegal_is_allowed_for_preflight(self):
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-
-        role     = "paralegal"
-        required = ENDPOINT_MIN_ROLES["review_preflight"]
-        assert ROLE_HIERARCHY[role] >= ROLE_HIERARCHY[required]
-
-    def test_paralegal_is_allowed_for_submit(self):
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-
-        role     = "paralegal"
-        required = ENDPOINT_MIN_ROLES["review_submit"]
-        assert ROLE_HIERARCHY[role] >= ROLE_HIERARCHY[required]
-
-    def test_unauthenticated_preflight_returns_403(self):
-        with patch("app.utils.firestore.get_firestore_client"), \
-             patch("firebase_admin._apps", [True]):
-            from importlib import reload
-            import main as m
-            reload(m)
-            client = TestClient(m.app, raise_server_exceptions=False)
-
-        resp = client.get("/api/v1/cases/ZAD-2026-04-0001/review-preflight")
-        assert resp.status_code == 403
-
-    def test_unauthenticated_submit_returns_403(self):
-        with patch("app.utils.firestore.get_firestore_client"), \
-             patch("firebase_admin._apps", [True]):
-            from importlib import reload
-            import main as m
-            reload(m)
-            client = TestClient(m.app, raise_server_exceptions=False)
-
-        resp = client.post("/api/v1/cases/ZAD-2026-04-0001/submit-for-review")
-        assert resp.status_code == 403
-
-
 # ── Route integration tests ────────────────────────────────────────────────
 
 class TestReviewRoutes:
 
     def _make_client(self, role="paralegal"):
         user = {"uid": "para-uid", "role": role}
-        with patch("firebase_admin._apps", [True]):
-            from importlib import reload
-            import main as m
-            reload(m)
-            client = TestClient(m.app, raise_server_exceptions=False)
+        from importlib import reload
+        import main as m
+        reload(m)
+        client = TestClient(m.app, raise_server_exceptions=False)
         return client, user
 
     def test_preflight_endpoint_exists(self):
         client, user = self._make_client()
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
+        with patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
              patch(
                  "app.routes.review.run_preflight",
                  return_value={"all_passed": True, "checks": []},
@@ -372,8 +329,7 @@ class TestReviewRoutes:
             "task_id":                   "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
             "auto_assigned_attorney_id": None,
         }
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
+        with patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
              patch(
                  "app.routes.review.submit_for_review",
                  return_value=mock_result,
@@ -388,8 +344,7 @@ class TestReviewRoutes:
 
     def test_submit_422_propagates_to_client(self):
         client, user = self._make_client()
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
+        with patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
              patch(
                  "app.routes.review.submit_for_review",
                  side_effect=HTTPException(

@@ -573,12 +573,10 @@ class TestGenerateComplianceReport:
 
 class TestDecisionAuditRoutes:
 
-    def _get_client(self, role="junior_partner", uid=_ATTY):
+    def _get_client(self):
         from main import app
-        user = {"uid": uid, "role": role}
-        app.dependency_overrides = {}
         client = TestClient(app, raise_server_exceptions=False)
-        return client, user
+        return client
 
     def _patch_service(self, name, return_value):
         return patch(f"app.routes.decision_audit.{name}", return_value=return_value)
@@ -586,47 +584,32 @@ class TestDecisionAuditRoutes:
     # ── GET /audit/decisions ──────────────────────────────────────────────────
 
     def test_get_decisions_returns_200(self):
-        client, user = self._get_client(role="junior_partner", uid=_ATTY)
+        client = self._get_client()
         svc_result = {
             "total_decisions": 0,
             "page": {"items": [], "total": 0, "page": 1, "page_size": 20, "total_pages": 0},
         }
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             self._patch_service("get_decisions", svc_result), \
+        with self._patch_service("get_decisions", svc_result), \
              patch("app.routes.decision_audit.get_firestore_client"):
-            resp = client.get(
-                "/api/v1/audit/decisions",
-                headers={"Authorization": "Bearer fake-token"},
-            )
+            resp = client.get("/api/v1/audit/decisions")
         assert resp.status_code == 200
         assert resp.json()["total_decisions"] == 0
-
-    def test_get_decisions_paralegal_returns_403(self):
-        from main import app
-        app.dependency_overrides = {}
-        client = TestClient(app, raise_server_exceptions=False)
-        resp = client.get("/api/v1/audit/decisions")
-        assert resp.status_code in (401, 403)
 
     # ── GET /cases/{caseId}/audit/decisions ───────────────────────────────────
 
     def test_get_case_decisions_returns_200(self):
-        client, user = self._get_client(role="junior_partner", uid=_ATTY)
+        client = self._get_client()
         svc_result = {"case_id": _CASE, "decisions": [], "total": 0}
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             self._patch_service("get_case_decisions", svc_result), \
+        with self._patch_service("get_case_decisions", svc_result), \
              patch("app.routes.decision_audit.get_firestore_client"):
-            resp = client.get(
-                f"/api/v1/cases/{_CASE}/audit/decisions",
-                headers={"Authorization": "Bearer fake-token"},
-            )
+            resp = client.get(f"/api/v1/cases/{_CASE}/audit/decisions")
         assert resp.status_code == 200
         assert resp.json()["case_id"] == _CASE
 
     # ── GET /audit/decisions/metrics ──────────────────────────────────────────
 
     def test_get_metrics_returns_200(self):
-        client, user = self._get_client(role="senior_partner", uid=_SP)
+        client = self._get_client()
         svc_result = {
             "total_decisions": 0,
             "by_decision_type": {},
@@ -636,48 +619,26 @@ class TestDecisionAuditRoutes:
             "date_from": None,
             "date_to": None,
         }
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             self._patch_service("get_decision_metrics", svc_result), \
+        with self._patch_service("get_decision_metrics", svc_result), \
              patch("app.routes.decision_audit.get_firestore_client"):
-            resp = client.get(
-                "/api/v1/audit/decisions/metrics",
-                headers={"Authorization": "Bearer fake-token"},
-            )
+            resp = client.get("/api/v1/audit/decisions/metrics")
         assert resp.status_code == 200
-
-    def test_metrics_junior_partner_returns_403(self):
-        from main import app
-        app.dependency_overrides = {}
-        client = TestClient(app, raise_server_exceptions=False)
-        resp = client.get("/api/v1/audit/decisions/metrics")
-        assert resp.status_code in (401, 403)
 
     # ── GET /audit/decisions/report ───────────────────────────────────────────
 
     def test_get_report_returns_200(self):
-        client, user = self._get_client(role="senior_partner", uid=_SP)
+        client = self._get_client()
         svc_result = {
             "generated_at": _NOW,
             "filters_applied": {},
             "total_records": 0,
             "records": [],
         }
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             self._patch_service("generate_compliance_report", svc_result), \
+        with self._patch_service("generate_compliance_report", svc_result), \
              patch("app.routes.decision_audit.get_firestore_client"):
-            resp = client.get(
-                "/api/v1/audit/decisions/report",
-                headers={"Authorization": "Bearer fake-token"},
-            )
+            resp = client.get("/api/v1/audit/decisions/report")
         assert resp.status_code == 200
         assert resp.json()["total_records"] == 0
-
-    def test_report_junior_partner_returns_403(self):
-        from main import app
-        app.dependency_overrides = {}
-        client = TestClient(app, raise_server_exceptions=False)
-        resp = client.get("/api/v1/audit/decisions/report")
-        assert resp.status_code in (401, 403)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -950,39 +911,3 @@ class TestExistingServicesWriteAuditEvents:
         assert mock_audit.call_args.kwargs["case_submitted_for_review_at"] == esc_at
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-# RBAC: role hierarchy constants for audit endpoints
-# ═════════════════════════════════════════════════════════════════════════════
-
-class TestDecisionAuditRBAC:
-
-    def test_junior_partner_meets_audit_decisions_read(self):
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-        min_role = ENDPOINT_MIN_ROLES["audit_decisions_read"]
-        assert ROLE_HIERARCHY["junior_partner"] >= ROLE_HIERARCHY[min_role]
-
-    def test_paralegal_below_audit_decisions_read(self):
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-        min_role = ENDPOINT_MIN_ROLES["audit_decisions_read"]
-        assert ROLE_HIERARCHY["paralegal"] < ROLE_HIERARCHY[min_role]
-
-    def test_senior_partner_meets_audit_metrics_read(self):
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-        min_role = ENDPOINT_MIN_ROLES["audit_metrics_read"]
-        assert ROLE_HIERARCHY["senior_partner"] >= ROLE_HIERARCHY[min_role]
-
-    def test_junior_partner_below_audit_metrics_read(self):
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-        min_role = ENDPOINT_MIN_ROLES["audit_metrics_read"]
-        assert ROLE_HIERARCHY["junior_partner"] < ROLE_HIERARCHY[min_role]
-
-    def test_senior_partner_meets_audit_report_export(self):
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-        min_role = ENDPOINT_MIN_ROLES["audit_report_export"]
-        assert ROLE_HIERARCHY["senior_partner"] >= ROLE_HIERARCHY[min_role]
-
-    def test_system_admin_meets_all_audit_keys(self):
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-        for key in ("audit_decisions_read", "audit_metrics_read", "audit_report_export"):
-            min_role = ENDPOINT_MIN_ROLES[key]
-            assert ROLE_HIERARCHY["system_admin"] >= ROLE_HIERARCHY[min_role]

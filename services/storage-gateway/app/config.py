@@ -19,6 +19,12 @@ class Settings(BaseSettings):
     # Pub/Sub topic for virus-detected notifications
     pubsub_topic_virus_detected: str = "virus-detected"
 
+    # Service account email used for IAM-based signed URL generation on Cloud Run.
+    # Set this to the Cloud Run service identity SA email, e.g.
+    # storage-gateway-sa@simpletort-prod.iam.gserviceaccount.com
+    # Leave blank to auto-discover from the GCE metadata server.
+    gcs_service_account_email: str = ""
+
     # Service identity — injected as SERVICE_NAME=$_SERVICE_NAME by Cloud Build
     # so every audit log entry carries the exact Cloud Run service name.
     service_name: str = "storage-gateway"
