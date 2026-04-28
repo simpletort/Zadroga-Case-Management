@@ -126,14 +126,9 @@ def _make_approve_db(
 
 class TestGetReviewQueue:
 
-    def _call(self, db, role="junior_partner", uid="atty-uid", page=1, page_size=20):
+    def _call(self, db, role=None, uid=None, page=1, page_size=20):
         from app.services.attorney_review_service import get_review_queue
-        return get_review_queue(
-            db=db,
-            user={"uid": uid, "role": role},
-            page=page,
-            page_size=page_size,
-        )
+        return get_review_queue(db=db, page=page, page_size=page_size)
 
     # ── Basic happy path ───────────────────────────────────────────────────
 
@@ -156,33 +151,11 @@ class TestGetReviewQueue:
         assert result["overdue_count"] == 0
         assert result["page"]["items"] == []
 
-    # ── Scoping ───────────────────────────────────────────────────────────
-
-    def test_junior_partner_scoped_by_assigned_attorney(self):
-        snap = _case_snap(assigned_attorney="atty-uid")
-        db   = _make_queue_db([snap])
-
-        self._call(db, role="junior_partner", uid="atty-uid")
-
-        # Expect a where("assignment.assignedAttorney", ...) call
-        where_calls = [str(c) for c in db.collection.return_value.where.call_args_list]
-        assert any("assignedAttorney" in c for c in where_calls)
-
-    def test_senior_partner_sees_all_no_attorney_filter(self):
+    def test_returns_all_regardless_of_attorney(self):
         snap = _case_snap(assigned_attorney="someone-else")
         db   = _make_queue_db([snap])
 
-        self._call(db, role="senior_partner", uid="senior-uid")
-
-        # Only the status where() call, NOT an assignedAttorney filter
-        where_calls = [str(c) for c in db.collection.return_value.where.call_args_list]
-        assert not any("assignedAttorney" in c for c in where_calls)
-
-    def test_system_admin_sees_all(self):
-        snap = _case_snap(assigned_attorney="someone-else")
-        db   = _make_queue_db([snap])
-
-        result = self._call(db, role="system_admin", uid="admin-uid")
+        result = self._call(db)
 
         assert result["total_pending"] == 1
 

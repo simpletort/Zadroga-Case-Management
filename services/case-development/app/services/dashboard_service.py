@@ -21,11 +21,7 @@ from typing import Optional
 
 from google.cloud import firestore
 
-from app.utils.roles import normalize_role
-
 logger = logging.getLogger(__name__)
-
-ADMIN_ROLES = {"admin_staff", "junior_partner", "senior_partner", "system_admin"}
 
 SORT_KEY_MAP = {
     "case_id":              lambda c: c["case_id"] or "",
@@ -51,7 +47,6 @@ _CASE_TYPE_MAP = {
 
 def get_dashboard(
     db: firestore.Client,
-    user: dict,
     statuses: Optional[list[str]],
     case_type: Optional[str],
     assignees: Optional[list[str]],
@@ -66,22 +61,14 @@ def get_dashboard(
     page: int,
     page_size: int,
 ) -> dict:
-    user_role = normalize_role(user.get("role", ""))
-    user_uid  = user.get("uid", "")
-    is_admin  = user_role in ADMIN_ROLES
-
     # Resolve type filter to stored Firestore value ("WTC" | "VCF" | None)
     # "all" and None both mean no type restriction
     resolved_type = _CASE_TYPE_MAP.get((case_type or "").lower())
 
-    # assignees filter is only meaningful for admin roles; paralegals are already
-    # scoped to themselves via the assignedParalegal equality filter below
-    effective_assignees = assignees if (is_admin and assignees) else None
+    effective_assignees = assignees if assignees else None
 
     # ── 1. Firestore query ────────────────────────────────────────────────
     query = db.collection("cases")
-    if not is_admin:
-        query = query.where("assignment.assignedParalegal", "==", user_uid)
 
     # Apply single-status equality filter at Firestore level when safe to do so
     # (no range filters that would conflict with a compound inequality query)
