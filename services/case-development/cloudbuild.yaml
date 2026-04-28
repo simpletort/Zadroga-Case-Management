@@ -40,7 +40,7 @@ steps:
       - "--region=$_REGION"
       - "--platform=managed"
       - "--no-allow-unauthenticated"
-      - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,ENV=$_ENV,FIRESTORE_DATABASE_ID=$_FIRESTORE_DATABASE_ID,ALLOWED_ORIGINS=$_ALLOWED_ORIGINS"
+      - "--set-env-vars=^|^GCP_PROJECT_ID=$PROJECT_ID|ENV=$_ENV|FIRESTORE_DATABASE_ID=$_FIRESTORE_DATABASE_ID|ALLOWED_ORIGINS=$_ALLOWED_ORIGINS"
       - "--memory=512Mi"
       - "--cpu=1"
       - "--max-instances=10"
