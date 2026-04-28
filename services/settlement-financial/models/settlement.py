@@ -19,16 +19,26 @@ from typing import List, Optional
 from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator, field_serializer
+from collections import defaultdict
 
 
 # ── Enums ──────────────────────────────────────────────────────────────────────
 
 class ExpenseCategory(str, Enum):
-    filing_fee     = "Filing Fee"
+    filing_fee      = "Filing Fee"
     medical_records = "Medical Records"
-    expert_witness = "Expert Witness"
-    travel         = "Travel"
-    other          = "Other"
+    expert_witness  = "Expert Witness"
+    travel          = "Travel"
+    postage         = "Postage"
+    other           = "Other"
+
+# All built-in category values — used for API validation
+BUILT_IN_EXPENSE_CATEGORIES: set[str] = {e.value for e in ExpenseCategory}
+
+
+class ExpensePaidStatus(str, Enum):
+    pending = "Pending"
+    paid    = "Paid"
 
 
 class LienSatisfactionStatus(str, Enum):
@@ -70,13 +80,22 @@ class QBSyncStatus(str, Enum):
 
 # ── 2.6.1 Expense models ───────────────────────────────────────────────────────
 
+class ExpenseChangeEntry(BaseModel):
+    """One audit-trail record written every time an expense is modified."""
+    changed_at: datetime
+    changed_by: str
+    changes:    dict   # e.g. {"amount": {"from": "500.00", "to": "750.00"}}
+
+
 class ExpenseRequest(BaseModel):
     """Payload for adding a new case expense."""
-    description: str          = Field(..., min_length=1, max_length=500)
-    amount: Decimal           = Field(..., gt=Decimal("0"), description="Amount in USD")
-    category: ExpenseCategory
-    date: datetime            = Field(..., description="Expense date")
-    added_by: str             = Field(default="", description="UID of staff who added")
+    description: str              = Field(..., min_length=1, max_length=500)
+    amount:      Decimal          = Field(..., gt=Decimal("0"), description="Amount in USD")
+    category:    ExpenseCategory
+    vendor:      Optional[str]    = Field(None, max_length=300, description="Vendor / payee name")
+    date:        datetime         = Field(..., description="Expense date")
+    paid_status: ExpensePaidStatus = ExpensePaidStatus.pending
+    added_by:    str              = Field(default="", description="UID of staff who added")
 
     @field_validator("amount", mode="before")
     @classmethod
@@ -91,22 +110,79 @@ class ExpenseRequest(BaseModel):
         return f"{v:.2f}"
 
 
+class ExpenseUpdateRequest(BaseModel):
+    """Payload for editing an existing expense. All fields optional."""
+    description: Optional[str]              = Field(None, min_length=1, max_length=500)
+    amount:      Optional[Decimal]          = Field(None, gt=Decimal("0"))
+    category:    Optional[ExpenseCategory]  = None
+    vendor:      Optional[str]              = Field(None, max_length=300)
+    date:        Optional[datetime]         = None
+    paid_status: Optional[ExpensePaidStatus] = None
+    updated_by:  str                        = Field(default="")
+
+    @field_validator("amount", mode="before")
+    @classmethod
+    def coerce_amount(cls, v):
+        if v is None:
+            return v
+        try:
+            return Decimal(str(v))
+        except Exception:
+            raise ValueError("amount must be a valid decimal number")
+
+
+class ExpenseReceiptRequest(BaseModel):
+    """Payload for attaching a receipt to an expense."""
+    receipt_url:      str = Field(..., min_length=1, description="GCS / Firebase Storage URL")
+    receipt_filename: str = Field(..., min_length=1, max_length=500, description="Original file name")
+
+
 class Expense(BaseModel):
-    """A case expense stored in cases/{caseId}/expenses/{expenseId}."""
-    expense_id:     str
-    case_id:        str
-    description:    str
-    amount:         Decimal
-    category:       ExpenseCategory
-    date:           datetime
-    added_by:       str
-    added_at:       datetime
-    qb_expense_id:  Optional[str]         = None
-    qb_sync_status: Optional[QBSyncStatus] = None
-    qb_synced_at:   Optional[datetime]    = None
+    """A case expense stored in cases/{caseId}/settlement/expenses (items array)."""
+    expense_id:       str
+    case_id:          str
+    description:      str
+    amount:           Decimal
+    category:         str
+    vendor:           Optional[str]           = None
+    date:             datetime
+    paid_status:      ExpensePaidStatus        = ExpensePaidStatus.pending
+    added_by:         str
+    added_at:         datetime
+    updated_at:       Optional[datetime]       = None
+    updated_by:       Optional[str]            = None
+    receipt_url:      Optional[str]            = None
+    receipt_filename: Optional[str]            = None
+    change_log:       List[ExpenseChangeEntry] = Field(default_factory=list)
+    qb_expense_id:    Optional[str]            = None
+    qb_sync_status:   Optional[QBSyncStatus]   = None
+    qb_synced_at:     Optional[datetime]       = None
 
     @field_serializer("amount")
     def serialize_amount(self, v: Decimal) -> str:
+        return f"{v:.2f}"
+
+
+class CategoryTotal(BaseModel):
+    """Aggregate total for one expense category."""
+    category: str
+    count:    int
+    total:    Decimal
+
+    @field_serializer("total")
+    def serialize_total(self, v: Decimal) -> str:
+        return f"{v:.2f}"
+
+
+class ExpenseTotals(BaseModel):
+    """Summary totals computed from the full expense list."""
+    total_amount:  Decimal
+    total_paid:    Decimal
+    total_unpaid:  Decimal
+    by_category:   List[CategoryTotal]
+
+    @field_serializer("total_amount", "total_paid", "total_unpaid")
+    def serialize_money(self, v: Decimal) -> str:
         return f"{v:.2f}"
 
 
@@ -114,6 +190,24 @@ class ExpenseListResponse(BaseModel):
     case_id:  str
     total:    int
     expenses: List[Expense]
+    totals:   ExpenseTotals
+
+
+class ExpenseCategoriesRequest(BaseModel):
+    """Admin payload to manage custom expense categories."""
+    custom_categories: List[str] = Field(
+        ..., description="Additional categories beyond the built-in set."
+    )
+    updated_by: str = Field(default="")
+
+
+class ExpenseCategoriesResponse(BaseModel):
+    """Full list of expense categories (built-in + admin-configured custom)."""
+    built_in:       List[str]
+    custom:         List[str]
+    all_categories: List[str]
+    updated_at:     Optional[datetime] = None
+    updated_by:     Optional[str]      = None
 
 
 # ── 2.6.2 Lien models ─────────────────────────────────────────────────────────

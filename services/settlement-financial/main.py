@@ -67,17 +67,26 @@ from google.cloud import firestore as _fs
 from config import get_settings
 from logging_config import get_logger, setup_logging
 from models.settlement import (
+    BUILT_IN_EXPENSE_CATEGORIES,
     CalculationHistoryResponse,
     CalculationPreviewResponse,
     CalculationRequest,
     CaseSettlementInputs,
     CaseSettlementInputsRequest,
+    CategoryTotal,
     Disbursement,
     DisbursementListResponse,
     DisbursementRequest,
     Expense,
+    ExpenseCategoriesRequest,
+    ExpenseCategoriesResponse,
+    ExpenseChangeEntry,
     ExpenseListResponse,
+    ExpensePaidStatus,
+    ExpenseReceiptRequest,
+    ExpenseTotals,
     ExpenseRequest,
+    ExpenseUpdateRequest,
     Lien,
     LienListResponse,
     LienRequest,
@@ -145,6 +154,9 @@ def _firm_fee_config_ref(db):
 def _fee_audit_ref(db):
     return db.collection("firmSettings").document("fee_config").collection("audit")
 
+def _expense_categories_ref(db):
+    return db.collection("firmSettings").document("expense_categories")
+
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
 
@@ -189,19 +201,35 @@ def _to_dt(val) -> Optional[datetime]:
 # ── Firestore doc converters ──────────────────────────────────────────────────
 
 def _doc_to_expense(doc_id: str, data: dict) -> Expense:
-    from models.settlement import ExpenseCategory, QBSyncStatus
+    from models.settlement import ExpensePaidStatus, QBSyncStatus
+    raw_log = data.get("changeLog", [])
+    change_log = [
+        ExpenseChangeEntry(
+            changed_at=_to_dt(e.get("changedAt")) or datetime.now(tz=timezone.utc),
+            changed_by=e.get("changedBy", ""),
+            changes=e.get("changes", {}),
+        )
+        for e in raw_log
+    ]
     return Expense(
-        expense_id=doc_id,
-        case_id=data["caseId"],
-        description=data["description"],
-        amount=Decimal(str(data["amount"])),
-        category=ExpenseCategory(data["category"]),
-        date=_to_dt(data.get("date")) or datetime.now(tz=timezone.utc),
-        added_by=data.get("addedBy", ""),
-        added_at=_to_dt(data.get("addedAt")) or datetime.now(tz=timezone.utc),
-        qb_expense_id=data.get("qbExpenseId"),
-        qb_sync_status=QBSyncStatus(data["qbSyncStatus"]) if data.get("qbSyncStatus") else None,
-        qb_synced_at=_to_dt(data.get("qbSyncedAt")),
+        expense_id       = doc_id,
+        case_id          = data["caseId"],
+        description      = data["description"],
+        amount           = Decimal(str(data["amount"])),
+        category         = data["category"],
+        vendor           = data.get("vendor"),
+        date             = _to_dt(data.get("date")) or datetime.now(tz=timezone.utc),
+        paid_status      = ExpensePaidStatus(data.get("paidStatus", "Pending")),
+        added_by         = data.get("addedBy", ""),
+        added_at         = _to_dt(data.get("addedAt")) or datetime.now(tz=timezone.utc),
+        updated_at       = _to_dt(data.get("updatedAt")),
+        updated_by       = data.get("updatedBy"),
+        receipt_url      = data.get("receiptUrl"),
+        receipt_filename = data.get("receiptFilename"),
+        change_log       = change_log,
+        qb_expense_id    = data.get("qbExpenseId"),
+        qb_sync_status   = QBSyncStatus(data["qbSyncStatus"]) if data.get("qbSyncStatus") else None,
+        qb_synced_at     = _to_dt(data.get("qbSyncedAt")),
     )
 
 
@@ -615,17 +643,24 @@ async def add_expense(
     expense_id = str(uuid.uuid4())
     now        = datetime.now(tz=timezone.utc)
     new_item   = {
-        "expenseId":    expense_id,
-        "caseId":       case_id,
-        "description":  request.description,
-        "amount":       float(request.amount),
-        "category":     request.category.value,
-        "date":         request.date,
-        "addedBy":      request.added_by,
-        "addedAt":      now,
-        "qbExpenseId":  None,
-        "qbSyncStatus": None,
-        "qbSyncedAt":   None,
+        "expenseId":       expense_id,
+        "caseId":          case_id,
+        "description":     request.description,
+        "amount":          float(request.amount),
+        "category":        request.category.value,
+        "vendor":          request.vendor,
+        "date":            request.date,
+        "paidStatus":      request.paid_status.value,
+        "addedBy":         request.added_by,
+        "addedAt":         now,
+        "updatedAt":       None,
+        "updatedBy":       None,
+        "receiptUrl":      None,
+        "receiptFilename": None,
+        "changeLog":       [],
+        "qbExpenseId":     None,
+        "qbSyncStatus":    None,
+        "qbSyncedAt":      None,
     }
     await _expenses_ref(db, case_id).set(
         {"items": _fs.ArrayUnion([new_item])}, merge=True
@@ -645,10 +680,35 @@ async def list_expenses(case_id: str = Path(..., description="Case ID")):
     db   = get_db()
     snap = await _expenses_ref(db, case_id).get()
     if not snap.exists:
-        return ExpenseListResponse(case_id=case_id, total=0, expenses=[])
+        empty_totals = ExpenseTotals(
+            total_amount=Decimal("0"), total_paid=Decimal("0"),
+            total_unpaid=Decimal("0"), by_category=[],
+        )
+        return ExpenseListResponse(case_id=case_id, total=0, expenses=[], totals=empty_totals)
+
     items    = snap.to_dict().get("items", [])
     expenses = [_doc_to_expense(i["expenseId"], i) for i in items]
-    return ExpenseListResponse(case_id=case_id, total=len(expenses), expenses=expenses)
+
+    # ── Compute totals ────────────────────────────────────────────────────────
+    from collections import defaultdict
+    total_amount = sum(e.amount for e in expenses) if expenses else Decimal("0")
+    total_paid   = sum(e.amount for e in expenses if e.paid_status == ExpensePaidStatus.paid)
+    total_unpaid = total_amount - total_paid
+
+    cat_map: dict = defaultdict(lambda: {"total": Decimal("0"), "count": 0})
+    for e in expenses:
+        cat_map[e.category]["total"] += e.amount
+        cat_map[e.category]["count"] += 1
+    by_category = [
+        CategoryTotal(category=cat, total=vals["total"], count=vals["count"])
+        for cat, vals in cat_map.items()
+    ]
+
+    totals = ExpenseTotals(
+        total_amount=total_amount, total_paid=total_paid,
+        total_unpaid=total_unpaid, by_category=by_category,
+    )
+    return ExpenseListResponse(case_id=case_id, total=len(expenses), expenses=expenses, totals=totals)
 
 
 @app.delete(
@@ -671,6 +731,228 @@ async def delete_expense(
                             detail=f"Expense '{expense_id}' not found for case '{case_id}'")
     await doc_ref.set({"items": new_items})
     logger.info("expense_deleted", expense_id=expense_id, case_id=case_id)
+
+
+@app.patch(
+    "/api/v1/settlement/cases/{case_id}/expenses/{expense_id}",
+    response_model=Expense,
+    status_code=status.HTTP_200_OK,
+    summary="Update a case expense",
+    tags=["Expenses (2.6.1)"],
+)
+async def update_expense(
+    case_id:    str = Path(..., description="Case ID"),
+    expense_id: str = Path(..., description="Expense ID"),
+    request:    ExpenseUpdateRequest = ...,
+):
+    """
+    Update any combination of fields on an existing expense.
+    Every change is appended to the expense's ``change_log`` for audit purposes.
+    """
+    db      = get_db()
+    doc_ref = _expenses_ref(db, case_id)
+    snap    = await doc_ref.get()
+    items   = snap.to_dict().get("items", []) if snap.exists else []
+
+    updated_item = None
+    new_items    = []
+    now          = datetime.now(tz=timezone.utc)
+
+    for item in items:
+        if item["expenseId"] == expense_id:
+            changes: dict = {}
+            if request.description is not None and request.description != item["description"]:
+                changes["description"] = {"from": item["description"], "to": request.description}
+                item["description"] = request.description
+            if request.amount is not None and float(request.amount) != item["amount"]:
+                changes["amount"] = {"from": str(item["amount"]), "to": f"{request.amount:.2f}"}
+                item["amount"] = float(request.amount)
+            if request.category is not None and request.category.value != item["category"]:
+                changes["category"] = {"from": item["category"], "to": request.category.value}
+                item["category"] = request.category.value
+            if request.vendor is not None and request.vendor != item.get("vendor"):
+                changes["vendor"] = {"from": item.get("vendor"), "to": request.vendor}
+                item["vendor"] = request.vendor
+            if request.date is not None:
+                changes["date"] = {"from": str(item.get("date")), "to": str(request.date)}
+                item["date"] = request.date
+            if request.paid_status is not None and request.paid_status.value != item.get("paidStatus"):
+                changes["paidStatus"] = {"from": item.get("paidStatus"), "to": request.paid_status.value}
+                item["paidStatus"] = request.paid_status.value
+
+            if changes:
+                log_entry = {
+                    "changedAt": now,
+                    "changedBy": request.updated_by,
+                    "changes":   changes,
+                }
+                item.setdefault("changeLog", []).append(log_entry)
+                item["updatedAt"] = now
+                item["updatedBy"] = request.updated_by
+
+            updated_item = item
+        new_items.append(item)
+
+    if updated_item is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Expense '{expense_id}' not found for case '{case_id}'",
+        )
+
+    await doc_ref.set({"items": new_items})
+    logger.info("expense_updated", expense_id=expense_id, case_id=case_id)
+    return _doc_to_expense(expense_id, updated_item)
+
+
+@app.put(
+    "/api/v1/settlement/cases/{case_id}/expenses/{expense_id}/receipt",
+    response_model=Expense,
+    status_code=status.HTTP_200_OK,
+    summary="Attach a receipt to an expense",
+    tags=["Expenses (2.6.1)"],
+)
+async def attach_receipt(
+    case_id:    str = Path(..., description="Case ID"),
+    expense_id: str = Path(..., description="Expense ID"),
+    request:    ExpenseReceiptRequest = ...,
+):
+    """
+    Store the receipt URL and filename on an expense record.
+    Upload the file to Firebase Storage first and pass the resulting URL here.
+    """
+    db      = get_db()
+    doc_ref = _expenses_ref(db, case_id)
+    snap    = await doc_ref.get()
+    items   = snap.to_dict().get("items", []) if snap.exists else []
+
+    updated_item = None
+    new_items    = []
+    now          = datetime.now(tz=timezone.utc)
+
+    for item in items:
+        if item["expenseId"] == expense_id:
+            item["receiptUrl"]      = request.receipt_url
+            item["receiptFilename"] = request.receipt_filename
+            item["updatedAt"]       = now
+            updated_item = item
+        new_items.append(item)
+
+    if updated_item is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Expense '{expense_id}' not found for case '{case_id}'",
+        )
+
+    await doc_ref.set({"items": new_items})
+    logger.info("receipt_attached", expense_id=expense_id, case_id=case_id)
+    return _doc_to_expense(expense_id, updated_item)
+
+
+@app.delete(
+    "/api/v1/settlement/cases/{case_id}/expenses/{expense_id}/receipt",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Remove the receipt from an expense",
+    tags=["Expenses (2.6.1)"],
+)
+async def remove_receipt(
+    case_id:    str = Path(..., description="Case ID"),
+    expense_id: str = Path(..., description="Expense ID"),
+):
+    """Clears the receipt URL and filename from an expense record."""
+    db      = get_db()
+    doc_ref = _expenses_ref(db, case_id)
+    snap    = await doc_ref.get()
+    items   = snap.to_dict().get("items", []) if snap.exists else []
+
+    found     = False
+    new_items = []
+    for item in items:
+        if item["expenseId"] == expense_id:
+            item["receiptUrl"]      = None
+            item["receiptFilename"] = None
+            item["updatedAt"]       = datetime.now(tz=timezone.utc)
+            found = True
+        new_items.append(item)
+
+    if not found:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Expense '{expense_id}' not found for case '{case_id}'",
+        )
+
+    await doc_ref.set({"items": new_items})
+    logger.info("receipt_removed", expense_id=expense_id, case_id=case_id)
+
+
+# ── Admin: expense categories ─────────────────────────────────────────────────
+
+@app.get(
+    "/api/v1/admin/expense-categories",
+    response_model=ExpenseCategoriesResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get all expense categories (built-in + admin-configured)",
+    tags=["Admin – Expense Categories"],
+)
+async def get_expense_categories():
+    """
+    Returns the full list of valid expense categories:
+    built-in defaults plus any custom categories added by an admin.
+    """
+    db  = get_db()
+    doc = await _expense_categories_ref(db).get()
+
+    custom     = []
+    updated_at = None
+    updated_by = None
+
+    if doc.exists:
+        data       = doc.to_dict()
+        custom     = data.get("custom_categories", [])
+        updated_at = _to_dt(data.get("updated_at"))
+        updated_by = data.get("updated_by")
+
+    built_in = sorted(BUILT_IN_EXPENSE_CATEGORIES)
+    all_cats = sorted(set(built_in) | set(custom))
+
+    return ExpenseCategoriesResponse(
+        built_in=built_in,
+        custom=custom,
+        all_categories=all_cats,
+        updated_at=updated_at,
+        updated_by=updated_by,
+    )
+
+
+@app.put(
+    "/api/v1/admin/expense-categories",
+    response_model=ExpenseCategoriesResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Set admin-configured custom expense categories",
+    tags=["Admin – Expense Categories"],
+)
+async def upsert_expense_categories(request: ExpenseCategoriesRequest):
+    """
+    Replace the custom expense category list.  Built-in categories are always
+    included and cannot be removed.
+    """
+    db = get_db()
+    await _expense_categories_ref(db).set({
+        "custom_categories": request.custom_categories,
+        "updated_by":        request.updated_by,
+        "updated_at":        _fs.SERVER_TIMESTAMP,
+    })
+    logger.info("expense_categories_updated", updated_by=request.updated_by,
+                count=len(request.custom_categories))
+
+    built_in = sorted(BUILT_IN_EXPENSE_CATEGORIES)
+    all_cats = sorted(set(built_in) | set(request.custom_categories))
+    return ExpenseCategoriesResponse(
+        built_in=built_in,
+        custom=request.custom_categories,
+        all_categories=all_cats,
+        updated_at=datetime.now(tz=timezone.utc),
+        updated_by=request.updated_by,
+    )
 
 
 # ── 2.6.2 Liens ───────────────────────────────────────────────────────────────
