@@ -41,11 +41,24 @@ class ExpensePaidStatus(str, Enum):
     paid    = "Paid"
 
 
+class LienType(str, Enum):
+    medical    = "Medical"     # Medicare, Medicaid, health insurance
+    government = "Government"  # IRS, state tax, workers' comp
+    private    = "Private"     # private insurer, attorney fee lien
+
+
 class LienSatisfactionStatus(str, Enum):
     outstanding  = "Outstanding"
     negotiating  = "Negotiating"
     satisfied    = "Satisfied"
     waived       = "Waived"
+
+
+class LienClaimStatus(str, Enum):
+    claimed  = "Claimed"   # asserted but not yet verified
+    verified = "Verified"  # amount confirmed
+    disputed = "Disputed"  # validity or amount is contested
+    paid     = "Paid"      # fully paid off
 
 
 class LoanSatisfactionStatus(str, Enum):
@@ -214,12 +227,14 @@ class ExpenseCategoriesResponse(BaseModel):
 
 class LienRequest(BaseModel):
     """Payload for adding a new lien."""
-    lienholder:          str                   = Field(..., min_length=1, max_length=300)
-    amount:              Decimal               = Field(..., gt=Decimal("0"))
-    satisfaction_status: LienSatisfactionStatus = LienSatisfactionStatus.outstanding
-    satisfaction_date:   Optional[datetime]    = None
-    notes:               Optional[str]         = Field(None, max_length=1000)
-    added_by:            str                   = Field(default="")
+    lienholder:          str                    = Field(..., min_length=1, max_length=300)
+    amount:              Decimal                = Field(..., gt=Decimal("0"))
+    lien_type:           LienType               = LienType.private
+    claim_status:        LienClaimStatus         = LienClaimStatus.claimed
+    satisfaction_status: LienSatisfactionStatus  = LienSatisfactionStatus.outstanding
+    satisfaction_date:   Optional[datetime]     = None
+    notes:               Optional[str]          = Field(None, max_length=1000)
+    added_by:            str                    = Field(default="")
 
     @field_validator("amount", mode="before")
     @classmethod
@@ -235,11 +250,13 @@ class LienRequest(BaseModel):
 
 
 class LienUpdateRequest(BaseModel):
-    """Payload for updating lien satisfaction status."""
+    """Payload for updating a lien — all fields optional."""
+    lien_type:           Optional[LienType]              = None
+    claim_status:        Optional[LienClaimStatus]        = None
     satisfaction_status: Optional[LienSatisfactionStatus] = None
-    satisfaction_date:   Optional[datetime]               = None
-    notes:               Optional[str]                    = None
-    amount:              Optional[Decimal]                = None
+    satisfaction_date:   Optional[datetime]              = None
+    notes:               Optional[str]                   = None
+    amount:              Optional[Decimal]               = None
 
     @field_validator("amount", mode="before")
     @classmethod
@@ -253,19 +270,49 @@ class LienUpdateRequest(BaseModel):
 
 
 class Lien(BaseModel):
-    """A lien stored in cases/{caseId}/liens/{lienId}."""
+    """A lien stored in cases/{caseId}/settlement/liens (items array)."""
     lien_id:             str
     case_id:             str
     lienholder:          str
     amount:              Decimal
+    lien_type:           LienType               = LienType.private
+    claim_status:        LienClaimStatus         = LienClaimStatus.claimed
+    is_disputed:         bool                   = False
     satisfaction_status: LienSatisfactionStatus
-    satisfaction_date:   Optional[datetime] = None
-    notes:               Optional[str]      = None
+    satisfaction_date:   Optional[datetime]     = None
+    notes:               Optional[str]          = None
     added_by:            str
     added_at:            datetime
+    updated_at:          Optional[datetime]     = None
+    updated_by:          Optional[str]          = None
 
     @field_serializer("amount")
     def serialize_amount(self, v: Decimal) -> str:
+        return f"{v:.2f}"
+
+
+class LienTypeTotal(BaseModel):
+    """Aggregate for one lien type."""
+    lien_type: str
+    count:     int
+    total:     Decimal
+
+    @field_serializer("total")
+    def serialize_total(self, v: Decimal) -> str:
+        return f"{v:.2f}"
+
+
+class LienTotals(BaseModel):
+    """Summary totals for a case's lien list."""
+    total_amount:      Decimal
+    total_outstanding: Decimal   # Outstanding + Negotiating
+    total_disputed:    Decimal   # where claim_status == Disputed
+    total_satisfied:   Decimal   # Satisfied + Waived
+    disputed_count:    int
+    by_type:           List[LienTypeTotal]
+
+    @field_serializer("total_amount", "total_outstanding", "total_disputed", "total_satisfied")
+    def serialize_money(self, v: Decimal) -> str:
         return f"{v:.2f}"
 
 
@@ -273,61 +320,108 @@ class LienListResponse(BaseModel):
     case_id: str
     total:   int
     liens:   List[Lien]
+    totals:  LienTotals
 
 
 # ── 2.6.3 Loan models ─────────────────────────────────────────────────────────
 
 class LoanRequest(BaseModel):
     """Payload for adding a new case-advance loan."""
-    lender:              str                   = Field(..., min_length=1, max_length=300)
-    amount:              Decimal               = Field(..., gt=Decimal("0"))
-    satisfaction_status: LoanSatisfactionStatus = LoanSatisfactionStatus.outstanding
-    satisfaction_date:   Optional[datetime]    = None
-    added_by:            str                   = Field(default="")
+    lender:              str                    = Field(..., min_length=1, max_length=300)
+    amount:              Decimal                = Field(..., gt=Decimal("0"), description="Principal disbursed")
+    interest_rate:       Optional[Decimal]      = Field(None, ge=Decimal("0"), le=Decimal("100"),
+                                                        description="Annual interest rate %")
+    disbursement_date:   Optional[datetime]     = Field(None, description="Date funds were disbursed")
+    payoff_amount:       Optional[Decimal]      = Field(None, gt=Decimal("0"),
+                                                        description="Total amount to fully pay off (principal + interest)")
+    satisfaction_status: LoanSatisfactionStatus  = LoanSatisfactionStatus.outstanding
+    satisfaction_date:   Optional[datetime]     = None
+    notes:               Optional[str]          = Field(None, max_length=1000)
+    added_by:            str                    = Field(default="")
 
-    @field_validator("amount", mode="before")
+    @field_validator("amount", "interest_rate", "payoff_amount", mode="before")
     @classmethod
-    def coerce_amount(cls, v):
-        try:
-            return Decimal(str(v))
-        except Exception:
-            raise ValueError("amount must be a valid decimal number")
-
-    @field_serializer("amount")
-    def serialize_amount(self, v: Decimal) -> str:
-        return f"{v:.2f}"
-
-
-class LoanUpdateRequest(BaseModel):
-    """Payload for updating loan satisfaction status."""
-    satisfaction_status: Optional[LoanSatisfactionStatus] = None
-    satisfaction_date:   Optional[datetime]               = None
-    amount:              Optional[Decimal]                = None
-
-    @field_validator("amount", mode="before")
-    @classmethod
-    def coerce_amount(cls, v):
+    def coerce_decimal(cls, v):
         if v is None:
             return v
         try:
             return Decimal(str(v))
         except Exception:
-            raise ValueError("amount must be a valid decimal number")
+            raise ValueError("value must be a valid decimal number")
+
+    @field_serializer("amount")
+    def serialize_amount(self, v: Decimal) -> str:
+        return f"{v:.2f}"
+
+    @field_serializer("interest_rate")
+    def serialize_rate(self, v: Optional[Decimal]) -> Optional[str]:
+        return f"{v:.4f}" if v is not None else None
+
+    @field_serializer("payoff_amount")
+    def serialize_payoff(self, v: Optional[Decimal]) -> Optional[str]:
+        return f"{v:.2f}" if v is not None else None
+
+
+class LoanUpdateRequest(BaseModel):
+    """Payload for updating a loan — all fields optional."""
+    satisfaction_status: Optional[LoanSatisfactionStatus] = None
+    satisfaction_date:   Optional[datetime]               = None
+    amount:              Optional[Decimal]                = None
+    interest_rate:       Optional[Decimal]                = Field(None, ge=Decimal("0"), le=Decimal("100"))
+    disbursement_date:   Optional[datetime]               = None
+    payoff_amount:       Optional[Decimal]                = Field(None, gt=Decimal("0"))
+    notes:               Optional[str]                   = None
+
+    @field_validator("amount", "interest_rate", "payoff_amount", mode="before")
+    @classmethod
+    def coerce_decimal(cls, v):
+        if v is None:
+            return v
+        try:
+            return Decimal(str(v))
+        except Exception:
+            raise ValueError("value must be a valid decimal number")
 
 
 class Loan(BaseModel):
-    """A loan stored in cases/{caseId}/loans/{loanId}."""
+    """A loan stored in cases/{caseId}/settlement/loans (items array)."""
     loan_id:             str
     case_id:             str
     lender:              str
     amount:              Decimal
+    interest_rate:       Optional[Decimal]      = None
+    disbursement_date:   Optional[datetime]     = None
+    payoff_amount:       Optional[Decimal]      = None
     satisfaction_status: LoanSatisfactionStatus
-    satisfaction_date:   Optional[datetime] = None
+    satisfaction_date:   Optional[datetime]     = None
+    notes:               Optional[str]          = None
     added_by:            str
     added_at:            datetime
+    updated_at:          Optional[datetime]     = None
+    updated_by:          Optional[str]          = None
 
     @field_serializer("amount")
     def serialize_amount(self, v: Decimal) -> str:
+        return f"{v:.2f}"
+
+    @field_serializer("interest_rate")
+    def serialize_rate(self, v: Optional[Decimal]) -> Optional[str]:
+        return f"{v:.4f}" if v is not None else None
+
+    @field_serializer("payoff_amount")
+    def serialize_payoff(self, v: Optional[Decimal]) -> Optional[str]:
+        return f"{v:.2f}" if v is not None else None
+
+
+class LoanTotals(BaseModel):
+    """Summary totals for a case's loan list."""
+    total_amount:       Decimal   # sum of all principal amounts
+    total_payoff:       Decimal   # sum of payoff_amount (falls back to amount)
+    outstanding_amount: Decimal   # principal still outstanding
+    outstanding_payoff: Decimal   # payoff total still outstanding
+
+    @field_serializer("total_amount", "total_payoff", "outstanding_amount", "outstanding_payoff")
+    def serialize_money(self, v: Decimal) -> str:
         return f"{v:.2f}"
 
 
@@ -335,6 +429,7 @@ class LoanListResponse(BaseModel):
     case_id: str
     total:   int
     loans:   List[Loan]
+    totals:  LoanTotals
 
 
 # ── 2.6.4 Disbursement models ─────────────────────────────────────────────────
