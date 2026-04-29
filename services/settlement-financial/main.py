@@ -88,12 +88,17 @@ from models.settlement import (
     ExpenseRequest,
     ExpenseUpdateRequest,
     Lien,
+    LienClaimStatus,
     LienListResponse,
     LienRequest,
+    LienTotals,
+    LienTypeTotal,
     LienUpdateRequest,
     Loan,
     LoanListResponse,
     LoanRequest,
+    LoanSatisfactionStatus,
+    LoanTotals,
     LoanUpdateRequest,
     SavedCalculation,
 )
@@ -234,31 +239,43 @@ def _doc_to_expense(doc_id: str, data: dict) -> Expense:
 
 
 def _doc_to_lien(doc_id: str, data: dict) -> Lien:
-    from models.settlement import LienSatisfactionStatus
+    from models.settlement import LienSatisfactionStatus, LienType, LienClaimStatus
+    claim_status = LienClaimStatus(data.get("claimStatus", "Claimed"))
     return Lien(
-        lien_id=doc_id,
-        case_id=data["caseId"],
-        lienholder=data["lienholder"],
-        amount=Decimal(str(data["amount"])),
-        satisfaction_status=LienSatisfactionStatus(data["satisfactionStatus"]),
-        satisfaction_date=_to_dt(data.get("satisfactionDate")),
-        notes=data.get("notes"),
-        added_by=data.get("addedBy", ""),
-        added_at=_to_dt(data.get("addedAt")) or datetime.now(tz=timezone.utc),
+        lien_id             = doc_id,
+        case_id             = data["caseId"],
+        lienholder          = data["lienholder"],
+        amount              = Decimal(str(data["amount"])),
+        lien_type           = LienType(data.get("lienType", "Private")),
+        claim_status        = claim_status,
+        is_disputed         = claim_status == LienClaimStatus.disputed,
+        satisfaction_status = LienSatisfactionStatus(data["satisfactionStatus"]),
+        satisfaction_date   = _to_dt(data.get("satisfactionDate")),
+        notes               = data.get("notes"),
+        added_by            = data.get("addedBy", ""),
+        added_at            = _to_dt(data.get("addedAt")) or datetime.now(tz=timezone.utc),
+        updated_at          = _to_dt(data.get("updatedAt")),
+        updated_by          = data.get("updatedBy"),
     )
 
 
 def _doc_to_loan(doc_id: str, data: dict) -> Loan:
     from models.settlement import LoanSatisfactionStatus
     return Loan(
-        loan_id=doc_id,
-        case_id=data["caseId"],
-        lender=data["lender"],
-        amount=Decimal(str(data["amount"])),
-        satisfaction_status=LoanSatisfactionStatus(data["satisfactionStatus"]),
-        satisfaction_date=_to_dt(data.get("satisfactionDate")),
-        added_by=data.get("addedBy", ""),
-        added_at=_to_dt(data.get("addedAt")) or datetime.now(tz=timezone.utc),
+        loan_id             = doc_id,
+        case_id             = data["caseId"],
+        lender              = data["lender"],
+        amount              = Decimal(str(data["amount"])),
+        interest_rate       = Decimal(str(data["interestRate"])) if data.get("interestRate") is not None else None,
+        disbursement_date   = _to_dt(data.get("disbursementDate")),
+        payoff_amount       = Decimal(str(data["payoffAmount"])) if data.get("payoffAmount") is not None else None,
+        satisfaction_status = LoanSatisfactionStatus(data["satisfactionStatus"]),
+        satisfaction_date   = _to_dt(data.get("satisfactionDate")),
+        notes               = data.get("notes"),
+        added_by            = data.get("addedBy", ""),
+        added_at            = _to_dt(data.get("addedAt")) or datetime.now(tz=timezone.utc),
+        updated_at          = _to_dt(data.get("updatedAt")),
+        updated_by          = data.get("updatedBy"),
     )
 
 
@@ -976,11 +993,15 @@ async def add_lien(
         "caseId":             case_id,
         "lienholder":         request.lienholder,
         "amount":             float(request.amount),
+        "lienType":           request.lien_type.value,
+        "claimStatus":        request.claim_status.value,
         "satisfactionStatus": request.satisfaction_status.value,
         "satisfactionDate":   request.satisfaction_date,
         "notes":              request.notes,
         "addedBy":            request.added_by,
         "addedAt":            now,
+        "updatedAt":          None,
+        "updatedBy":          None,
     }
     await _liens_ref(db, case_id).set(
         {"items": _fs.ArrayUnion([new_item])}, merge=True
@@ -997,13 +1018,42 @@ async def add_lien(
     tags=["Liens (2.6.2)"],
 )
 async def list_liens(case_id: str = Path(..., description="Case ID")):
+    from collections import defaultdict
     db   = get_db()
     snap = await _liens_ref(db, case_id).get()
     if not snap.exists:
-        return LienListResponse(case_id=case_id, total=0, liens=[])
+        empty_totals = LienTotals(
+            total_amount=Decimal("0"), total_outstanding=Decimal("0"),
+            total_disputed=Decimal("0"), total_satisfied=Decimal("0"),
+            disputed_count=0, by_type=[],
+        )
+        return LienListResponse(case_id=case_id, total=0, liens=[], totals=empty_totals)
+
     items = snap.to_dict().get("items", [])
     liens = [_doc_to_lien(i["lienId"], i) for i in items]
-    return LienListResponse(case_id=case_id, total=len(liens), liens=liens)
+
+    # ── Compute totals ────────────────────────────────────────────────────────
+    _ACTIVE    = {"Outstanding", "Negotiating"}
+    _SATISFIED = {"Satisfied", "Waived"}
+    total_amount      = sum(l.amount for l in liens) if liens else Decimal("0")
+    total_outstanding = sum(l.amount for l in liens if l.satisfaction_status.value in _ACTIVE)
+    total_satisfied   = sum(l.amount for l in liens if l.satisfaction_status.value in _SATISFIED)
+    total_disputed    = sum(l.amount for l in liens if l.is_disputed)
+    disputed_count    = sum(1 for l in liens if l.is_disputed)
+
+    type_map: dict = defaultdict(lambda: {"total": Decimal("0"), "count": 0})
+    for l in liens:
+        type_map[l.lien_type.value]["total"] += l.amount
+        type_map[l.lien_type.value]["count"] += 1
+    by_type = [LienTypeTotal(lien_type=k, count=v["count"], total=v["total"])
+               for k, v in type_map.items()]
+
+    totals = LienTotals(
+        total_amount=total_amount, total_outstanding=total_outstanding,
+        total_disputed=total_disputed, total_satisfied=total_satisfied,
+        disputed_count=disputed_count, by_type=by_type,
+    )
+    return LienListResponse(case_id=case_id, total=len(liens), liens=liens, totals=totals)
 
 
 @app.patch(
@@ -1023,18 +1073,26 @@ async def update_lien(
     snap    = await doc_ref.get()
     items   = snap.to_dict().get("items", []) if snap.exists else []
 
+    now          = datetime.now(tz=timezone.utc)
     updated_item = None
-    new_items = []
+    new_items    = []
     for item in items:
         if item["lienId"] == lien_id:
-            if request.satisfaction_status:
-                item["satisfactionStatus"] = request.satisfaction_status.value
-            if request.satisfaction_date:
-                item["satisfactionDate"] = request.satisfaction_date
+            changed = False
+            if request.lien_type is not None:
+                item["lienType"]  = request.lien_type.value;  changed = True
+            if request.claim_status is not None:
+                item["claimStatus"] = request.claim_status.value;  changed = True
+            if request.satisfaction_status is not None:
+                item["satisfactionStatus"] = request.satisfaction_status.value;  changed = True
+            if request.satisfaction_date is not None:
+                item["satisfactionDate"] = request.satisfaction_date;  changed = True
             if request.notes is not None:
-                item["notes"] = request.notes
-            if request.amount:
-                item["amount"] = float(request.amount)
+                item["notes"] = request.notes;  changed = True
+            if request.amount is not None:
+                item["amount"] = float(request.amount);  changed = True
+            if changed:
+                item["updatedAt"] = now
             updated_item = item
         new_items.append(item)
 
@@ -1042,6 +1100,7 @@ async def update_lien(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail=f"Lien '{lien_id}' not found for case '{case_id}'")
     await doc_ref.set({"items": new_items})
+    logger.info("lien_updated", lien_id=lien_id, case_id=case_id)
     return _doc_to_lien(lien_id, updated_item)
 
 
@@ -1088,10 +1147,16 @@ async def add_loan(
         "caseId":             case_id,
         "lender":             request.lender,
         "amount":             float(request.amount),
+        "interestRate":       float(request.interest_rate) if request.interest_rate is not None else None,
+        "disbursementDate":   request.disbursement_date,
+        "payoffAmount":       float(request.payoff_amount) if request.payoff_amount is not None else None,
         "satisfactionStatus": request.satisfaction_status.value,
         "satisfactionDate":   request.satisfaction_date,
+        "notes":              request.notes,
         "addedBy":            request.added_by,
         "addedAt":            now,
+        "updatedAt":          None,
+        "updatedBy":          None,
     }
     await _loans_ref(db, case_id).set(
         {"items": _fs.ArrayUnion([new_item])}, merge=True
@@ -1111,10 +1176,30 @@ async def list_loans(case_id: str = Path(..., description="Case ID")):
     db   = get_db()
     snap = await _loans_ref(db, case_id).get()
     if not snap.exists:
-        return LoanListResponse(case_id=case_id, total=0, loans=[])
+        empty_totals = LoanTotals(
+            total_amount=Decimal("0"), total_payoff=Decimal("0"),
+            outstanding_amount=Decimal("0"), outstanding_payoff=Decimal("0"),
+        )
+        return LoanListResponse(case_id=case_id, total=0, loans=[], totals=empty_totals)
+
     items = snap.to_dict().get("items", [])
     loans = [_doc_to_loan(i["loanId"], i) for i in items]
-    return LoanListResponse(case_id=case_id, total=len(loans), loans=loans)
+
+    # ── Compute totals ────────────────────────────────────────────────────────
+    def _effective_payoff(loan: Loan) -> Decimal:
+        return loan.payoff_amount if loan.payoff_amount is not None else loan.amount
+
+    total_amount       = sum(l.amount for l in loans) if loans else Decimal("0")
+    total_payoff       = sum(_effective_payoff(l) for l in loans) if loans else Decimal("0")
+    outstanding        = [l for l in loans if l.satisfaction_status == LoanSatisfactionStatus.outstanding]
+    outstanding_amount = sum(l.amount for l in outstanding)
+    outstanding_payoff = sum(_effective_payoff(l) for l in outstanding)
+
+    totals = LoanTotals(
+        total_amount=total_amount, total_payoff=total_payoff,
+        outstanding_amount=outstanding_amount, outstanding_payoff=outstanding_payoff,
+    )
+    return LoanListResponse(case_id=case_id, total=len(loans), loans=loans, totals=totals)
 
 
 @app.patch(
@@ -1134,16 +1219,28 @@ async def update_loan(
     snap    = await doc_ref.get()
     items   = snap.to_dict().get("items", []) if snap.exists else []
 
+    now          = datetime.now(tz=timezone.utc)
     updated_item = None
-    new_items = []
+    new_items    = []
     for item in items:
         if item["loanId"] == loan_id:
-            if request.satisfaction_status:
-                item["satisfactionStatus"] = request.satisfaction_status.value
-            if request.satisfaction_date:
-                item["satisfactionDate"] = request.satisfaction_date
-            if request.amount:
-                item["amount"] = float(request.amount)
+            changed = False
+            if request.satisfaction_status is not None:
+                item["satisfactionStatus"] = request.satisfaction_status.value;  changed = True
+            if request.satisfaction_date is not None:
+                item["satisfactionDate"] = request.satisfaction_date;  changed = True
+            if request.amount is not None:
+                item["amount"] = float(request.amount);  changed = True
+            if request.interest_rate is not None:
+                item["interestRate"] = float(request.interest_rate);  changed = True
+            if request.disbursement_date is not None:
+                item["disbursementDate"] = request.disbursement_date;  changed = True
+            if request.payoff_amount is not None:
+                item["payoffAmount"] = float(request.payoff_amount);  changed = True
+            if request.notes is not None:
+                item["notes"] = request.notes;  changed = True
+            if changed:
+                item["updatedAt"] = now
             updated_item = item
         new_items.append(item)
 
