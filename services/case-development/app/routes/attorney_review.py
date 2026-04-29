@@ -34,7 +34,7 @@ def get_attorney_review_queue(
     page_size: int = Query(default=20, ge=1, le=100, description="Items per page"),
 ):
     db     = get_firestore_client()
-    result = get_review_queue(db=db, user={}, page=page, page_size=page_size)
+    result = get_review_queue(db=db, page=page, page_size=page_size)
 
     page_data = result["page"]
     return ReviewQueueResponse(

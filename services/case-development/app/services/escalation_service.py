@@ -307,7 +307,6 @@ def escalate_case(
 
 def get_escalation_queue(
     db: firestore.Client,
-    user: dict,
     page: int,
     page_size: int,
 ) -> dict:

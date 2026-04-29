@@ -27,11 +27,7 @@ from typing import Optional
 
 from google.cloud import firestore
 
-from app.utils.roles import normalize_role
-
 logger = logging.getLogger(__name__)
-
-ADMIN_ROLES = {"admin_staff", "junior_partner", "senior_partner", "system_admin"}
 
 SORT_KEY_MAP = {
     "case_id":              lambda c: c["case_id"] or "",
@@ -75,13 +71,9 @@ def _normalize_dt(value) -> Optional[datetime]:
 
 def _load_cases(
     db: firestore.Client,
-    user: dict,
-    is_admin: bool,
 ) -> list[dict]:
     """Stream all cases from Firestore and materialise the extended case dict."""
     query = db.collection("cases")
-    if not is_admin:
-        query = query.where("assignment.assignedParalegal", "==", user.get("uid", ""))
 
     cases: list[dict] = []
     for doc in query.stream():
@@ -189,15 +181,13 @@ def _apply_filters(
 
 
 def _resolve_params(
-    user: dict,
-    is_admin: bool,
     case_type: Optional[str],
     assignees: Optional[list[str]],
     attorney: Optional[list[str]],
 ) -> tuple[Optional[str], Optional[list[str]], Optional[list[str]]]:
     resolved_type       = _CASE_TYPE_MAP.get((case_type or "").lower())
-    effective_assignees = assignees if (is_admin and assignees) else None
-    effective_attorneys = attorney if (is_admin and attorney) else None
+    effective_assignees = assignees if assignees else None
+    effective_attorneys = attorney if attorney else None
     return resolved_type, effective_assignees, effective_attorneys
 
 
@@ -205,7 +195,6 @@ def _resolve_params(
 
 def search_cases(
     db: firestore.Client,
-    user: dict,
     q: Optional[str],
     statuses: Optional[list[str]],
     case_type: Optional[str],
@@ -225,14 +214,11 @@ def search_cases(
     page: int,
     page_size: int,
 ) -> dict:
-    user_role = normalize_role(user.get("role", ""))
-    is_admin  = user_role in ADMIN_ROLES
-
     resolved_type, effective_assignees, effective_attorneys = _resolve_params(
-        user, is_admin, case_type, assignees, attorney
+        case_type, assignees, attorney
     )
 
-    cases    = _load_cases(db, user, is_admin)
+    cases    = _load_cases(db)
     filtered = _apply_filters(
         cases,
         q=q,
@@ -272,7 +258,6 @@ def search_cases(
 
 def export_cases_csv(
     db: firestore.Client,
-    user: dict,
     q: Optional[str],
     statuses: Optional[list[str]],
     case_type: Optional[str],
@@ -291,14 +276,11 @@ def export_cases_csv(
     sort_dir: str,
 ) -> str:
     """Return all matching cases as a CSV string (no pagination)."""
-    user_role = normalize_role(user.get("role", ""))
-    is_admin  = user_role in ADMIN_ROLES
-
     resolved_type, effective_assignees, effective_attorneys = _resolve_params(
-        user, is_admin, case_type, assignees, attorney
+        case_type, assignees, attorney
     )
 
-    cases    = _load_cases(db, user, is_admin)
+    cases    = _load_cases(db)
     filtered = _apply_filters(
         cases,
         q=q,

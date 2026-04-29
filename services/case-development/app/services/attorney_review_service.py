@@ -67,7 +67,6 @@ _FILING_TASKS = [
 
 def get_review_queue(
     db: firestore.Client,
-    user: dict,
     page: int,
     page_size: int,
 ) -> dict:
@@ -79,13 +78,7 @@ def get_review_queue(
       2. submittedForReviewAt — oldest first (longest waiting)
       3. qual_score — highest first (strongest cases)
     """
-    user_uid  = user.get("uid", "")
-    user_role = normalize_role(user.get("role", ""))
-    is_senior = user_role in SENIOR_ROLES
-
     query = db.collection("cases").where("status", "==", REVIEW_STATUS)
-    if not is_senior:
-        query = query.where("assignment.assignedAttorney", "==", user_uid)
 
     docs = list(query.stream())
 

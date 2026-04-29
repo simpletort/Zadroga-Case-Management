@@ -66,7 +66,6 @@ def paralegal_dashboard(
     db = get_firestore_client()
     result = get_dashboard(
         db=db,
-        user={},
         statuses=statuses,
         case_type=case_type,
         assignees=assignees,

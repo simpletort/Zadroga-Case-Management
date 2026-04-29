@@ -563,14 +563,9 @@ class TestEscalateCase:
 
 class TestGetEscalationQueue:
 
-    def _call(self, db, role="senior_partner", uid=_SP, page=1, page_size=20):
+    def _call(self, db, role=None, uid=None, page=1, page_size=20):
         from app.services.escalation_service import get_escalation_queue
-        return get_escalation_queue(
-            db=db,
-            user={"uid": uid, "role": role},
-            page=page,
-            page_size=page_size,
-        )
+        return get_escalation_queue(db=db, page=page, page_size=page_size)
 
     def _escalated_case_snap(self, case_id=_CASE, vcf_deadline=None, qual_score=80.0,
                               escalated_at=None):

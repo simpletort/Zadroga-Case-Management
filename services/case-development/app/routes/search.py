@@ -143,7 +143,7 @@ def case_search(
     page_size: int = Query(default=20, ge=1, le=100),
 ):
     db     = get_firestore_client()
-    result = search_cases(db=db, user={}, page=page, page_size=page_size, **params)
+    result = search_cases(db=db, page=page, page_size=page_size, **params)
     raw    = result["page"]
     return SearchResponse(
         page=SearchPage(
@@ -167,7 +167,7 @@ def case_search_export(
     params: dict = Depends(_search_params),
 ):
     db          = get_firestore_client()
-    csv_content = export_cases_csv(db=db, user={}, **params)
+    csv_content = export_cases_csv(db=db, **params)
     return StreamingResponse(
         iter([csv_content]),
         media_type="text/csv",
