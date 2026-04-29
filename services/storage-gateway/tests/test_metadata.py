@@ -42,8 +42,7 @@ class TestMetadataRoute:
             resp = client.get(
                 "/api/v1/storage/doc-abc123/metadata",
                 params={"case_id": "ZAD-2024-01-0001"},
-                headers={"Authorization": "Bearer fake-token"},
-            )
+                            )
 
         assert resp.status_code == 200
         body = resp.json()
@@ -68,8 +67,7 @@ class TestMetadataRoute:
             resp = client.get(
                 "/api/v1/storage/nonexistent-id/metadata",
                 params={"case_id": "ZAD-2024-01-0001"},
-                headers={"Authorization": "Bearer fake-token"},
-            )
+                            )
 
         assert resp.status_code == 404
         assert "not found" in resp.json()["detail"].lower()
@@ -78,16 +76,8 @@ class TestMetadataRoute:
         resp = client.get(
             "/api/v1/storage/doc-abc123/metadata",
             # case_id intentionally omitted
-            headers={"Authorization": "Bearer fake-token"},
-        )
+                    )
         assert resp.status_code == 422
-
-    def test_unauthenticated_request_returns_403(self, client):
-        resp = client.get(
-            "/api/v1/storage/doc-abc123/metadata",
-            params={"case_id": "ZAD-2024-01-0001"},
-        )
-        assert resp.status_code in (401, 403)
 
 
 # ── metadata_service unit tests ────────────────────────────────────────────

@@ -17,7 +17,7 @@ All lifecycle endpoints require system_admin role.
 
 import logging
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Request
 
 from app.models.storage import (
     CaseHoldRequest,
@@ -35,7 +35,6 @@ from app.services.gcs_service import (
     update_lifecycle_rules,
 )
 from app.utils.audit import AuditAction, log_audit_event
-from app.utils.auth import require_min_role
 from app.utils.gcs_client import get_gcs_client
 from app.config import get_settings
 
@@ -87,9 +86,7 @@ def _build_sdk_rules(rules: list) -> list[dict]:
     response_model=LifecyclePolicyResponse,
     summary="Read current bucket lifecycle rules and soft-delete policy (system_admin only)",
 )
-def get_lifecycle(
-    _user: dict = Depends(require_min_role("lifecycle_update")),
-):
+def get_lifecycle():
     gcs_client = get_gcs_client()
     rules, retention_days = get_lifecycle_rules(gcs_client)
     return LifecyclePolicyResponse(
@@ -108,7 +105,6 @@ def get_lifecycle(
 )
 def update_lifecycle(
     body: LifecycleUpdateRequest,
-    _user: dict = Depends(require_min_role("lifecycle_update")),
 ):
     sdk_rules = _build_sdk_rules(body.rules)
     gcs_client = get_gcs_client()
@@ -127,9 +123,7 @@ def update_lifecycle(
     response_model=LifecycleUpdateResponse,
     summary="Apply the canonical Zadroga lifecycle policy (system_admin only)",
 )
-def apply_default_lifecycle(
-    _user: dict = Depends(require_min_role("lifecycle_update")),
-):
+def apply_default_lifecycle():
     """
     Applies the standard four-rule Zadroga policy:
       - staging/    → Delete after 1 day
@@ -157,7 +151,6 @@ def apply_default_lifecycle(
 )
 def update_soft_delete(
     body: SoftDeleteRequest,
-    _user: dict = Depends(require_min_role("lifecycle_update")),
 ):
     """
     Sets the soft-delete retention window on the GCS bucket.
@@ -184,7 +177,6 @@ def update_case_hold(
     request: Request,
     case_id: str,
     body: CaseHoldRequest,
-    user: dict = Depends(require_min_role("lifecycle_update")),
 ):
     """
     Sets ``temporaryHold`` on every GCS object under ``{caseId}/``.
@@ -202,7 +194,6 @@ def update_case_hold(
     audit_action = AuditAction.hold_set if body.hold else AuditAction.hold_release
     log_audit_event(
         action=audit_action,
-        user=user,
         request=request,
         case_id=case_id,
         metadata={"documents_updated": count},

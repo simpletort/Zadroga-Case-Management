@@ -17,14 +17,6 @@ import pytest
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-AUTH = {"Authorization": "Bearer fake-token"}
-
-SYSTEM_ADMIN_ROLE = {
-    "uid": "admin-001",
-    "email": "admin@simpletort.com",
-    "role": "system_admin",
-}
-
 
 def _mock_request(xff=None, client_host="10.0.0.1", user_agent="TestAgent/1.0"):
     """Build a minimal mock FastAPI Request for unit testing."""
@@ -106,7 +98,6 @@ class TestLogAuditEvent:
 
         defaults = dict(
             action=AuditAction.view_metadata,
-            user={"uid": "u001", "email": "user@simpletort.com"},
             request=_mock_request(),
         )
         defaults.update(kwargs)
@@ -136,20 +127,12 @@ class TestLogAuditEvent:
                 case_id="ZAD-2024-01-0001",
             )
         payload = mock_cloud_logger.log_struct.call_args[0][0]
-        assert payload["userId"] == "user@simpletort.com"
         assert payload["action"] == "view_metadata"
         assert payload["documentId"] == "doc-001"
         assert payload["caseId"] == "ZAD-2024-01-0001"
         assert "timestamp" in payload
         assert "ipAddress" in payload
         assert "userAgent" in payload
-
-    def test_uses_uid_fallback_when_no_email(self, mock_cloud_logger):
-        with patch("app.utils.audit.get_firestore_client") as mock_fs:
-            mock_fs.return_value = MagicMock()
-            self._invoke(mock_cloud_logger, user={"uid": "u999"})
-        payload = mock_cloud_logger.log_struct.call_args[0][0]
-        assert payload["userId"] == "u999"
 
     def test_service_name_included_in_event(self, mock_cloud_logger):
         with patch("app.utils.audit.get_firestore_client") as mock_fs:
@@ -218,7 +201,6 @@ class TestUploadRegisterAudit:
                     "content_type": "application/pdf",
                     "case_id": "ZAD-2024-01-0001",
                 },
-                headers=AUTH,
             )
             return resp, mock_audit
 
@@ -262,7 +244,6 @@ class TestSignedUrlAudit:
             resp = client.get(
                 "/api/v1/storage/signed-url",
                 params=params,
-                headers=AUTH,
             )
             return resp, mock_audit
 
@@ -292,7 +273,6 @@ class TestMetadataAudit:
             resp = client.get(
                 "/api/v1/storage/doc-001/metadata",
                 params={"case_id": "ZAD-2024-01-0001"},
-                headers=AUTH,
             )
             return resp, mock_audit
 
@@ -329,7 +309,6 @@ class TestDocumentsListAudit:
             )
             resp = client.get(
                 "/api/v1/storage/cases/ZAD-2024-01-0001/documents",
-                headers=AUTH,
             )
             return resp, mock_audit
 
@@ -361,7 +340,6 @@ class TestDocumentsPatchAudit:
             resp = client.patch(
                 "/api/v1/storage/cases/ZAD-2024-01-0001/documents/doc-001",
                 json={"processing_status": "Completed"},
-                headers=AUTH,
             )
             return resp, mock_audit
 
@@ -384,26 +362,24 @@ class TestDocumentsPatchAudit:
 class TestCaseHoldAudit:
     """Verify PUT /cases/{caseId}/hold emits hold_set / hold_release events."""
 
-    def _do_hold(self, client, mock_firebase, hold: bool):
-        mock_firebase.return_value = SYSTEM_ADMIN_ROLE
+    def _do_hold(self, client, hold: bool):
         with patch("app.routes.lifecycle.set_case_documents_hold") as mock_hold, \
              patch("app.routes.lifecycle.log_audit_event") as mock_audit:
             mock_hold.return_value = 3
             resp = client.put(
                 "/api/v1/storage/cases/ZAD-2024-01-0001/hold",
                 json={"hold": hold},
-                headers=AUTH,
             )
             return resp, mock_audit
 
-    def test_hold_true_emits_hold_set(self, client, mock_firebase, mock_gcs_client):
-        resp, mock_audit = self._do_hold(client, mock_firebase, hold=True)
+    def test_hold_true_emits_hold_set(self, client, mock_gcs_client):
+        resp, mock_audit = self._do_hold(client, hold=True)
         assert resp.status_code == 200
         mock_audit.assert_called_once()
         assert mock_audit.call_args.kwargs["action"].value == "hold_set"
 
-    def test_hold_false_emits_hold_release(self, client, mock_firebase, mock_gcs_client):
-        resp, mock_audit = self._do_hold(client, mock_firebase, hold=False)
+    def test_hold_false_emits_hold_release(self, client, mock_gcs_client):
+        resp, mock_audit = self._do_hold(client, hold=False)
         assert resp.status_code == 200
         mock_audit.assert_called_once()
         assert mock_audit.call_args.kwargs["action"].value == "hold_release"

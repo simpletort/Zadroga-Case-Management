@@ -78,32 +78,17 @@ def get_client_ip(request: Request) -> str:
 def log_audit_event(
     *,
     action: AuditAction,
-    user: dict,
     request: Request,
     document_id: Optional[str] = None,
     case_id: Optional[str] = None,
     resource: Optional[str] = None,
     metadata: Optional[dict] = None,
 ) -> None:
-    """
-    Write a HIPAA audit event to Cloud Logging and Firestore.
-
-    Args:
-        action:      The file access action performed.
-        user:        Verified Firebase token dict (uid, email, role).
-        request:     FastAPI Request — source of IP address and user-agent.
-        document_id: fileId of the document accessed (if applicable).
-        case_id:     Case ID scoping the document (if applicable).
-        resource:    Human-readable resource identifier (e.g. GCS blob path).
-        metadata:    Extra context dict (category, content_type, etc.).
-    """
     now = datetime.now(tz=timezone.utc)
-    user_id = user.get("email") or user.get("uid", "unknown")
     client_ip = get_client_ip(request)
     user_agent = request.headers.get("user-agent", "unknown")
 
     event: dict = {
-        "userId": user_id,
         "action": action.value,
         "documentId": document_id,
         "caseId": case_id,
@@ -124,14 +109,10 @@ def log_audit_event(
             labels={
                 "action": action.value,
                 "case_id": case_id or "",
-                "user_id": user_id,
             },
         )
     except Exception as exc:
-        logger.error(
-            "AUDIT_CLOUD_LOG_FAILURE action=%s user=%s error=%s",
-            action.value, user_id, exc,
-        )
+        logger.error("AUDIT_CLOUD_LOG_FAILURE action=%s error=%s", action.value, exc)
 
     # ── 2. Firestore (queryable index) ────────────────────────────────────────
     # .add() always creates a new document with an auto-generated ID.
@@ -142,7 +123,4 @@ def log_audit_event(
         db = get_firestore_client()
         db.collection("audit_logs").add(firestore_event)
     except Exception as exc:
-        logger.error(
-            "AUDIT_FIRESTORE_FAILURE action=%s user=%s error=%s",
-            action.value, user_id, exc,
-        )
+        logger.error("AUDIT_FIRESTORE_FAILURE action=%s error=%s", action.value, exc)
