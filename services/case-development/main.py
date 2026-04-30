@@ -80,13 +80,8 @@ _ROUTE_PERMISSIONS: list[tuple[str, str, str]] = [
     ("DELETE", r"^/api/v1/search/presets/[^/]+$",            "cases.delete"),
 ]
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=get_cors_origins(settings.environment),
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PATCH", "DELETE"],
-    allow_headers=["Authorization", "Content-Type", "x-apigateway-api-userinfo"],
-)
+app.add_middleware(ErrorHandlerMiddleware)
+app.add_middleware(LoggingMiddleware)
 app.add_middleware(
     AuthMiddleware,
     route_permissions=_ROUTE_PERMISSIONS,
@@ -96,8 +91,13 @@ app.add_middleware(
         e.strip() for e in settings.trusted_service_accounts.split(",") if e.strip()
     ],
 )
-app.add_middleware(LoggingMiddleware)
-app.add_middleware(ErrorHandlerMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_cors_origins(settings.environment),
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
+    allow_headers=["Authorization", "Content-Type", "x-apigateway-api-userinfo"],
+)
 
 
 @app.get("/health", include_in_schema=False)
