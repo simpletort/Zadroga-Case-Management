@@ -15,7 +15,6 @@ class Settings(BaseSettings):
     roles_firestore_database_id: str = "simpletort-dev"
     environment: str = "production"
     log_level: str = "INFO"
-    allowed_origins: str = "https://staff.simpletort.com"
     # Comma-separated service account emails allowed to call this service via OIDC
     trusted_service_accounts: str = ""
 
