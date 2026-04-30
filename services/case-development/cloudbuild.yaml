@@ -52,22 +52,7 @@ images:
 
 substitutions:
   _TRUSTED_SERVICE_ACCOUNTS: >-
-    auth-rbac@$PROJECT_ID.iam.gserviceaccount.com,
-    client-portal@$PROJECT_ID.iam.gserviceaccount.com,
-    counsel-substitution@$PROJECT_ID.iam.gserviceaccount.com,
-    enrollment-workflow@$PROJECT_ID.iam.gserviceaccount.com,
-    evidence-management@$PROJECT_ID.iam.gserviceaccount.com,
-    external-sync@$PROJECT_ID.iam.gserviceaccount.com,
-    hipaa-compliance@$PROJECT_ID.iam.gserviceaccount.com,
-    lead-intake@$PROJECT_ID.iam.gserviceaccount.com,
-    notification@$PROJECT_ID.iam.gserviceaccount.com,
-    reporting-kpi@$PROJECT_ID.iam.gserviceaccount.com,
-    reporting-service@$PROJECT_ID.iam.gserviceaccount.com,
-    revenue-analytics@$PROJECT_ID.iam.gserviceaccount.com,
-    settlement-financial@$PROJECT_ID.iam.gserviceaccount.com,
-    storage-gateway@$PROJECT_ID.iam.gserviceaccount.com,
-    vcf-claim-tracking@$PROJECT_ID.iam.gserviceaccount.com,
-    workflow-orchestrator@$PROJECT_ID.iam.gserviceaccount.com
+    292736139819-compute@developer.gserviceaccount.com
 
 options:
   logging: CLOUD_LOGGING_ONLY

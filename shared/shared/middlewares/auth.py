@@ -17,7 +17,8 @@ import json
 import logging
 import re
 import time
-from typing import Sequence
+from collections.abc import Collection
+from typing import Any, Sequence
 
 from cachetools import TTLCache
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -37,7 +38,7 @@ def _get_firestore_client(project: str, database: str):
     global _firestore_client
     if _firestore_client is None:
         from google.cloud import firestore
-        _firestore_client = firestore.Client(project=project, database=database)
+        _firestore_client = firestore.AsyncClient(project=project, database=database)
     return _firestore_client
 
 
@@ -92,12 +93,13 @@ async def _get_role_permissions(
         return _roles_cache[role]
 
     db = _get_firestore_client(firestore_project, firestore_database)
-    doc = db.collection("roles").document(role).get()
+    doc = await db.collection("roles").document(role).get()
     if not doc.exists:
         logger.warning("Role document 'roles/%s' not found in Firestore", role)
         permissions: list[str] = []
     else:
-        permissions = doc.to_dict().get("permissions", [])
+        data = doc.to_dict() or {}
+        permissions = data.get("permissions", [])
 
     _roles_cache[role] = permissions
     return permissions
@@ -107,16 +109,16 @@ async def _get_role_permissions(
 # OIDC verification for service-to-service calls
 # ---------------------------------------------------------------------------
 
-def _verify_oidc_token(token: str) -> dict:
+def _verify_oidc_token(token: str) -> dict[str, Any]:
     from google.auth.transport import requests as google_requests
     from google.oauth2 import id_token
 
     request = google_requests.Request()
     # verify_oauth2_token checks signature, expiry, and issuer
-    return id_token.verify_oauth2_token(token, request)
+    return dict(id_token.verify_oauth2_token(token, request))
 
 
-def _is_trusted_service(claims: dict, trusted_accounts: Sequence[str]) -> bool:
+def _is_trusted_service(claims: dict, trusted_accounts: Collection[str]) -> bool:
     email = claims.get("email", "")
     return bool(email) and claims.get("email_verified", False) and email in trusted_accounts
 
