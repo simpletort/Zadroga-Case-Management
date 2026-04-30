@@ -40,7 +40,7 @@ steps:
       - "--region=$_REGION"
       - "--platform=managed"
       - "--no-allow-unauthenticated"
-      - "--set-env-vars=^|^GCP_PROJECT_ID=$PROJECT_ID|ENV=$_ENV|FIRESTORE_DATABASE_ID=$_FIRESTORE_DATABASE_ID"
+      - "--set-env-vars=^|^GCP_PROJECT_ID=$PROJECT_ID|ENVIRONMENT=$_ENV|FIRESTORE_DATABASE_ID=$_FIRESTORE_DATABASE_ID|TRUSTED_SERVICE_ACCOUNTS=$_TRUSTED_SERVICE_ACCOUNTS"
       - "--memory=512Mi"
       - "--cpu=1"
       - "--max-instances=10"
@@ -49,6 +49,25 @@ steps:
 images:
   - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
   - "$_REPO/$_SERVICE_NAME:latest"
+
+substitutions:
+  _TRUSTED_SERVICE_ACCOUNTS: >-
+    auth-rbac@$PROJECT_ID.iam.gserviceaccount.com,
+    client-portal@$PROJECT_ID.iam.gserviceaccount.com,
+    counsel-substitution@$PROJECT_ID.iam.gserviceaccount.com,
+    enrollment-workflow@$PROJECT_ID.iam.gserviceaccount.com,
+    evidence-management@$PROJECT_ID.iam.gserviceaccount.com,
+    external-sync@$PROJECT_ID.iam.gserviceaccount.com,
+    hipaa-compliance@$PROJECT_ID.iam.gserviceaccount.com,
+    lead-intake@$PROJECT_ID.iam.gserviceaccount.com,
+    notification@$PROJECT_ID.iam.gserviceaccount.com,
+    reporting-kpi@$PROJECT_ID.iam.gserviceaccount.com,
+    reporting-service@$PROJECT_ID.iam.gserviceaccount.com,
+    revenue-analytics@$PROJECT_ID.iam.gserviceaccount.com,
+    settlement-financial@$PROJECT_ID.iam.gserviceaccount.com,
+    storage-gateway@$PROJECT_ID.iam.gserviceaccount.com,
+    vcf-claim-tracking@$PROJECT_ID.iam.gserviceaccount.com,
+    workflow-orchestrator@$PROJECT_ID.iam.gserviceaccount.com
 
 options:
   logging: CLOUD_LOGGING_ONLY
