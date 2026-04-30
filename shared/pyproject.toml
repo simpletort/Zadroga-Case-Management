@@ -1,9 +1,14 @@
 [build-system]
-requires = ["setuptools>=61"]
-build-backend = "setuptools.build_meta"
+requires = ["setuptools>=68"]
+build-backend = "setuptools.backends.legacy:BuildBackend"
 
 [project]
-name = "shared"
+name = "simpletort-shared"
 version = "0.1.0"
-requires-python = ">=3.10"
-dependencies = []  # add e.g. "starlette" if your middlewares need it
+requires-python = ">=3.11"
+dependencies = [
+    "starlette>=0.36",
+    "google-auth>=2.28",
+    "google-cloud-firestore>=2.14",
+    "cachetools>=5.3",
+]

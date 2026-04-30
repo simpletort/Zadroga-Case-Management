@@ -12,9 +12,12 @@ _ENV_FILE = f".env.{_ENV}" if _ENV != "production" else ".env.production"
 class Settings(BaseSettings):
     gcp_project_id: str = "simpletort-prod"
     firestore_database_id: str = "(default)"
+    roles_firestore_database_id: str = "simpletort-dev"
     environment: str = "production"
     log_level: str = "INFO"
     allowed_origins: str = "https://staff.simpletort.com"
+    # Comma-separated service account emails allowed to call this service via OIDC
+    trusted_service_accounts: str = ""
 
     model_config = {"env_file": _ENV_FILE, "case_sensitive": False}
 
