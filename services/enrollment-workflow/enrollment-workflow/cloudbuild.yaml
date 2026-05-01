@@ -1,0 +1,79 @@
+# Cloud Build pipeline for the Enrollment Workflow Service (Module 3).
+#
+# Steps:
+#   1. Run unit tests
+#   2. Build & push Docker image
+#   3. Deploy to Cloud Run
+#
+# Substitution variables (set in Cloud Build trigger):
+#   _SERVICE_NAME — enrollment-workflow
+#   _REPO         — Artifact Registry repo URL
+#   _REGION       — GCP region (e.g. us-central1)
+#   _ENV          — dev | test | prod
+
+steps:
+  # ── Tests ──────────────────────────────────────────────────────────────
+  - name: "python:3.11-slim"
+    id: test
+    dir: "services/enrollment-workflow"
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        pip install -r requirements.txt --quiet
+        GCP_PROJECT_ID=test APP_ENV=development pytest tests/ -v --tb=short
+
+  # ── Build image ────────────────────────────────────────────────────────
+  - name: "gcr.io/cloud-builders/docker"
+    id: build
+    dir: "services/enrollment-workflow"
+    waitFor: ["test"]
+    args:
+      - build
+      - "-t"
+      - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+      - "-t"
+      - "$_REPO/$_SERVICE_NAME:$_ENV-latest"
+      - "."
+
+  # ── Push image ─────────────────────────────────────────────────────────
+  - name: "gcr.io/cloud-builders/docker"
+    id: push
+    waitFor: ["build"]
+    args: ["push", "--all-tags", "$_REPO/$_SERVICE_NAME"]
+
+  # ── Deploy to Cloud Run ────────────────────────────────────────────────
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: deploy
+    waitFor: ["push"]
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - "$_SERVICE_NAME"
+      - "--image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+      - "--region=$_REGION"
+      - "--platform=managed"
+      - "--no-allow-unauthenticated"
+      - "--service-account=enrollment-workflow-sa@$PROJECT_ID.iam.gserviceaccount.com"
+      - >-
+        --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,APP_ENV=$_ENV,
+        FIRESTORE_DATABASE_ID=simpletort-dev,
+        PUBSUB_TOPIC_ENROLLMENT=enrollment-status-changes,
+        PUBSUB_TOPIC_NOTIFICATIONS=notification-requested,
+        JWT_AUDIENCE=$PROJECT_ID,
+        JWT_ISSUER=https://securetoken.google.com/$PROJECT_ID
+      - "--memory=512Mi"
+      - "--cpu=1"
+      - "--timeout=120s"
+      - "--min-instances=1"
+      - "--max-instances=10"
+
+images:
+  - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+  - "$_REPO/$_SERVICE_NAME:$_ENV-latest"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: "1800s"
