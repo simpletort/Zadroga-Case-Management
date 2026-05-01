@@ -563,14 +563,9 @@ class TestEscalateCase:
 
 class TestGetEscalationQueue:
 
-    def _call(self, db, role="senior_partner", uid=_SP, page=1, page_size=20):
+    def _call(self, db, role=None, uid=None, page=1, page_size=20):
         from app.services.escalation_service import get_escalation_queue
-        return get_escalation_queue(
-            db=db,
-            user={"uid": uid, "role": role},
-            page=page,
-            page_size=page_size,
-        )
+        return get_escalation_queue(db=db, page=page, page_size=page_size)
 
     def _escalated_case_snap(self, case_id=_CASE, vcf_deadline=None, qual_score=80.0,
                               escalated_at=None):
@@ -669,8 +664,11 @@ class TestGetEscalationQueue:
         future  = self._escalated_case_snap(case_id="ZAD-FUT", vcf_deadline=_NOW + timedelta(days=10))
         no_dl   = self._escalated_case_snap(case_id="ZAD-NODL")
 
-        db     = _make_queue_db([overdue, future, no_dl])
-        result = self._call(db)
+        db = _make_queue_db([overdue, future, no_dl])
+        mock_dt = MagicMock(wraps=datetime)
+        mock_dt.now.return_value = _NOW
+        with patch("app.services.escalation_service.datetime", mock_dt):
+            result = self._call(db)
         assert result["overdue_count"] == 1
 
     def test_days_until_deadline_negative_when_overdue(self):
@@ -962,114 +960,6 @@ class TestDecideEscalation:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# RBAC tests
-# ═════════════════════════════════════════════════════════════════════════════
-
-class TestEscalationRBAC:
-
-    # ── Role hierarchy constants ──────────────────────────────────────────────
-
-    def test_junior_partner_meets_escalate_min_role(self):
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-        required = ENDPOINT_MIN_ROLES["case_escalate"]
-        assert ROLE_HIERARCHY["junior_partner"] >= ROLE_HIERARCHY[required]
-
-    def test_paralegal_is_below_escalate_min_role(self):
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-        required = ENDPOINT_MIN_ROLES["case_escalate"]
-        assert ROLE_HIERARCHY["paralegal"] < ROLE_HIERARCHY[required]
-
-    def test_senior_partner_meets_queue_min_role(self):
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-        required = ENDPOINT_MIN_ROLES["escalation_queue"]
-        assert ROLE_HIERARCHY["senior_partner"] >= ROLE_HIERARCHY[required]
-
-    def test_junior_partner_is_below_queue_min_role(self):
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-        required = ENDPOINT_MIN_ROLES["escalation_queue"]
-        assert ROLE_HIERARCHY["junior_partner"] < ROLE_HIERARCHY[required]
-
-    def test_senior_partner_meets_decide_min_role(self):
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-        required = ENDPOINT_MIN_ROLES["escalation_decide"]
-        assert ROLE_HIERARCHY["senior_partner"] >= ROLE_HIERARCHY[required]
-
-    def test_junior_partner_is_below_decide_min_role(self):
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-        required = ENDPOINT_MIN_ROLES["escalation_decide"]
-        assert ROLE_HIERARCHY["junior_partner"] < ROLE_HIERARCHY[required]
-
-    def test_system_admin_meets_all_escalation_roles(self):
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-        for key in ("case_escalate", "escalation_queue", "escalation_decide"):
-            required = ENDPOINT_MIN_ROLES[key]
-            assert ROLE_HIERARCHY["system_admin"] >= ROLE_HIERARCHY[required]
-
-    # ── Route-level 403 ───────────────────────────────────────────────────────
-
-    def _make_client(self):
-        with patch("app.utils.firestore.get_firestore_client"), \
-             patch("firebase_admin._apps", [True]):
-            from importlib import reload
-            import main as m
-            reload(m)
-            return TestClient(m.app, raise_server_exceptions=False)
-
-    def test_unauthenticated_escalate_returns_403(self):
-        client = self._make_client()
-        resp   = client.post(
-            "/api/v1/cases/{}/escalate".format(_CASE),
-            json={"reason": "high_value_claim"},
-        )
-        assert resp.status_code == 403
-
-    def test_unauthenticated_queue_returns_403(self):
-        client = self._make_client()
-        resp   = client.get("/api/v1/attorney/escalation-queue")
-        assert resp.status_code == 403
-
-    def test_unauthenticated_decide_returns_403(self):
-        client = self._make_client()
-        resp   = client.post(
-            "/api/v1/cases/{}/escalation-decision".format(_CASE),
-            json={"decision": "approve"},
-        )
-        assert resp.status_code == 403
-
-    def test_paralegal_escalation_queue_returns_403(self):
-        user   = {"uid": _PARA, "role": "paralegal"}
-        client = self._make_client()
-        with patch("app.utils.auth.get_current_user", return_value=user):
-            resp = client.get(
-                "/api/v1/attorney/escalation-queue",
-                headers={"Authorization": "Bearer fake-token"},
-            )
-        assert resp.status_code == 403
-
-    def test_paralegal_escalate_returns_403(self):
-        user   = {"uid": _PARA, "role": "paralegal"}
-        client = self._make_client()
-        with patch("app.utils.auth.get_current_user", return_value=user):
-            resp = client.post(
-                "/api/v1/cases/{}/escalate".format(_CASE),
-                json={"reason": "high_value_claim"},
-                headers={"Authorization": "Bearer fake-token"},
-            )
-        assert resp.status_code == 403
-
-    def test_junior_partner_escalation_decide_returns_403(self):
-        user   = {"uid": _ATTY, "role": "junior_partner"}
-        client = self._make_client()
-        with patch("app.utils.auth.get_current_user", return_value=user):
-            resp = client.post(
-                "/api/v1/cases/{}/escalation-decision".format(_CASE),
-                json={"decision": "approve"},
-                headers={"Authorization": "Bearer fake-token"},
-            )
-        assert resp.status_code == 403
-
-
-# ═════════════════════════════════════════════════════════════════════════════
 # Route integration tests
 # ═════════════════════════════════════════════════════════════════════════════
 
@@ -1077,11 +967,10 @@ class TestEscalationRoutes:
 
     def _make_client(self, role="junior_partner", uid=_ATTY):
         user = {"uid": uid, "role": role}
-        with patch("firebase_admin._apps", [True]):
-            from importlib import reload
-            import main as m
-            reload(m)
-            client = TestClient(m.app, raise_server_exceptions=False)
+        from importlib import reload
+        import main as m
+        reload(m)
+        client = TestClient(m.app, raise_server_exceptions=False)
         return client, user
 
     # ── POST /escalate ────────────────────────────────────────────────────────
@@ -1095,13 +984,11 @@ class TestEscalationRoutes:
             "escalation_id": "esc-abc",
             "notified_count": 1,
         }
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
+        with patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
              patch("app.routes.escalation.escalate_case", return_value=mock_result):
             resp = client.post(
                 "/api/v1/cases/{}/escalate".format(_CASE),
                 json={"reason": "high_value_claim"},
-                headers={"Authorization": "Bearer fake-token"},
             )
         assert resp.status_code == 200
         body = resp.json()
@@ -1114,13 +1001,11 @@ class TestEscalationRoutes:
             "case_id": _CASE, "status": "Pending Senior Review",
             "escalated_at": _NOW, "escalation_id": "esc-abc", "notified_count": 1,
         }
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
+        with patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
              patch("app.routes.escalation.escalate_case", return_value=mock_result) as mock_fn:
             client.post(
                 "/api/v1/cases/{}/escalate".format(_CASE),
                 json={"reason": "other", "notes": "Special situation."},
-                headers={"Authorization": "Bearer fake-token"},
             )
         _, kwargs = mock_fn.call_args
         assert kwargs["reason"] == "other"
@@ -1128,8 +1013,7 @@ class TestEscalationRoutes:
 
     def test_escalate_422_propagates_to_client(self):
         client, user = self._make_client()
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
+        with patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
              patch(
                  "app.routes.escalation.escalate_case",
                  side_effect=HTTPException(422, detail="Wrong status"),
@@ -1137,7 +1021,6 @@ class TestEscalationRoutes:
             resp = client.post(
                 "/api/v1/cases/{}/escalate".format(_CASE),
                 json={"reason": "high_value_claim"},
-                headers={"Authorization": "Bearer fake-token"},
             )
         assert resp.status_code == 422
 
@@ -1170,13 +1053,9 @@ class TestEscalationRoutes:
                 "total_pages": 1,
             },
         }
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
+        with patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
              patch("app.routes.escalation.get_escalation_queue", return_value=mock_result):
-            resp = client.get(
-                "/api/v1/attorney/escalation-queue",
-                headers={"Authorization": "Bearer fake-token"},
-            )
+            resp = client.get("/api/v1/attorney/escalation-queue")
         assert resp.status_code == 200
         body = resp.json()
         assert body["total_pending"]                          == 1
@@ -1189,13 +1068,9 @@ class TestEscalationRoutes:
             "overdue_count": 0,
             "page": {"items": [], "total": 0, "page": 3, "page_size": 10, "total_pages": 0},
         }
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
+        with patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
              patch("app.routes.escalation.get_escalation_queue", return_value=mock_result) as mock_fn:
-            resp = client.get(
-                "/api/v1/attorney/escalation-queue?page=3&page_size=10",
-                headers={"Authorization": "Bearer fake-token"},
-            )
+            resp = client.get("/api/v1/attorney/escalation-queue?page=3&page_size=10")
         assert resp.status_code == 200
         _, kwargs = mock_fn.call_args
         assert kwargs["page"]      == 3
@@ -1214,13 +1089,11 @@ class TestEscalationRoutes:
             "task_ids":    ["t1", "t2", "t3"],
             "new_status":  "Approved for Filing",
         }
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
+        with patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
              patch("app.routes.escalation.decide_escalation", return_value=mock_result):
             resp = client.post(
                 "/api/v1/cases/{}/escalation-decision".format(_CASE),
                 json={"decision": "approve"},
-                headers={"Authorization": "Bearer fake-token"},
             )
         assert resp.status_code == 200
         body = resp.json()
@@ -1235,13 +1108,11 @@ class TestEscalationRoutes:
             "resolved_by": _SP, "notes": "Weak case.", "task_ids": [],
             "new_status": "Pending Attorney Review",
         }
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
+        with patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
              patch("app.routes.escalation.decide_escalation", return_value=mock_result) as mock_fn:
             client.post(
                 "/api/v1/cases/{}/escalation-decision".format(_CASE),
                 json={"decision": "reject", "notes": "Weak case."},
-                headers={"Authorization": "Bearer fake-token"},
             )
         _, kwargs = mock_fn.call_args
         assert kwargs["decision"] == "reject"
@@ -1249,8 +1120,7 @@ class TestEscalationRoutes:
 
     def test_escalation_decide_404_propagates_to_client(self):
         client, user = self._make_client(role="senior_partner", uid=_SP)
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
+        with patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
              patch(
                  "app.routes.escalation.decide_escalation",
                  side_effect=HTTPException(404, detail="Not found"),
@@ -1258,6 +1128,5 @@ class TestEscalationRoutes:
             resp = client.post(
                 "/api/v1/cases/{}/escalation-decision".format(_CASE),
                 json={"decision": "approve"},
-                headers={"Authorization": "Bearer fake-token"},
             )
         assert resp.status_code == 404

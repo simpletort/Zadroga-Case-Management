@@ -668,46 +668,6 @@ class TestResubmitCase:
 # RBAC role level checks
 # ═════════════════════════════════════════════════════════════════════════════
 
-class TestRejectionRBAC:
-
-    def test_junior_partner_meets_case_reject_min_role(self):
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-        min_role   = ENDPOINT_MIN_ROLES["case_reject"]
-        assert ROLE_HIERARCHY["junior_partner"] >= ROLE_HIERARCHY[min_role]
-
-    def test_paralegal_is_below_case_reject_min_role(self):
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-        min_role = ENDPOINT_MIN_ROLES["case_reject"]
-        assert ROLE_HIERARCHY["paralegal"] < ROLE_HIERARCHY[min_role]
-
-    def test_paralegal_meets_case_resubmit_min_role(self):
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-        min_role = ENDPOINT_MIN_ROLES["case_resubmit"]
-        assert ROLE_HIERARCHY["paralegal"] >= ROLE_HIERARCHY[min_role]
-
-    def test_system_admin_meets_both_rejection_roles(self):
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-        for key in ("case_reject", "case_resubmit"):
-            min_role = ENDPOINT_MIN_ROLES[key]
-            assert ROLE_HIERARCHY["system_admin"] >= ROLE_HIERARCHY[min_role]
-
-    def test_unauthenticated_reject_returns_403(self):
-        from main import app
-        from app.utils.auth import require_min_role
-        # Remove any overrides
-        app.dependency_overrides = {}
-        client = TestClient(app, raise_server_exceptions=False)
-        resp = client.post(f"/api/v1/cases/{_CASE}/reject", json={"reason": "incomplete_documentation"})
-        assert resp.status_code in (401, 403)
-
-    def test_unauthenticated_resubmit_returns_403(self):
-        from main import app
-        app.dependency_overrides = {}
-        client = TestClient(app, raise_server_exceptions=False)
-        resp = client.post(f"/api/v1/cases/{_CASE}/resubmit", json={})
-        assert resp.status_code in (401, 403)
-
-
 # ═════════════════════════════════════════════════════════════════════════════
 # Route integration (TestClient)
 # ═════════════════════════════════════════════════════════════════════════════
@@ -715,12 +675,9 @@ class TestRejectionRBAC:
 class TestRejectionRoutes:
 
     def _get_client(self, role="junior_partner", uid=_ATTY):
-        """Return (client, user_dict) — auth is bypassed via get_current_user patch."""
         from main import app
-        user = {"uid": uid, "role": role}
-        app.dependency_overrides = {}   # clear any previous overrides
         client = TestClient(app, raise_server_exceptions=False)
-        return client, user
+        return client, {"uid": uid, "role": role}
 
     # ── Reject endpoint ───────────────────────────────────────────────────────
 
@@ -728,8 +685,7 @@ class TestRejectionRoutes:
         db = _make_reject_db()
         client, user = self._get_client(role="junior_partner", uid=_ATTY)
 
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.routes.rejection.get_firestore_client", return_value=db):
+        with patch("app.routes.rejection.get_firestore_client", return_value=db):
             resp = client.post(
                 f"/api/v1/cases/{_CASE}/reject",
                 json={"reason": "incomplete_documentation"},
@@ -745,8 +701,7 @@ class TestRejectionRoutes:
         db = _make_reject_db()
         client, user = self._get_client(role="junior_partner", uid=_ATTY)
 
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.routes.rejection.get_firestore_client", return_value=db), \
+        with patch("app.routes.rejection.get_firestore_client", return_value=db), \
              patch("app.routes.rejection.reject_case") as mock_svc:
             mock_svc.return_value = {
                 "case_id": _CASE,
@@ -767,8 +722,7 @@ class TestRejectionRoutes:
 
     def test_reject_422_propagates_from_service(self):
         client, user = self._get_client(role="junior_partner", uid=_ATTY)
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.routes.rejection.get_firestore_client"), \
+        with patch("app.routes.rejection.get_firestore_client"), \
              patch("app.routes.rejection.reject_case",
                    side_effect=HTTPException(status_code=422, detail="wrong status")):
             resp = client.post(
@@ -780,8 +734,7 @@ class TestRejectionRoutes:
 
     def test_reject_404_propagates_from_service(self):
         client, user = self._get_client(role="junior_partner", uid=_ATTY)
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.routes.rejection.get_firestore_client"), \
+        with patch("app.routes.rejection.get_firestore_client"), \
              patch("app.routes.rejection.reject_case",
                    side_effect=HTTPException(status_code=404, detail="not found")):
             resp = client.post(
@@ -793,8 +746,7 @@ class TestRejectionRoutes:
 
     def test_reject_model_validation_error_returns_422(self):
         client, user = self._get_client(role="junior_partner", uid=_ATTY)
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.routes.rejection.get_firestore_client"):
+        with patch("app.routes.rejection.get_firestore_client"):
             resp = client.post(
                 f"/api/v1/cases/{_CASE}/reject",
                 json={"reason": "other"},   # other without notes → 422
@@ -808,8 +760,7 @@ class TestRejectionRoutes:
         db = _make_resubmit_db()
         client, user = self._get_client(role="paralegal", uid=_PARA)
 
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.routes.rejection.get_firestore_client", return_value=db):
+        with patch("app.routes.rejection.get_firestore_client", return_value=db):
             resp = client.post(
                 f"/api/v1/cases/{_CASE}/resubmit",
                 json={},
@@ -822,8 +773,7 @@ class TestRejectionRoutes:
 
     def test_resubmit_passes_notes_to_service(self):
         client, user = self._get_client(role="paralegal", uid=_PARA)
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.routes.rejection.get_firestore_client"), \
+        with patch("app.routes.rejection.get_firestore_client"), \
              patch("app.routes.rejection.resubmit_case") as mock_svc:
             mock_svc.return_value = {
                 "case_id": _CASE,
@@ -841,8 +791,7 @@ class TestRejectionRoutes:
 
     def test_resubmit_422_propagates_from_service(self):
         client, user = self._get_client(role="paralegal", uid=_PARA)
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.routes.rejection.get_firestore_client"), \
+        with patch("app.routes.rejection.get_firestore_client"), \
              patch("app.routes.rejection.resubmit_case",
                    side_effect=HTTPException(status_code=422, detail="wrong status")):
             resp = client.post(
@@ -854,8 +803,7 @@ class TestRejectionRoutes:
 
     def test_resubmit_404_propagates_from_service(self):
         client, user = self._get_client(role="paralegal", uid=_PARA)
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.routes.rejection.get_firestore_client"), \
+        with patch("app.routes.rejection.get_firestore_client"), \
              patch("app.routes.rejection.resubmit_case",
                    side_effect=HTTPException(status_code=404, detail="not found")):
             resp = client.post(

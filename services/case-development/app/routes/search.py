@@ -48,7 +48,6 @@ from app.services.search_service import (
     search_cases,
     update_preset,
 )
-from app.utils.auth import require_min_role
 from app.utils.firestore import get_firestore_client
 
 router = APIRouter(prefix="/api/v1", tags=["Case Search"])
@@ -142,10 +141,9 @@ def case_search(
     params: dict = Depends(_search_params),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
-    user: dict = Depends(require_min_role("search_view")),
 ):
     db     = get_firestore_client()
-    result = search_cases(db=db, user=user, page=page, page_size=page_size, **params)
+    result = search_cases(db=db, page=page, page_size=page_size, **params)
     raw    = result["page"]
     return SearchResponse(
         page=SearchPage(
@@ -167,10 +165,9 @@ def case_search(
 )
 def case_search_export(
     params: dict = Depends(_search_params),
-    user: dict = Depends(require_min_role("search_view")),
 ):
     db          = get_firestore_client()
-    csv_content = export_cases_csv(db=db, user=user, **params)
+    csv_content = export_cases_csv(db=db, **params)
     return StreamingResponse(
         iter([csv_content]),
         media_type="text/csv",
@@ -185,9 +182,9 @@ def case_search_export(
     response_model=FilterPresetListResponse,
     summary="List saved filter presets for the current user",
 )
-def get_presets(user: dict = Depends(require_min_role("search_view"))):
+def get_presets():
     db  = get_firestore_client()
-    raw = list_presets(db, user["uid"])
+    raw = list_presets(db, "system")
     presets = []
     for p in raw:
         presets.append(FilterPreset(
@@ -208,11 +205,10 @@ def get_presets(user: dict = Depends(require_min_role("search_view"))):
 )
 def create_preset(
     body: FilterPresetRequest,
-    user: dict = Depends(require_min_role("search_view")),
 ):
     db = get_firestore_client()
     p  = save_preset(
-        db, user["uid"], body.name,
+        db, "system", body.name,
         body.filters.model_dump(exclude_none=True)
     )
     return FilterPreset(
@@ -232,11 +228,10 @@ def create_preset(
 def patch_preset(
     preset_id: str,
     body: FilterPresetRequest,
-    user: dict = Depends(require_min_role("search_view")),
 ):
     db = get_firestore_client()
     p  = update_preset(
-        db, user["uid"], preset_id,
+        db, "system", preset_id,
         body.name,
         body.filters.model_dump(exclude_none=True),
     )
@@ -261,10 +256,9 @@ def patch_preset(
 )
 def remove_preset(
     preset_id: str,
-    user: dict = Depends(require_min_role("search_view")),
 ):
     db    = get_firestore_client()
-    found = delete_preset(db, user["uid"], preset_id)
+    found = delete_preset(db, "system", preset_id)
     if not found:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

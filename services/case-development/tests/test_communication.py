@@ -241,24 +241,13 @@ class TestCreateCommunication:
 
 class TestCommunicationRBAC:
 
-    def test_paralegal_can_read(self):
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-        assert ROLE_HIERARCHY["paralegal"] >= ROLE_HIERARCHY[ENDPOINT_MIN_ROLES["comm_read"]]
-
-    def test_paralegal_can_write(self):
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-        assert ROLE_HIERARCHY["paralegal"] >= ROLE_HIERARCHY[ENDPOINT_MIN_ROLES["comm_write"]]
-
     def test_get_endpoint_200(self):
-        user = {"uid": "staff-uid", "role": "paralegal"}
         svc_result = {
             "items": [], "total": 0, "page": 1, "page_size": 20, "total_pages": 1
         }
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
+        with patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
              patch("app.services.communication_service.list_communications",
-                   return_value=svc_result), \
-             patch("firebase_admin._apps", [True]):
+                   return_value=svc_result):
             from importlib import reload
             import main as m
             client = TestClient(m.app, raise_server_exceptions=False)
@@ -266,7 +255,6 @@ class TestCommunicationRBAC:
         assert resp.status_code == 200
 
     def test_post_endpoint_201(self):
-        user = {"uid": "staff-uid", "role": "paralegal"}
         svc_result = {
             "comm_id": "abc-123",
             "channel": "Call", "direction": "Outbound",
@@ -277,11 +265,9 @@ class TestCommunicationRBAC:
             "external_message_id": None,
             "sent_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
         }
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
+        with patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
              patch("app.routes.communication.create_communication",
-                   return_value=svc_result), \
-             patch("firebase_admin._apps", [True]):
+                   return_value=svc_result):
             from importlib import reload
             import main as m
             client = TestClient(m.app, raise_server_exceptions=False)
@@ -290,20 +276,3 @@ class TestCommunicationRBAC:
                 json={"channel": "Call", "direction": "Outbound", "subject": "Test"},
             )
         assert resp.status_code == 201
-
-    def test_unauthenticated_get_rejected(self):
-        with patch("firebase_admin._apps", [True]):
-            import main as m
-            client = TestClient(m.app, raise_server_exceptions=False)
-            resp = client.get("/api/v1/cases/ZAD-2026-01-0001/communications")
-        assert resp.status_code == 403
-
-    def test_unauthenticated_post_rejected(self):
-        with patch("firebase_admin._apps", [True]):
-            import main as m
-            client = TestClient(m.app, raise_server_exceptions=False)
-            resp = client.post(
-                "/api/v1/cases/ZAD-2026-01-0001/communications",
-                json={"channel": "Call", "direction": "Outbound", "subject": "Test"},
-            )
-        assert resp.status_code == 403

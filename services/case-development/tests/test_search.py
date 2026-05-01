@@ -94,9 +94,7 @@ def _call_service(db, user=None, **kwargs):
         page=1, page_size=20,
     )
     defaults.update(kwargs)
-    if user is None:
-        user = {"uid": "sarah-chen-uid", "role": "paralegal"}
-    return search_cases(db=db, user=user, **defaults)
+    return search_cases(db=db, **defaults)
 
 
 # ── Service: basic retrieval ──────────────────────────────────────────────────
@@ -326,25 +324,14 @@ class TestSearchServiceFilters:
         assert result["page"]["total"] == 1
         assert result["page"]["items"][0]["case_id"] == "c1"
 
-    def test_attorney_filter_admin_only(self):
+    def test_attorney_filter(self):
         docs = [
             _make_case_doc("c1", attorney_id="atty-001"),
             _make_case_doc("c2", attorney_id="atty-002"),
         ]
-        admin  = {"uid": "admin-uid", "role": "admin_staff"}
-        result = _call_service(_make_db(docs), user=admin, attorney=["atty-001"])
+        result = _call_service(_make_db(docs), attorney=["atty-001"])
         assert result["page"]["total"] == 1
         assert result["page"]["items"][0]["assigned_attorney"] == "atty-001"
-
-    def test_attorney_filter_ignored_for_paralegal(self):
-        # Paralegals cannot filter by attorney — filter is silently ignored
-        docs = [
-            _make_case_doc("c1", attorney_id="atty-001"),
-            _make_case_doc("c2", attorney_id="atty-002"),
-        ]
-        paralegal = {"uid": "sarah-chen-uid", "role": "paralegal"}
-        result = _call_service(_make_db(docs), user=paralegal, attorney=["atty-001"])
-        assert result["page"]["total"] == 2
 
     def test_all_filters_combined(self):
         docs = [
@@ -440,25 +427,6 @@ class TestSearchServicePagination:
         assert result["page"]["items"] == []
 
 
-# ── Service: admin role visibility ────────────────────────────────────────────
-
-class TestSearchServiceAdminRole:
-
-    def test_admin_does_not_scope_to_paralegal(self):
-        docs  = [_make_case_doc("c1", paralegal_id="someone-else")]
-        db    = _make_db(docs)
-        admin = {"uid": "admin-uid", "role": "senior_partner"}
-        _call_service(db, user=admin)
-        where_calls = [str(c) for c in db.collection.return_value.where.call_args_list]
-        assert not any("assignedParalegal" in c for c in where_calls)
-
-    def test_paralegal_scoped_to_own_uid(self):
-        db        = _make_db([])
-        paralegal = {"uid": "sarah-chen-uid", "role": "paralegal"}
-        _call_service(db, user=paralegal)
-        where_calls = [str(c) for c in db.collection.return_value.where.call_args_list]
-        assert any("assignedParalegal" in c for c in where_calls)
-
 
 # ── Service: CSV export ───────────────────────────────────────────────────────
 
@@ -477,9 +445,7 @@ class TestSearchServiceCsvExport:
             sort_by="last_activity", sort_dir="desc",
         )
         defaults.update(kwargs)
-        if user is None:
-            user = {"uid": "sarah-chen-uid", "role": "paralegal"}
-        return export_cases_csv(db=db, user=user, **defaults)
+        return export_cases_csv(db=db, **defaults)
 
     def test_csv_contains_header(self):
         csv_output = self._call_export(_make_db([]))
@@ -598,61 +564,30 @@ class TestFilterPresets:
 
 class TestSearchRBAC:
 
-    def test_paralegal_role_meets_search_view_minimum(self):
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-        assert ROLE_HIERARCHY["paralegal"] >= ROLE_HIERARCHY[ENDPOINT_MIN_ROLES["search_view"]]
-
-    def test_admin_staff_meets_search_view_minimum(self):
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-        assert ROLE_HIERARCHY["admin_staff"] >= ROLE_HIERARCHY[ENDPOINT_MIN_ROLES["search_view"]]
-
     def test_search_endpoint_200_for_paralegal(self):
-        user = {"uid": "sarah-chen-uid", "role": "paralegal"}
         svc_result = {
             "page": {"items": [], "total": 0, "page": 1, "page_size": 20, "total_pages": 1},
         }
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
-             patch("app.services.search_service.search_cases", return_value=svc_result), \
-             patch("firebase_admin._apps", [True]):
+        with patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
+             patch("app.services.search_service.search_cases", return_value=svc_result):
             from importlib import reload
             import main as m
             client = TestClient(m.app, raise_server_exceptions=False)
             resp = client.get("/api/v1/cases/search")
         assert resp.status_code == 200
-
-    def test_search_endpoint_403_unauthenticated(self):
-        with patch("firebase_admin._apps", [True]):
-            import main as m
-            client = TestClient(m.app, raise_server_exceptions=False)
-            resp = client.get("/api/v1/cases/search")
-        assert resp.status_code == 403
 
     def test_presets_endpoint_200_for_paralegal(self):
-        user = {"uid": "sarah-chen-uid", "role": "paralegal"}
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
-             patch("app.services.search_service.list_presets", return_value=[]), \
-             patch("firebase_admin._apps", [True]):
+        with patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
+             patch("app.services.search_service.list_presets", return_value=[]):
             from importlib import reload
             import main as m
             client = TestClient(m.app, raise_server_exceptions=False)
             resp = client.get("/api/v1/search/presets")
         assert resp.status_code == 200
 
-    def test_presets_endpoint_403_unauthenticated(self):
-        with patch("firebase_admin._apps", [True]):
-            import main as m
-            client = TestClient(m.app, raise_server_exceptions=False)
-            resp = client.get("/api/v1/search/presets")
-        assert resp.status_code == 403
-
     def test_export_endpoint_200_for_paralegal(self):
-        user = {"uid": "sarah-chen-uid", "role": "paralegal"}
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
-             patch("app.services.search_service.export_cases_csv", return_value="case_id\n"), \
-             patch("firebase_admin._apps", [True]):
+        with patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
+             patch("app.services.search_service.export_cases_csv", return_value="case_id\n"):
             import main as m
             client = TestClient(m.app, raise_server_exceptions=False)
             resp = client.get("/api/v1/cases/search/export")

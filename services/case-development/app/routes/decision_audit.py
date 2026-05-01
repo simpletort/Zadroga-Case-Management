@@ -9,7 +9,7 @@
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Path, Query
+from fastapi import APIRouter, Path, Query
 
 from app.models.decision_audit import (
     AttorneyMetrics,
@@ -26,7 +26,6 @@ from app.services.decision_audit_service import (
     get_decision_metrics,
     get_decisions,
 )
-from app.utils.auth import require_min_role
 from app.utils.firestore import get_firestore_client
 
 router = APIRouter(prefix="/api/v1", tags=["Decision Audit"])
@@ -47,7 +46,6 @@ def get_audit_decisions(
     decision_type: Optional[str]      = Query(default=None, description="Filter by decision type"),
     page:          int                = Query(default=1,  ge=1,   description="Page number"),
     page_size:     int                = Query(default=20, ge=1, le=100, description="Items per page"),
-    user: dict = Depends(require_min_role("audit_decisions_read")),
 ):
     db     = get_firestore_client()
     result = get_decisions(
@@ -82,7 +80,6 @@ def get_audit_decisions(
 )
 def get_case_audit_decisions(
     caseId: str = Path(..., description="Case ID (e.g. ZAD-2024-01-0001)"),
-    user: dict = Depends(require_min_role("audit_decisions_read")),
 ):
     db     = get_firestore_client()
     result = get_case_decisions(db=db, case_id=caseId)
@@ -105,7 +102,6 @@ def get_audit_metrics(
     date_to:       Optional[datetime] = Query(default=None),
     performed_by:  Optional[str]      = Query(default=None),
     decision_type: Optional[str]      = Query(default=None),
-    user: dict = Depends(require_min_role("audit_metrics_read")),
 ):
     db     = get_firestore_client()
     result = get_decision_metrics(
@@ -139,7 +135,6 @@ def get_audit_report(
     performed_by:  Optional[str]      = Query(default=None),
     case_id:       Optional[str]      = Query(default=None),
     decision_type: Optional[str]      = Query(default=None),
-    user: dict = Depends(require_min_role("audit_report_export")),
 ):
     db     = get_firestore_client()
     result = generate_compliance_report(

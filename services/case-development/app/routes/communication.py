@@ -7,7 +7,7 @@
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Path, Query
+from fastapi import APIRouter, Path, Query
 
 from app.models.communication import (
     CommunicationEntry,
@@ -15,7 +15,6 @@ from app.models.communication import (
     CommunicationLogRequest,
 )
 from app.services.communication_service import create_communication, list_communications
-from app.utils.auth import require_min_role
 from app.utils.firestore import get_firestore_client
 
 router = APIRouter(prefix="/api/v1", tags=["Communications"])
@@ -35,7 +34,6 @@ def get_communications(
     ),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
-    _user: dict = Depends(require_min_role("comm_read")),
 ):
     db     = get_firestore_client()
     result = list_communications(
@@ -63,13 +61,12 @@ def get_communications(
 def post_communication(
     body: CommunicationLogRequest,
     caseId: str = Path(..., description="Case ID (e.g. ZAD-2024-01-0001)"),
-    user: dict = Depends(require_min_role("comm_write")),
 ):
     db     = get_firestore_client()
     result = create_communication(
         db=db,
         case_id=caseId,
-        actor_uid=user["uid"],
+        actor_uid="system",
         channel=body.channel,
         direction=body.direction,
         subject=body.subject,

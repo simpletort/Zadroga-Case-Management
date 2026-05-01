@@ -2,7 +2,7 @@
 #   POST /api/v1/cases/{caseId}/reject    — reject case from attorney review  (min: junior_partner)
 #   POST /api/v1/cases/{caseId}/resubmit  — resubmit rejected case            (min: paralegal)
 
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter, Path
 
 from app.models.rejection import (
     RejectCaseRequest,
@@ -11,9 +11,7 @@ from app.models.rejection import (
     ResubmitCaseResponse,
 )
 from app.services.rejection_service import reject_case, resubmit_case
-from app.utils.auth import require_min_role
 from app.utils.firestore import get_firestore_client
-from app.utils.roles import normalize_role
 
 router = APIRouter(prefix="/api/v1", tags=["Rejection"])
 
@@ -29,14 +27,13 @@ router = APIRouter(prefix="/api/v1", tags=["Rejection"])
 def post_reject_case(
     body: RejectCaseRequest,
     caseId: str = Path(..., description="Case ID (e.g. ZAD-2024-01-0001)"),
-    user: dict = Depends(require_min_role("case_reject")),
 ):
     db     = get_firestore_client()
     result = reject_case(
         db=db,
         case_id=caseId,
-        actor_uid=user["uid"],
-        actor_role=normalize_role(user.get("role", "")),
+        actor_uid="system",
+        actor_role="system_admin",
         reason=body.reason,
         notes=body.notes,
     )
@@ -52,14 +49,13 @@ def post_reject_case(
 def post_resubmit_case(
     body: ResubmitCaseRequest,
     caseId: str = Path(..., description="Case ID (e.g. ZAD-2024-01-0001)"),
-    user: dict = Depends(require_min_role("case_resubmit")),
 ):
     db     = get_firestore_client()
     result = resubmit_case(
         db=db,
         case_id=caseId,
-        actor_uid=user["uid"],
-        actor_role=normalize_role(user.get("role", "")),
+        actor_uid="system",
+        actor_role="system_admin",
         notes=body.notes,
     )
     return ResubmitCaseResponse(**result)

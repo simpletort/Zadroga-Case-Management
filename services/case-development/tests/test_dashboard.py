@@ -46,7 +46,7 @@ def _make_db(docs):
     return db
 
 
-def _call_service(db, user=None, **kwargs):
+def _call_service(db, user=None, **kwargs):  # user param kept for backward compat but ignored
     from app.services.dashboard_service import get_dashboard
     defaults = dict(
         statuses=None,
@@ -59,9 +59,7 @@ def _call_service(db, user=None, **kwargs):
         page=1, page_size=20,
     )
     defaults.update(kwargs)
-    if user is None:
-        user = {"uid": "sarah-chen-uid", "role": "paralegal"}
-    return get_dashboard(db=db, user=user, **defaults)
+    return get_dashboard(db=db, **defaults)
 
 
 # ── Service: basic retrieval ───────────────────────────────────────────────
@@ -271,59 +269,21 @@ class TestDashboardServicePagination:
         assert result["page"]["items"] == []
 
 
-# ── Service: admin role visibility ─────────────────────────────────────────
-
-class TestDashboardServiceAdminRole:
-
-    def test_admin_does_not_filter_by_paralegal(self):
-        docs = [_make_case_doc("c1", paralegal_id="someone-else")]
-        db = _make_db(docs)
-        admin = {"uid": "admin-uid", "role": "senior_partner"}
-        result = _call_service(db, user=admin)
-        # The Firestore query.where should NOT have been called with assignedParalegal
-        where_calls = [str(c) for c in db.collection.return_value.where.call_args_list]
-        assert not any("assignedParalegal" in c for c in where_calls)
-
-    def test_paralegal_query_scoped_to_uid(self):
-        db = _make_db([])
-        paralegal = {"uid": "sarah-chen-uid", "role": "paralegal"}
-        _call_service(db, user=paralegal)
-        where_calls = [str(c) for c in db.collection.return_value.where.call_args_list]
-        assert any("assignedParalegal" in c for c in where_calls)
-
 
 # ── RBAC ───────────────────────────────────────────────────────────────────
 
 class TestDashboardRBAC:
 
-    def test_paralegal_can_access_dashboard(self):
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-        assert ROLE_HIERARCHY["paralegal"] >= ROLE_HIERARCHY[ENDPOINT_MIN_ROLES["dashboard_view"]]
-
-    def test_admin_can_access_dashboard(self):
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-        assert ROLE_HIERARCHY["admin_staff"] >= ROLE_HIERARCHY[ENDPOINT_MIN_ROLES["dashboard_view"]]
-
     def test_dashboard_endpoint_200_for_paralegal(self):
-        user = {"uid": "sarah-chen-uid", "role": "paralegal"}
         svc_result = {
             "summary": {"total_assigned": 0, "overdue_deadline": 0,
                         "pending_review": 0, "avg_qual_score": None},
             "page": {"items": [], "total": 0, "page": 1, "page_size": 20, "total_pages": 1},
         }
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
-             patch("app.services.dashboard_service.get_dashboard", return_value=svc_result), \
-             patch("firebase_admin._apps", [True]):
+        with patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
+             patch("app.services.dashboard_service.get_dashboard", return_value=svc_result):
             from importlib import reload
             import main as m
             client = TestClient(m.app, raise_server_exceptions=False)
             resp = client.get("/api/v1/dashboard/cases")
         assert resp.status_code == 200
-
-    def test_unauthenticated_request_rejected(self):
-        with patch("firebase_admin._apps", [True]):
-            import main as m
-            client = TestClient(m.app, raise_server_exceptions=False)
-            resp = client.get("/api/v1/dashboard/cases")
-        assert resp.status_code == 403

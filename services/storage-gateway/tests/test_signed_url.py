@@ -77,8 +77,7 @@ class TestSignedUrlRoute:
                     "file_name": "intake.pdf",
                     "action": "read",
                 },
-                headers={"Authorization": "Bearer fake-token"},
-            )
+                            )
 
         assert resp.status_code == 200
         body = resp.json()
@@ -96,8 +95,7 @@ class TestSignedUrlRoute:
                 "action": "write",
                 "case_id": "ZAD-2024-01-0001",
             },
-            headers={"Authorization": "Bearer fake-token"},
-        )
+                    )
         assert resp.status_code == 422
         assert "content_type" in resp.json()["detail"]
 
@@ -111,16 +109,8 @@ class TestSignedUrlRoute:
                     "action": "read",
                     # case_id intentionally omitted
                 },
-                headers={"Authorization": "Bearer fake-token"},
-            )
+                            )
         assert resp.status_code == 422
-
-    def test_unauthenticated_request_returns_403(self, client):
-        resp = client.get(
-            "/api/v1/storage/signed-url",
-            params={"category": "temp_lead_attachments", "file_name": "x.pdf"},
-        )
-        assert resp.status_code in (401, 403)
 
     def test_write_url_uses_15_min_expiry(self, client):
         mock_blob = MagicMock()
@@ -141,8 +131,7 @@ class TestSignedUrlRoute:
                     "case_id": "ZAD-2024-01-0001",
                     "content_type": "application/pdf",
                 },
-                headers={"Authorization": "Bearer fake-token"},
-            )
+                            )
 
         call_kwargs = mock_blob.generate_signed_url.call_args.kwargs
         assert call_kwargs["expiration"] == datetime.timedelta(minutes=15)

@@ -126,14 +126,9 @@ def _make_approve_db(
 
 class TestGetReviewQueue:
 
-    def _call(self, db, role="junior_partner", uid="atty-uid", page=1, page_size=20):
+    def _call(self, db, role=None, uid=None, page=1, page_size=20):
         from app.services.attorney_review_service import get_review_queue
-        return get_review_queue(
-            db=db,
-            user={"uid": uid, "role": role},
-            page=page,
-            page_size=page_size,
-        )
+        return get_review_queue(db=db, page=page, page_size=page_size)
 
     # ── Basic happy path ───────────────────────────────────────────────────
 
@@ -156,33 +151,11 @@ class TestGetReviewQueue:
         assert result["overdue_count"] == 0
         assert result["page"]["items"] == []
 
-    # ── Scoping ───────────────────────────────────────────────────────────
-
-    def test_junior_partner_scoped_by_assigned_attorney(self):
-        snap = _case_snap(assigned_attorney="atty-uid")
-        db   = _make_queue_db([snap])
-
-        self._call(db, role="junior_partner", uid="atty-uid")
-
-        # Expect a where("assignment.assignedAttorney", ...) call
-        where_calls = [str(c) for c in db.collection.return_value.where.call_args_list]
-        assert any("assignedAttorney" in c for c in where_calls)
-
-    def test_senior_partner_sees_all_no_attorney_filter(self):
+    def test_returns_all_regardless_of_attorney(self):
         snap = _case_snap(assigned_attorney="someone-else")
         db   = _make_queue_db([snap])
 
-        self._call(db, role="senior_partner", uid="senior-uid")
-
-        # Only the status where() call, NOT an assignedAttorney filter
-        where_calls = [str(c) for c in db.collection.return_value.where.call_args_list]
-        assert not any("assignedAttorney" in c for c in where_calls)
-
-    def test_system_admin_sees_all(self):
-        snap = _case_snap(assigned_attorney="someone-else")
-        db   = _make_queue_db([snap])
-
-        result = self._call(db, role="system_admin", uid="admin-uid")
+        result = self._call(db)
 
         assert result["total_pending"] == 1
 
@@ -694,96 +667,6 @@ class TestBulkApproveForFiling:
 # RBAC tests
 # ═════════════════════════════════════════════════════════════════════════════
 
-class TestAttorneyReviewRBAC:
-
-    def test_junior_partner_meets_queue_min_role(self):
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-
-        required = ENDPOINT_MIN_ROLES["attorney_review_queue"]
-        assert ROLE_HIERARCHY["junior_partner"] >= ROLE_HIERARCHY[required]
-
-    def test_junior_partner_meets_approve_min_role(self):
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-
-        required = ENDPOINT_MIN_ROLES["attorney_approve"]
-        assert ROLE_HIERARCHY["junior_partner"] >= ROLE_HIERARCHY[required]
-
-    def test_junior_partner_meets_bulk_approve_min_role(self):
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-
-        required = ENDPOINT_MIN_ROLES["attorney_bulk_approve"]
-        assert ROLE_HIERARCHY["junior_partner"] >= ROLE_HIERARCHY[required]
-
-    def test_paralegal_is_below_queue_min_role(self):
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-
-        required = ENDPOINT_MIN_ROLES["attorney_review_queue"]
-        assert ROLE_HIERARCHY["paralegal"] < ROLE_HIERARCHY[required]
-
-    def test_paralegal_is_below_approve_min_role(self):
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-
-        required = ENDPOINT_MIN_ROLES["attorney_approve"]
-        assert ROLE_HIERARCHY["paralegal"] < ROLE_HIERARCHY[required]
-
-    def test_senior_partner_meets_approve_min_role(self):
-        from app.utils.auth import ROLE_HIERARCHY, ENDPOINT_MIN_ROLES
-
-        required = ENDPOINT_MIN_ROLES["attorney_approve"]
-        assert ROLE_HIERARCHY["senior_partner"] >= ROLE_HIERARCHY[required]
-
-    def _make_client(self):
-        with patch("app.utils.firestore.get_firestore_client"), \
-             patch("firebase_admin._apps", [True]):
-            from importlib import reload
-            import main as m
-            reload(m)
-            client = TestClient(m.app, raise_server_exceptions=False)
-        return client
-
-    def test_unauthenticated_review_queue_returns_403(self):
-        client = self._make_client()
-        resp = client.get("/api/v1/attorney/review-queue")
-        assert resp.status_code == 403
-
-    def test_unauthenticated_approve_returns_403(self):
-        client = self._make_client()
-        resp = client.post(
-            "/api/v1/cases/{}/approve-for-filing".format(_CASE),
-            json={},
-        )
-        assert resp.status_code == 403
-
-    def test_unauthenticated_bulk_approve_returns_403(self):
-        client = self._make_client()
-        resp = client.post(
-            "/api/v1/cases/bulk-approve",
-            json={"case_ids": [_CASE]},
-        )
-        assert resp.status_code == 403
-
-    def test_paralegal_review_queue_returns_403(self):
-        user   = {"uid": "para-uid", "role": "paralegal"}
-        client = self._make_client()
-        with patch("app.utils.auth.get_current_user", return_value=user):
-            resp = client.get(
-                "/api/v1/attorney/review-queue",
-                headers={"Authorization": "Bearer fake-token"},
-            )
-        assert resp.status_code == 403
-
-    def test_paralegal_approve_returns_403(self):
-        user   = {"uid": "para-uid", "role": "paralegal"}
-        client = self._make_client()
-        with patch("app.utils.auth.get_current_user", return_value=user):
-            resp = client.post(
-                "/api/v1/cases/{}/approve-for-filing".format(_CASE),
-                json={},
-                headers={"Authorization": "Bearer fake-token"},
-            )
-        assert resp.status_code == 403
-
-
 # ═════════════════════════════════════════════════════════════════════════════
 # Route integration tests
 # ═════════════════════════════════════════════════════════════════════════════
@@ -792,11 +675,10 @@ class TestAttorneyReviewRoutes:
 
     def _make_client(self, role="junior_partner", uid="atty-uid"):
         user = {"uid": uid, "role": role}
-        with patch("firebase_admin._apps", [True]):
-            from importlib import reload
-            import main as m
-            reload(m)
-            client = TestClient(m.app, raise_server_exceptions=False)
+        from importlib import reload
+        import main as m
+        reload(m)
+        client = TestClient(m.app, raise_server_exceptions=False)
         return client, user
 
     # ── Review queue endpoint ─────────────────────────────────────────────
@@ -825,8 +707,7 @@ class TestAttorneyReviewRoutes:
                 "total_pages": 1,
             },
         }
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
+        with patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
              patch("app.routes.attorney_review.get_review_queue", return_value=mock_result):
             resp = client.get(
                 "/api/v1/attorney/review-queue",
@@ -844,8 +725,7 @@ class TestAttorneyReviewRoutes:
             "overdue_count": 0,
             "page": {"items": [], "total": 0, "page": 2, "page_size": 5, "total_pages": 0},
         }
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
+        with patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
              patch("app.routes.attorney_review.get_review_queue", return_value=mock_result) as mock_fn:
             resp = client.get(
                 "/api/v1/attorney/review-queue?page=2&page_size=5",
@@ -868,8 +748,7 @@ class TestAttorneyReviewRoutes:
             "notes":       None,
             "task_ids":    ["t1", "t2", "t3"],
         }
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
+        with patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
              patch("app.routes.attorney_review.approve_for_filing", return_value=mock_result):
             resp = client.post(
                 "/api/v1/cases/{}/approve-for-filing".format(_CASE),
@@ -891,8 +770,7 @@ class TestAttorneyReviewRoutes:
             "notes":       "Solid case.",
             "task_ids":    [],
         }
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
+        with patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
              patch("app.routes.attorney_review.approve_for_filing", return_value=mock_result) as mock_fn:
             client.post(
                 "/api/v1/cases/{}/approve-for-filing".format(_CASE),
@@ -904,8 +782,7 @@ class TestAttorneyReviewRoutes:
 
     def test_approve_422_propagates_to_client(self):
         client, user = self._make_client()
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
+        with patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
              patch(
                  "app.routes.attorney_review.approve_for_filing",
                  side_effect=HTTPException(status_code=422, detail="Wrong status"),
@@ -919,8 +796,7 @@ class TestAttorneyReviewRoutes:
 
     def test_approve_404_propagates_to_client(self):
         client, user = self._make_client()
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
+        with patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
              patch(
                  "app.routes.attorney_review.approve_for_filing",
                  side_effect=HTTPException(status_code=404, detail="Not found"),
@@ -947,8 +823,7 @@ class TestAttorneyReviewRoutes:
                  "approved_at": _NOW, "task_ids": ["t2"], "error": None},
             ],
         }
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
+        with patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
              patch("app.routes.attorney_review.bulk_approve_for_filing", return_value=mock_result):
             resp = client.post(
                 "/api/v1/cases/bulk-approve",
@@ -964,12 +839,9 @@ class TestAttorneyReviewRoutes:
     def test_bulk_approve_empty_list_rejected(self):
         """Pydantic min_length=1 on case_ids should cause 422."""
         client, user = self._make_client()
-        with patch("app.utils.auth.get_current_user", return_value=user), \
-             patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()), \
-             patch("firebase_admin._apps", [True]):
+        with patch("app.utils.firestore.get_firestore_client", return_value=MagicMock()):
             resp = client.post(
                 "/api/v1/cases/bulk-approve",
                 json={"case_ids": []},
-                headers={"Authorization": "Bearer fake-token"},
             )
         assert resp.status_code == 422

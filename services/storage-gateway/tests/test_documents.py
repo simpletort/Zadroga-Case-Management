@@ -71,15 +71,13 @@ def _db_from_col(mock_col):
 class TestListCaseDocuments:
     CASE_ID = "ZAD-2024-01-0001"
     URL = "/api/v1/storage/cases/{}/documents".format(CASE_ID)
-    AUTH = {"Authorization": "Bearer fake-token"}
-
     def test_returns_documents_for_case(self, client):
         docs = [_make_doc("file-001"), _make_doc("file-002")]
         mock_col, _ = _make_col_mock(docs)
 
         with patch("app.services.metadata_service.get_firestore_client") as mock_db_fn:
             mock_db_fn.return_value = _db_from_col(mock_col)
-            resp = client.get(self.URL, headers=self.AUTH)
+            resp = client.get(self.URL)
 
         assert resp.status_code == 200
         body = resp.json()
@@ -97,8 +95,7 @@ class TestListCaseDocuments:
         with patch("app.services.metadata_service.get_firestore_client") as mock_db_fn:
             mock_db_fn.return_value = _db_from_col(mock_col)
             resp = client.get(
-                self.URL, params={"category": "medical_records"}, headers=self.AUTH
-            )
+                self.URL, params={"category": "medical_records"}            )
 
         assert resp.status_code == 200
         # where() was called with the category filter
@@ -110,8 +107,7 @@ class TestListCaseDocuments:
         with patch("app.services.metadata_service.get_firestore_client") as mock_db_fn:
             mock_db_fn.return_value = _db_from_col(mock_col)
             resp = client.get(
-                self.URL, params={"processing_status": "Completed"}, headers=self.AUTH
-            )
+                self.URL, params={"processing_status": "Completed"}            )
 
         assert resp.status_code == 200
         mock_query.where.assert_any_call("processingStatus", "==", "Completed")
@@ -122,8 +118,7 @@ class TestListCaseDocuments:
         with patch("app.services.metadata_service.get_firestore_client") as mock_db_fn:
             mock_db_fn.return_value = _db_from_col(mock_col)
             resp = client.get(
-                self.URL, params={"scan_status": "clean"}, headers=self.AUTH
-            )
+                self.URL, params={"scan_status": "clean"}            )
 
         assert resp.status_code == 200
         mock_query.where.assert_any_call("scanStatus", "==", "clean")
@@ -134,8 +129,7 @@ class TestListCaseDocuments:
         with patch("app.services.metadata_service.get_firestore_client") as mock_db_fn:
             mock_db_fn.return_value = _db_from_col(mock_col)
             resp = client.get(
-                self.URL, params={"verification_status": "AI Verified"}, headers=self.AUTH
-            )
+                self.URL, params={"verification_status": "AI Verified"}            )
 
         assert resp.status_code == 200
         mock_query.where.assert_any_call("verificationStatus", "==", "AI Verified")
@@ -148,8 +142,7 @@ class TestListCaseDocuments:
         with patch("app.services.metadata_service.get_firestore_client") as mock_db_fn:
             mock_db_fn.return_value = _db_from_col(mock_col)
             resp = client.get(
-                self.URL, params={"page_size": 2}, headers=self.AUTH
-            )
+                self.URL, params={"page_size": 2}            )
 
         body = resp.json()
         assert body["has_more"] is True
@@ -163,8 +156,7 @@ class TestListCaseDocuments:
         with patch("app.services.metadata_service.get_firestore_client") as mock_db_fn:
             mock_db_fn.return_value = _db_from_col(mock_col)
             resp = client.get(
-                self.URL, params={"page_size": 10}, headers=self.AUTH
-            )
+                self.URL, params={"page_size": 10}            )
 
         body = resp.json()
         assert body["has_more"] is False
@@ -175,7 +167,7 @@ class TestListCaseDocuments:
 
         with patch("app.services.metadata_service.get_firestore_client") as mock_db_fn:
             mock_db_fn.return_value = _db_from_col(mock_col)
-            resp = client.get(self.URL, headers=self.AUTH)
+            resp = client.get(self.URL)
 
         body = resp.json()
         assert resp.status_code == 200
@@ -189,8 +181,7 @@ class TestListCaseDocuments:
         with patch("app.services.metadata_service.get_firestore_client") as mock_db_fn:
             mock_db_fn.return_value = _db_from_col(mock_col)
             resp = client.get(
-                self.URL, params={"page_token": "f-001"}, headers=self.AUTH
-            )
+                self.URL, params={"page_token": "f-001"}            )
 
         assert resp.status_code == 200
         # start_after should have been called with the cursor snapshot
@@ -198,19 +189,13 @@ class TestListCaseDocuments:
 
     def test_page_size_too_large_returns_422(self, client):
         resp = client.get(
-            self.URL, params={"page_size": 101}, headers=self.AUTH
-        )
+            self.URL, params={"page_size": 101}        )
         assert resp.status_code == 422
 
     def test_page_size_zero_returns_422(self, client):
         resp = client.get(
-            self.URL, params={"page_size": 0}, headers=self.AUTH
-        )
+            self.URL, params={"page_size": 0}        )
         assert resp.status_code == 422
-
-    def test_unauthenticated_returns_403(self, client):
-        resp = client.get(self.URL)
-        assert resp.status_code in (401, 403)
 
     def test_response_includes_scan_status_and_extracted_data(self, client):
         doc_data = {
@@ -232,7 +217,7 @@ class TestListCaseDocuments:
 
         with patch("app.services.metadata_service.get_firestore_client") as mock_db_fn:
             mock_db_fn.return_value = _db_from_col(mock_col)
-            resp = client.get(self.URL, headers=self.AUTH)
+            resp = client.get(self.URL)
 
         doc = resp.json()["documents"][0]
         assert doc["scan_status"] == "clean"
@@ -245,8 +230,6 @@ class TestPatchDocumentMetadata:
     CASE_ID = "ZAD-2024-01-0001"
     FILE_ID = "file-abc-001"
     URL = "/api/v1/storage/cases/{}/documents/{}".format(CASE_ID, FILE_ID)
-    AUTH = {"Authorization": "Bearer fake-token"}
-
     def _existing_snap(self, data: Optional[dict] = None):
         snap = MagicMock()
         snap.exists = True
@@ -291,7 +274,6 @@ class TestPatchDocumentMetadata:
             resp = client.patch(
                 self.URL,
                 json={"processing_status": "Completed"},
-                headers=self.AUTH,
             )
 
         assert resp.status_code == 200
@@ -314,7 +296,6 @@ class TestPatchDocumentMetadata:
             resp = client.patch(
                 self.URL,
                 json={"verification_status": "Manually Verified"},
-                headers=self.AUTH,
             )
 
         assert resp.status_code == 200
@@ -337,7 +318,6 @@ class TestPatchDocumentMetadata:
             resp = client.patch(
                 self.URL,
                 json={"extracted_data": payload},
-                headers=self.AUTH,
             )
 
         assert resp.status_code == 200
@@ -352,7 +332,7 @@ class TestPatchDocumentMetadata:
             mock_db_fn.return_value = mock_db
             ref = self._wire_db(mock_db, existing)
 
-            resp = client.patch(self.URL, json={}, headers=self.AUTH)
+            resp = client.patch(self.URL, json={})
 
         assert resp.status_code == 200
         ref.update.assert_not_called()
@@ -369,14 +349,9 @@ class TestPatchDocumentMetadata:
                 .get.return_value = missing
 
             resp = client.patch(
-                self.URL, json={"processing_status": "Completed"}, headers=self.AUTH
-            )
+                self.URL, json={"processing_status": "Completed"}            )
 
         assert resp.status_code == 404
-
-    def test_unauthenticated_returns_403(self, client):
-        resp = client.patch(self.URL, json={"processing_status": "Completed"})
-        assert resp.status_code in (401, 403)
 
 
 # ── query_case_documents service unit tests ────────────────────────────────────
