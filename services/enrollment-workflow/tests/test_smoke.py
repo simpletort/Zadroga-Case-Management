@@ -1,18 +1,19 @@
 import pytest
-from app import app as flask_app
+from fastapi.testclient import TestClient
+from app import app
 
 
 @pytest.fixture()
 def client():
-    flask_app.config["TESTING"] = True
-    with flask_app.test_client() as c:
+    # FastAPI uses Starlette's TestClient — no .config["TESTING"]
+    with TestClient(app) as c:
         yield c
 
 
 def test_app_imports():
-    """The Flask application object must be importable without errors."""
-    from app import app
-    assert app is not None
+    """The FastAPI application object must be importable without errors."""
+    from app import app as imported_app
+    assert imported_app is not None
 
 
 def test_root_responds(client):

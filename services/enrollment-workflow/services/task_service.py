@@ -134,7 +134,7 @@ VCF_TASKS: dict[VCFRegistrationStep, dict[str, Any]] = {
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-async def create_wtc_task(
+def create_wtc_task(
     db,
     case_id: str,
     step: WTCWorkflowStep | str,
@@ -166,7 +166,7 @@ async def create_wtc_task(
     if not task_def:
         return None
 
-    return await _create_task(
+    return _create_task(
         db=db,
         case_id=case_id,
         task_def=task_def,
@@ -177,7 +177,7 @@ async def create_wtc_task(
     )
 
 
-async def create_vcf_task(
+def create_vcf_task(
     db,
     case_id: str,
     step: VCFRegistrationStep | str,
@@ -216,7 +216,7 @@ async def create_vcf_task(
         extra_instructions = f"\n\nIMPORTANT: VCF filing deadline is {vcf_filing_deadline}."
         task_def = {**task_def, "instructions": task_def["instructions"] + extra_instructions}
 
-    return await _create_task(
+    return _create_task(
         db=db,
         case_id=case_id,
         task_def=task_def,
@@ -228,7 +228,7 @@ async def create_vcf_task(
     )
 
 
-async def create_deadline_alert_task(
+def create_deadline_alert_task(
     db: firestore.Client,
     case_id: str,
     days_remaining: int,
@@ -263,7 +263,7 @@ async def create_deadline_alert_task(
         "category": "VCF Deadline Alert",
     }
 
-    return await _create_task(
+    return _create_task(
         db=db,
         case_id=case_id,
         task_def=task_def,
@@ -280,7 +280,7 @@ async def create_deadline_alert_task(
 
 # ── Internal ──────────────────────────────────────────────────────────────────
 
-async def _create_task(
+def _create_task(
     db,
     case_id: str,
     task_def: dict[str, Any],
@@ -301,7 +301,7 @@ async def _create_task(
     now = datetime.now(tz=timezone.utc)
     due_date = deadline_override or (now + timedelta(days=task_def["due_days"]))
 
-    await task_ref.set({
+    task_ref.set({
         "taskId": task_id,
         "caseId": case_id,
         "title": task_def["title"],

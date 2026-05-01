@@ -24,7 +24,7 @@ Firestore document path: cases/{caseId}
 """
 
 from __future__ import annotations
-
+import asyncio
 import structlog
 from datetime import datetime, timezone
 from typing import Optional
@@ -411,7 +411,9 @@ async def _publish_enrollment_confirmed(
             data=json.dumps(payload).encode("utf-8"),
             event_type="certification.enrolled",
         )
-        future.result()
+        # future.result()
+        loop =  asyncio.get_event_loop()
+        await loop.run_in_executor(None, future.result)
         log.info("certification_enrolled_event_published", case_id=case_id, program=program)
         return True
     except Exception as exc:
