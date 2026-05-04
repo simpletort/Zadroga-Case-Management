@@ -33,10 +33,6 @@ from logging_config import setup_logging, get_logger
 from middleware.rate_limiter import limiter, rate_limit_exceeded_handler
 from routers import leads, partners
 
-from shared.middlewares.auth import AuthMiddleware
-from shared.middlewares.cors import get_cors_origins
-from shared.middlewares.error_handler import ErrorHandlerMiddleware
-from shared.middlewares.logging import LoggingMiddleware
 # ---------------------------------------------------------------------------
 # Route permission map
 # ---------------------------------------------------------------------------
