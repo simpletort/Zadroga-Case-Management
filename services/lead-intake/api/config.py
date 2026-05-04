@@ -11,11 +11,21 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    
+    gcp_project_id: str = "simpletort-prod"
+    firestore_database_id: str = "(default)"
+    roles_firestore_database_id: str = "simpletort-dev"
+    environment: str = "production"
+    log_level: str = "INFO"
+    # Comma-separated service account emails allowed to call this service via OIDC
+    trusted_service_accounts: str = ""
+
     model_config = SettingsConfigDict(
         env_file="api/.env",
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
+        
     )
 
     # ── GCP ──────────────────────────────────────────────────────────────────

@@ -10,7 +10,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     # ── GCP ────────────────────────────────────────────────────────────────
     gcp_project_id: str
-    app_env: str = "development"
+    app_env: str = "production"
     firestore_database_id: str = "simpletort-dev"
 
     # ── Auth ───────────────────────────────────────────────────────────────

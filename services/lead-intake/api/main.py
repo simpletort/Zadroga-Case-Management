@@ -1,18 +1,6 @@
 """
 api/main.py — FastAPI entrypoint for Cloud Run.
-
-Route permission map legend
-───────────────────────────
-Each entry: (HTTP_METHOD, url_regex, permission_key)
-
-permission_key conventions
-  leads.create          POST /leads   — partner API-key only
-  leads.read            GET  /leads*  — partner key OR Firebase JWT
-  leads.write           PATCH status, bulk-assign — partner key OR Firebase JWT
-  leads.export          GET  /export/csv — partner key OR Firebase JWT (stricter rate-limit)
-  leads.internal        POST internal/tasks/* — Cloud Tasks OIDC only
-  admin.partners.read   GET  admin/partners* — Firebase JWT, admin role
-  admin.partners.write  POST/DELETE admin/partners* — Firebase JWT, admin role
+...
 """
 from __future__ import annotations
 
@@ -31,7 +19,10 @@ from slowapi.middleware import SlowAPIMiddleware
 from config import get_settings
 from logging_config import setup_logging, get_logger
 from middleware.rate_limiter import limiter, rate_limit_exceeded_handler
+from shared.middlewares.auth import AuthMiddleware
+from shared.middlewares.cors import get_cors_origins  # ← shared package
 from routers import leads, partners
+
 
 # ---------------------------------------------------------------------------
 # Route permission map
@@ -163,18 +154,27 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
+
+app.add_middleware(
+    AuthMiddleware,
+    route_permissions=_ROUTE_PERMISSIONS,
+    roles_firestore_project=settings.gcp_project_id,
+    roles_firestore_database=settings.firestore_database,
+    trusted_service_accounts=settings.trusted_service_accounts,  # list[str] from config
+    skip_paths=["/health", "/", "/api/v1/docs", "/api/v1/redoc", "/api/v1/openapi.json"],
+)
+
 # ---------------------------------------------------------------------------
 # CORS
 # ---------------------------------------------------------------------------
 
-ALLOWED_ORIGINS = [
-    "https://simpletort-zadroga-dev.web.app",
-    "https://simpletort-zadroga-dev.firebaseapp.com",
-]
-if not settings.is_production:
-    ALLOWED_ORIGINS += ["http://localhost:3000", "http://localhost:5173"]
-
-
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_cors_origins(settings.app_env),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 # ---------------------------------------------------------------------------
 # Request-ID passthrough middleware
 # ---------------------------------------------------------------------------
