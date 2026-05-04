@@ -54,7 +54,7 @@ steps:
       - "--image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
       - "--region=$_REGION"
       - "--platform=managed"
-      - "--no-allow-unauthenticated"
+      - "--allow-unauthenticated"
       - "--service-account=enrollment-workflow-sa@$PROJECT_ID.iam.gserviceaccount.com"
       - >-
         --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,APP_ENV=$_ENV,
