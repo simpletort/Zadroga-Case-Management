@@ -33,7 +33,7 @@ steps:
       - "--image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
       - "--region=$_REGION"
       - "--platform=managed"
-      - "--set-env-vars=GCS_SERVICE_ACCOUNT_EMAIL=$_GCS_SA_EMAIL"
+      - "--set-env-vars=GCS_SERVICE_ACCOUNT_EMAIL=$_GCS_SA_EMAIL,GCS_BUCKET_NAME=$_GCS_BUCKET_NAME"
 
 images:
   - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"

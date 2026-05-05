@@ -73,9 +73,9 @@ async def enrollment_dashboard(
         data = doc.to_dict() or {}
         case_id = doc.id
         enrollment = data.get("enrollment", {})
-        case_wtc = enrollment.get("wtcEnrollmentStatus", "Not Enrolled")
-        case_vcf = enrollment.get("vcfRegistrationStatus", "Not Registered")
-        deadline_str = enrollment.get("vcfFilingDeadline")
+        case_wtc = enrollment.get("certificationStatus", "Not Enrolled")
+        case_vcf = enrollment.get("registrationStatus", "Not Registered")
+        deadline_str = enrollment.get("filingDeadline")
         case_paralegal = data.get("assignment", {}).get("assignedParalegal")
 
         # Apply filters
@@ -114,7 +114,7 @@ async def enrollment_dashboard(
         if dl_status == DeadlineStatus.EXPIRED:
             overdue_count += 1
 
-        last_updated = enrollment.get("vcfLastUpdatedAt") or enrollment.get("wtcLastUpdatedAt")
+        last_updated = enrollment.get("registrationUpdatedAt") or enrollment.get("certificationUpdatedAt")
         last_updated_str = None
         if last_updated:
             try:
@@ -216,7 +216,7 @@ async def deadline_summary(
             days_until_deadline=days_rem,
             deadline_status=dl_status,
             vcf_registration_status=enrollment.get(
-                "vcfRegistrationStatus", "Not Registered"
+                "registrationStatus", "Not Registered"
             ),
             assigned_paralegal=case_paralegal,
         ))
@@ -285,12 +285,12 @@ async def export_csv(
             except (ValueError, TypeError):
                 pass
 
-        last_upd = enrollment.get("vcfLastUpdatedAt") or enrollment.get("wtcLastUpdatedAt")
+        last_upd = enrollment.get("registrationUpdatedAt") or enrollment.get("certificationUpdatedAt")
         writer.writerow([
             doc.id,
-            enrollment.get("wtcEnrollmentStatus", "Not Enrolled"),
-            enrollment.get("vcfRegistrationStatus", "Not Registered"),
-            enrollment.get("vcfClaimNumber", ""),
+            enrollment.get("certificationStatus", "Not Enrolled"),
+            enrollment.get("registrationStatus", "Not Registered"),
+            enrollment.get("registrationNumber", ""),
             deadline_str,
             days_rem,
             dl_status,

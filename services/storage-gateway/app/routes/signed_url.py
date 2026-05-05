@@ -9,12 +9,11 @@ without routing file bytes through this service.
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 
 from app.models.storage import DocumentCategory, SignedUrlResponse, UrlAction
 from app.services.gcs_service import build_blob_path, generate_signed_url
 from app.utils.audit import AuditAction, log_audit_event
-from app.utils.auth import require_min_role
 from app.utils.gcs_client import get_gcs_client
 from app.config import get_settings
 
@@ -35,7 +34,6 @@ def get_signed_url(
     action: UrlAction = Query(UrlAction.read, description="'read' for download, 'write' for upload"),
     case_id: Optional[str] = Query(None, description="Required for case-scoped categories"),
     content_type: Optional[str] = Query(None, description="MIME type — required for write action"),
-    user: dict = Depends(require_min_role("signed_url")),
 ):
     if action == UrlAction.write and not content_type:
         raise HTTPException(
@@ -62,7 +60,6 @@ def get_signed_url(
     audit_action = AuditAction.signed_url_read if action == UrlAction.read else AuditAction.signed_url_write
     log_audit_event(
         action=audit_action,
-        user=user,
         request=request,
         case_id=case_id,
         resource=blob_path,

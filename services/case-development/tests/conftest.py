@@ -20,12 +20,22 @@ os.environ.setdefault("ENVIRONMENT", "test")
 
 class _NoopMiddleware:
     """Minimal ASGI middleware that delegates straight to the wrapped app."""
-    def __init__(self, app):
+    def __init__(self, app, **kwargs):
         self.app = app
 
     async def __call__(self, scope, receive, send):
         await self.app(scope, receive, send)
 
+
+def _get_cors_origins_stub(environment: str) -> list[str]:
+    return ["http://localhost:3000"]
+
+
+_shared_auth_mod = MagicMock()
+_shared_auth_mod.AuthMiddleware = _NoopMiddleware
+
+_shared_cors_mod = MagicMock()
+_shared_cors_mod.get_cors_origins = _get_cors_origins_stub
 
 _shared_error_handler_mod = MagicMock()
 _shared_error_handler_mod.ErrorHandlerMiddleware = _NoopMiddleware
@@ -34,6 +44,12 @@ _shared_logging_mod = MagicMock()
 _shared_logging_mod.LoggingMiddleware = _NoopMiddleware
 
 _shared_middlewares_mod = MagicMock()
+_shared_middlewares_mod.AuthMiddleware = _NoopMiddleware
+_shared_middlewares_mod.get_cors_origins = _get_cors_origins_stub
+_shared_middlewares_mod.ErrorHandlerMiddleware = _NoopMiddleware
+_shared_middlewares_mod.LoggingMiddleware = _NoopMiddleware
+_shared_middlewares_mod.auth = _shared_auth_mod
+_shared_middlewares_mod.cors = _shared_cors_mod
 _shared_middlewares_mod.error_handler = _shared_error_handler_mod
 _shared_middlewares_mod.logging = _shared_logging_mod
 
@@ -42,6 +58,8 @@ _shared_mod.middlewares = _shared_middlewares_mod
 
 sys.modules.setdefault("shared", _shared_mod)
 sys.modules.setdefault("shared.middlewares", _shared_middlewares_mod)
+sys.modules.setdefault("shared.middlewares.auth", _shared_auth_mod)
+sys.modules.setdefault("shared.middlewares.cors", _shared_cors_mod)
 sys.modules.setdefault("shared.middlewares.error_handler", _shared_error_handler_mod)
 sys.modules.setdefault("shared.middlewares.logging", _shared_logging_mod)
 

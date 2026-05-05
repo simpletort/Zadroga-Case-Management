@@ -70,7 +70,7 @@ def days_until_deadline(deadline: date | None, today: date | None = None) -> int
     return (deadline - today).days
 
 
-async def update_case_deadline(
+def update_case_deadline(
     db,
     case_id: str,
     certification_date_str: str | None,
@@ -119,7 +119,7 @@ async def update_case_deadline(
         "enrollment.deadlineCalculatedAt": firestore.SERVER_TIMESTAMP,
     }
 
-    await db.collection("cases").document(case_id).update(update_data)
+    db.collection("cases").document(case_id).update(update_data)
 
     logger.info(
         "vcf_deadline_updated caseId=%s deadline=%s status=%s daysRemaining=%s",
@@ -128,7 +128,7 @@ async def update_case_deadline(
 
     if write_timeline:
         try:
-            await write_deadline_event(
+            write_deadline_event(
                 db=db,
                 case_id=case_id,
                 deadline_date=deadline.isoformat(),

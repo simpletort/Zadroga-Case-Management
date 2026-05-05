@@ -16,7 +16,7 @@ from google.cloud import firestore
 logger = logging.getLogger(__name__)
 
 
-async def write_timeline_event(
+def write_timeline_event(
     db,
     case_id: str,
     event_type: str,
@@ -36,7 +36,7 @@ async def write_timeline_event(
     )
     doc_id = timeline_ref.id
 
-    await timeline_ref.set({
+    timeline_ref.set({
         "eventId": doc_id,
         "caseId": case_id,
         "timestamp": firestore.SERVER_TIMESTAMP,
@@ -53,23 +53,23 @@ async def write_timeline_event(
     return doc_id
 
 
-async def write_status_transition_event(
+def write_status_transition_event(
     db,
     case_id: str,
     workflow_type: str,
     old_status: str,
     new_status: str,
     performed_by: str = "system",
-    metadata: dict[str, Any] | None = None,   # was extra_meta — renamed to match callers
+    extra_meta: dict[str, Any] | None = None,
 ) -> str:
     """Convenience wrapper for status-transition timeline events."""
     meta = {
         "workflowType": workflow_type,
         "oldStatus": old_status,
         "newStatus": new_status,
-        **(metadata or {}),
+        **(extra_meta or {}),
     }
-    return await write_timeline_event(
+    return write_timeline_event(
         db=db,
         case_id=case_id,
         event_type=f"{workflow_type}StatusChange",
@@ -79,7 +79,7 @@ async def write_status_transition_event(
     )
 
 
-async def write_task_created_event(
+def write_task_created_event(
     db,
     case_id: str,
     task_id: str,
@@ -89,7 +89,7 @@ async def write_task_created_event(
     step: str,
 ) -> str:
     """Write a timeline event when a paralegal task is auto-created."""
-    return await write_timeline_event(
+    return write_timeline_event(
         db=db,
         case_id=case_id,
         event_type="TaskCreated",
@@ -105,7 +105,7 @@ async def write_task_created_event(
     )
 
 
-async def write_deadline_event(
+def write_deadline_event(
     db,
     case_id: str,
     deadline_date: str,
@@ -113,7 +113,7 @@ async def write_deadline_event(
     event_subtype: str = "DeadlineCalculated",
 ) -> str:
     """Write a timeline event for VCF deadline calculation or alert."""
-    return await write_timeline_event(
+    return write_timeline_event(
         db=db,
         case_id=case_id,
         event_type=event_subtype,

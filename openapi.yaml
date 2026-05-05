@@ -38,6 +38,15 @@ paths:
   # --- Dashboard ---
 
   /api/v1/dashboard/cases:
+    options:
+      operationId: corsPreflightDashboardCases
+      security: []
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     get:
       summary: Paginated filterable case list with KPI summary
       operationId: getDashboardCases
@@ -67,6 +76,17 @@ paths:
   # --- Assignment ---
 
   /api/v1/cases/{caseId}/assign:
+    options:
+      operationId: corsPreflightCaseAssign
+      security: []
+      parameters:
+        - { name: caseId, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     post:
       summary: "Manually assign or re-assign a case (min role: admin_staff)"
       operationId: assignCase
@@ -84,6 +104,17 @@ paths:
           description: Insufficient role
 
   /api/v1/cases/{caseId}/assignment:
+    options:
+      operationId: corsPreflightCaseAssignment
+      security: []
+      parameters:
+        - { name: caseId, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     get:
       summary: "Get current assignment for a case (min role: paralegal)"
       operationId: getCaseAssignment
@@ -99,6 +130,15 @@ paths:
           description: Unauthorized
 
   /api/v1/staff/paralegals/workload:
+    options:
+      operationId: corsPreflightParalegalWorkload
+      security: []
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     get:
       summary: "Workload distribution across all paralegals (min role: paralegal)"
       operationId: getParalegalWorkload
@@ -114,6 +154,15 @@ paths:
   # --- Attorney Review ---
 
   /api/v1/attorney/review-queue:
+    options:
+      operationId: corsPreflightAttorneyReviewQueue
+      security: []
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     get:
       summary: "Paginated attorney review queue (min role: junior_partner)"
       operationId: getReviewQueue
@@ -132,6 +181,17 @@ paths:
           description: Insufficient role
 
   /api/v1/cases/{caseId}/approve-for-filing:
+    options:
+      operationId: corsPreflightApproveForFiling
+      security: []
+      parameters:
+        - { name: caseId, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     post:
       summary: "Approve a single case for filing (min role: junior_partner)"
       operationId: approveCase
@@ -149,6 +209,15 @@ paths:
           description: Insufficient role
 
   /api/v1/cases/bulk-approve:
+    options:
+      operationId: corsPreflightBulkApprove
+      security: []
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     post:
       summary: "Bulk approve multiple cases for filing (min role: junior_partner)"
       operationId: bulkApproveCases
@@ -166,6 +235,17 @@ paths:
   # --- Escalation ---
 
   /api/v1/cases/{caseId}/escalate:
+    options:
+      operationId: corsPreflightEscalateCase
+      security: []
+      parameters:
+        - { name: caseId, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     post:
       summary: "Escalate a case to senior partner review (min role: junior_partner)"
       description: >
@@ -218,6 +298,15 @@ paths:
           description: "Case not in 'Pending Attorney Review', or notes missing for reason=other"
 
   /api/v1/attorney/escalation-queue:
+    options:
+      operationId: corsPreflightEscalationQueue
+      security: []
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     get:
       summary: "Paginated escalation queue for senior partners (min role: senior_partner)"
       description: >
@@ -270,6 +359,17 @@ paths:
           description: "Insufficient role (min: senior_partner)"
 
   /api/v1/cases/{caseId}/escalation-decision:
+    options:
+      operationId: corsPreflightEscalationDecision
+      security: []
+      parameters:
+        - { name: caseId, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     post:
       summary: "Senior partner decision on an escalated case (min role: senior_partner)"
       description: >
@@ -330,6 +430,17 @@ paths:
   # --- Communications ---
 
   /api/v1/cases/{caseId}/communications:
+    options:
+      operationId: corsPreflightCaseCommunications
+      security: []
+      parameters:
+        - { name: caseId, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     get:
       summary: "Paginated communication log for a case (min role: paralegal)"
       operationId: getCaseCommunications
@@ -363,6 +474,17 @@ paths:
   # --- Review / Submit ---
 
   /api/v1/cases/{caseId}/review-preflight:
+    options:
+      operationId: corsPreflightCaseReviewPreflight
+      security: []
+      parameters:
+        - { name: caseId, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     get:
       summary: "Check submission readiness for a case (min role: paralegal)"
       operationId: getCaseReviewPreflight
@@ -378,6 +500,17 @@ paths:
           description: Unauthorized
 
   /api/v1/cases/{caseId}/submit-for-review:
+    options:
+      operationId: corsPreflightSubmitForReview
+      security: []
+      parameters:
+        - { name: caseId, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     post:
       summary: "Submit case for attorney review (min role: paralegal)"
       operationId: submitCaseForReview
@@ -395,6 +528,15 @@ paths:
   # --- Search ---
 
   /api/v1/cases/search:
+    options:
+      operationId: corsPreflightCaseSearch
+      security: []
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     get:
       summary: "Advanced full-text search and filtering (min role: paralegal)"
       operationId: searchCases
@@ -427,6 +569,15 @@ paths:
           description: Unauthorized
 
   /api/v1/cases/search/export:
+    options:
+      operationId: corsPreflightCaseSearchExport
+      security: []
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     get:
       summary: "Export filtered search results as CSV (min role: paralegal)"
       operationId: exportCaseSearch
@@ -457,6 +608,15 @@ paths:
           description: Unauthorized
 
   /api/v1/search/presets:
+    options:
+      operationId: corsPreflightSearchPresets
+      security: []
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     get:
       summary: "List saved filter presets for current user (min role: paralegal)"
       operationId: listSearchPresets
@@ -481,6 +641,17 @@ paths:
           description: Unauthorized
 
   /api/v1/search/presets/{preset_id}:
+    options:
+      operationId: corsPreflightSearchPresetById
+      security: []
+      parameters:
+        - { name: preset_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     patch:
       summary: "Update a saved filter preset (min role: paralegal)"
       operationId: updateSearchPreset
@@ -511,6 +682,17 @@ paths:
   # --- Rejection ---
 
   /api/v1/cases/{caseId}/reject:
+    options:
+      operationId: corsPreflightRejectCase
+      security: []
+      parameters:
+        - { name: caseId, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     post:
       summary: "Reject a case from Pending Attorney Review (min role: junior_partner)"
       operationId: rejectCase
@@ -528,6 +710,17 @@ paths:
           description: Insufficient role
 
   /api/v1/cases/{caseId}/resubmit:
+    options:
+      operationId: corsPreflightResubmitCase
+      security: []
+      parameters:
+        - { name: caseId, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     post:
       summary: "Resubmit a rejected case back to Pending Paralegal Review (min role: paralegal)"
       operationId: resubmitCase
@@ -545,6 +738,15 @@ paths:
   # --- Decision Audit ---
 
   /api/v1/audit/decisions:
+    options:
+      operationId: corsPreflightAuditDecisions
+      security: []
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     get:
       summary: "Query all decisions across cases (min role: junior_partner)"
       operationId: listAuditDecisions
@@ -566,6 +768,17 @@ paths:
           description: Unauthorized
 
   /api/v1/cases/{caseId}/audit/decisions:
+    options:
+      operationId: corsPreflightCaseAuditDecisions
+      security: []
+      parameters:
+        - { name: caseId, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     get:
       summary: "Chronological decision history for a single case (min role: junior_partner)"
       operationId: getCaseAuditDecisions
@@ -581,6 +794,15 @@ paths:
           description: Unauthorized
 
   /api/v1/audit/decisions/metrics:
+    options:
+      operationId: corsPreflightAuditDecisionMetrics
+      security: []
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     get:
       summary: "Time-to-decision metrics (min role: junior_partner)"
       operationId: getAuditDecisionMetrics
@@ -599,6 +821,15 @@ paths:
           description: Unauthorized
 
   /api/v1/audit/decisions/report:
+    options:
+      operationId: corsPreflightAuditDecisionReport
+      security: []
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     get:
       summary: "Compliance audit export — all decisions chronological (min role: senior_partner)"
       operationId: exportAuditDecisions
@@ -625,6 +856,15 @@ paths:
   # --- Leads ---
 
   /api/v1/leads:
+    options:
+      operationId: corsPreflightLeads
+      security: []
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     post:
       summary: Ingest a new lead from a marketing partner
       operationId: createLead
@@ -663,6 +903,15 @@ paths:
           description: Unauthorized
 
   /api/v1/leads/bulk-assign:
+    options:
+      operationId: corsPreflightLeadsBulkAssign
+      security: []
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     post:
       summary: "Bulk assign up to 100 leads to a staff member (min role: admin_staff)"
       operationId: bulkAssignLeads
@@ -678,6 +927,15 @@ paths:
           description: Insufficient role
 
   /api/v1/leads/export/csv:
+    options:
+      operationId: corsPreflightLeadsExportCsv
+      security: []
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     get:
       summary: "Export filtered leads as CSV — max 5,000 rows (min role: paralegal)"
       operationId: exportLeadsCsv
@@ -708,6 +966,17 @@ paths:
           description: Follow-up task processed
 
   /api/v1/leads/{lead_id}:
+    options:
+      operationId: corsPreflightLead
+      security: []
+      parameters:
+        - { name: lead_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     get:
       summary: "Get full case detail for a lead (min role: paralegal)"
       operationId: getLead
@@ -725,6 +994,17 @@ paths:
           description: Not found
 
   /api/v1/leads/{lead_id}/status:
+    options:
+      operationId: corsPreflightLeadStatus
+      security: []
+      parameters:
+        - { name: lead_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     patch:
       summary: "Update case status (min role: admin_staff)"
       operationId: updateLeadStatus
@@ -744,6 +1024,15 @@ paths:
   # --- Partner Management ---
 
   /api/v1/admin/partners:
+    options:
+      operationId: corsPreflightAdminPartners
+      security: []
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     post:
       summary: "Create a new marketing partner (min role: senior_partner)"
       operationId: createPartner
@@ -770,6 +1059,17 @@ paths:
           description: Unauthorized
 
   /api/v1/admin/partners/{partner_id}/keys:
+    options:
+      operationId: corsPreflightAdminPartnerKeys
+      security: []
+      parameters:
+        - { name: partner_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     post:
       summary: "Generate a new API key for a partner (min role: senior_partner)"
       operationId: createPartnerKey
@@ -787,6 +1087,18 @@ paths:
           description: Insufficient role
 
   /api/v1/admin/partners/{partner_id}/keys/{key_id}:
+    options:
+      operationId: corsPreflightAdminPartnerKeyById
+      security: []
+      parameters:
+        - { name: partner_id, in: path, required: true, type: string }
+        - { name: key_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     delete:
       summary: "Revoke a partner API key (min role: senior_partner)"
       operationId: revokePartnerKey
@@ -805,6 +1117,17 @@ paths:
           description: Insufficient role
 
   /api/v1/admin/partners/{partner_id}/stats:
+    options:
+      operationId: corsPreflightAdminPartnerStats
+      security: []
+      parameters:
+        - { name: partner_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     get:
       summary: "Partner usage stats — request count, last request, active keys (min role: senior_partner)"
       operationId: getPartnerStats

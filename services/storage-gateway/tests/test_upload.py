@@ -37,7 +37,6 @@ class TestRegisterUpload:
                     "content_type": "application/pdf",
                     "case_id": "ZAD-2024-01-0001",
                 },
-                headers={"Authorization": "Bearer fake-token"},
             )
 
         assert resp.status_code == 201
@@ -46,18 +45,6 @@ class TestRegisterUpload:
         assert body["staging_path"] == "staging/uuid-001/records.pdf"
         assert "signed_url" in body
         assert body["bucket"] == "zadroga-case-files-simpletort-prod"
-
-    def test_register_requires_auth(self, client):
-        resp = client.post(
-            "/api/v1/storage/upload/register",
-            json={
-                "file_name": "records.pdf",
-                "category": "medical_records",
-                "content_type": "application/pdf",
-                "case_id": "ZAD-2024-01-0001",
-            },
-        )
-        assert resp.status_code in (401, 403)  # HTTPBearer returns 403 on missing header
 
     def test_register_missing_content_type_returns_422(self, client):
         resp = client.post(
@@ -68,7 +55,6 @@ class TestRegisterUpload:
                 "case_id": "ZAD-2024-01-0001",
                 # content_type intentionally omitted
             },
-            headers={"Authorization": "Bearer fake-token"},
         )
         assert resp.status_code == 422
 
@@ -88,7 +74,6 @@ class TestRegisterUpload:
                     "content_type": "application/pdf",
                     # case_id omitted
                 },
-                headers={"Authorization": "Bearer fake-token"},
             )
         assert resp.status_code == 422
         assert "case_id" in resp.json()["detail"]
@@ -110,7 +95,6 @@ class TestRegisterUpload:
                     "category": "temp_lead_attachments",
                     "content_type": "application/pdf",
                 },
-                headers={"Authorization": "Bearer fake-token"},
             )
 
         assert resp.status_code == 201
@@ -135,7 +119,6 @@ class TestUploadStatus:
 
             resp = client.get(
                 "/api/v1/storage/upload/uuid-001/status",
-                headers={"Authorization": "Bearer fake-token"},
             )
 
         assert resp.status_code == 200
@@ -162,7 +145,6 @@ class TestUploadStatus:
 
             resp = client.get(
                 "/api/v1/storage/upload/uuid-002/status",
-                headers={"Authorization": "Bearer fake-token"},
             )
 
         assert resp.status_code == 200
@@ -188,7 +170,6 @@ class TestUploadStatus:
 
             resp = client.get(
                 "/api/v1/storage/upload/uuid-003/status",
-                headers={"Authorization": "Bearer fake-token"},
             )
 
         assert resp.status_code == 200
@@ -205,14 +186,9 @@ class TestUploadStatus:
 
             resp = client.get(
                 "/api/v1/storage/upload/bad-id/status",
-                headers={"Authorization": "Bearer fake-token"},
             )
 
         assert resp.status_code == 404
-
-    def test_status_requires_auth(self, client):
-        resp = client.get("/api/v1/storage/upload/uuid-001/status")
-        assert resp.status_code in (401, 403)  # HTTPBearer returns 403 on missing header
 
 
 # ── upload_service unit tests ─────────────────────────────────────────────

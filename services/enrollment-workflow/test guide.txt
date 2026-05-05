@@ -1,0 +1,180 @@
+health check
+
+get
+http://localhost:8080/health
+
+
+enrollment certificate trigger
+
+post
+http://localhost:8080/api/v1/enrollment/certification/trigger
+
+{
+    "case_id": "ZAD-2026-04-0001",
+    "program": "wtc",
+    "triggered_by": "paralegal-uid-1",
+    "notes": "Initial trigger for testing"
+  }
+
+fetch current certification record
+
+get
+curl http://localhost:8080/api/v1/enrollment/certification/ZAD-2026-04-0001
+
+
+update status to application pending
+
+put
+http://localhost:8080/api/v1/enrollment/certification/ZAD-2026-04-0001/status
+
+{
+    "new_status": "Application Pending",
+    "updated_by": "paralegal-uid-1",
+    "notes": "Application submitted to WTC program"
+  }
+
+
+update status to enrolled
+
+put
+http://localhost:8080/api/v1/enrollment/certification/ZAD-2026-04-0001/status
+
+{
+    "new_status": "Enrolled",
+    "updated_by": "paralegal-uid-1",
+    "certification_date": "2024-06-15",
+    "notes": "WTC confirmed enrollment"
+  }
+
+invalid transition
+
+put
+ http://localhost:8080/api/v1/enrollment/certification/ZAD-2026-04-0001/status
+
+{
+    "new_status": "Enrolled",
+    "updated_by": "paralegal-uid-1"
+  }
+
+registration need teh certification to exist first
+
+initiate registration
+
+post
+http://localhost:8080/api/v1/enrollment/registration/initiate
+
+{
+    "case_id": "ZAD-2026-04-0001",
+    "program": "vcf",
+    "initiated_by": "paralegal-uid-1",
+    "notes": "VCF registration initiated after WTC enrollment"
+  }
+
+get the case 
+
+get
+http://localhost:8080/api/v1/enrollment/registration/ZAD-2026-04-0001
+
+change status
+
+put
+http://localhost:8080/api/v1/enrollment/registration/ZAD-2026-04-0001/status
+
+{
+    "new_status": "Registration Pending",
+    "updated_by": "paralegal-uid-1"
+  }
+
+complete registration
+
+put
+http://localhost:8080/api/v1/enrollment/registration/ZAD-2026-04-0001/status
+
+{
+    "new_status": "Registered",
+    "updated_by": "paralegal-uid-1",
+    "registration_number": "VCF-2024-98765",
+    "notes": "Claim number confirmed by VCF portal"
+  }
+
+
+
+get prefill data DocuSign template
+
+get
+http://localhost:8080/api/v1/enrollment/registration/ZAD-2026-04-0001/prefill
+
+
+cloud workflow adapter endpoints
+
+check if the certification is complete
+
+get
+http://localhost:8080/api/v1/enrollment/wtc-status?case_id=ZAD-2026-04-0001
+
+trigger certification
+
+put
+http://localhost:8080/api/v1/enrollment/wtc-status
+
+{
+    "case_id": "ZAD-2026-04-0001",
+    "action": "initiate_enrollment",
+    "updated_by": "workflow-orchestrator"
+  }
+
+
+check again
+
+get
+http://localhost:8080/api/v1/enrollment/wtc-status?case_id=ZAD-2026-04-0001
+
+trigger registration 
+
+put
+http://localhost:8080/api/v1/enrollment/vcf-status
+
+
+{
+    "case_id": "ZAD-2026-04-0001",
+    "action": "submit_registration",
+    "updated_by": "workflow-orchestrator"
+}
+
+get enrollment deadlines
+
+get
+http://localhost:8080/api/v1/enrollment/deadlines?case_id=ZAD-2026-04-0001
+
+
+
+reporting and export endpoints
+
+enrollment dashboard
+
+get
+
+http://localhost:8080/api/v1/dashboard/enrollment
+
+filtered fetch
+
+get
+
+http://localhost:8080/api/v1/dashboard/enrollment?wtc_status=Enrolled&deadline_status=warning_30&limit=50
+
+deadline summary dashboard
+
+http://localhost:8080/api/v1/dashboard/deadlines
+
+filtered
+
+get
+http://localhost:8080/api/v1/dashboard/deadlines?status=warning_30
+
+
+export to csv
+
+get
+http://localhost:8080/api/v1/dashboard/export
+
+
