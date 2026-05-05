@@ -34,6 +34,14 @@ class Settings(BaseSettings):
         alias="FIRESTORE_SETTLEMENT_CALCULATIONS_COLLECTION",
     )
 
+    # ── Cloud Storage ─────────────────────────────────────────────────────
+    gcs_bucket: str = Field("zadroga-case-files-dev", alias="GCS_BUCKET")
+
+    # ── Firm logo ─────────────────────────────────────────────────────────
+    # Absolute path to the logo file on the container filesystem.
+    # Mount it via Cloud Run volume or leave blank to use no logo.
+    firm_logo_path: str = Field("", alias="FIRM_LOGO_PATH")
+
     model_config = {"populate_by_name": True, "env_file": ".env", "extra": "ignore"}
 
 

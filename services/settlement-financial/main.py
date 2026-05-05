@@ -51,6 +51,10 @@ Disbursements (2.6.4)
   POST /api/v1/settlement/cases/{case_id}/disbursements
   GET  /api/v1/settlement/cases/{case_id}/disbursements
 
+Statement PDF
+  POST /api/v1/settlement/cases/{case_id}/statement/generate
+      Generate & upload a settlement statement PDF; returns signed URL.
+
 GET /health
 """
 from __future__ import annotations
@@ -62,6 +66,7 @@ from decimal import Decimal
 from typing import List, Optional
 
 from fastapi import FastAPI, HTTPException, Path, status
+from fastapi.responses import StreamingResponse
 from google.cloud import firestore as _fs
 
 from config import get_settings
@@ -116,6 +121,8 @@ from models.fee_config import (
 from services.calculator import run_calculation
 from services.fee_calculator import calculate_attorney_fee
 from services.firestore_client import get_db
+from services.pdf_service import build_and_upload_statement
+from models.statement import StatementGenerateRequest, StatementGenerateResponse
 
 logger = get_logger(__name__)
 
@@ -1673,6 +1680,107 @@ async def preview_case_fee(
     logger.info("case_fee_preview_computed",
                 case_id=case_id, gross_award=str(request.gross_award), label=label)
     return result
+
+
+# ── Settlement Statement PDF ──────────────────────────────────────────────────
+
+@app.post(
+    "/api/v1/settlement/cases/{case_id}/statement/generate",
+    response_model=StatementGenerateResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Generate settlement statement PDF",
+    tags=["Statement"],
+)
+async def generate_statement(
+    case_id: str = Path(..., description="Case ID"),
+    request: StatementGenerateRequest = StatementGenerateRequest(),
+):
+    """
+    Assembles all settlement data for the case (firm info, gross award, expenses,
+    liens, loans), renders a one-page PDF, uploads it to Cloud Storage, and
+    returns a signed 60-minute download URL.
+
+    Saves statement metadata to Firestore at:
+        cases/{caseId}/settlement/statements/records/{statementId}
+    """
+    from config import get_settings
+    db       = get_db()
+    settings = get_settings()
+
+    try:
+        result = await build_and_upload_statement(db, case_id, request, settings)
+    except Exception as exc:
+        logger.error("statement_generation_failed", case_id=case_id, error=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate statement: {exc}",
+        )
+
+    # Persist statement metadata in Firestore
+    # Path: cases/{caseId}/settlement/statements/{statementId}
+    stmt_ref = (
+        db.collection("cases").document(case_id)
+          .collection("settlement").document(f"statement_{result.statement_id}")
+    )
+    await stmt_ref.set({
+        "statementId":   result.statement_id,
+        "caseId":        case_id,
+        "gcsPath":       result.gcs_path,
+        "pdfUrl":        result.pdf_url,
+        "generatedAt":   result.generated_at,
+        "preparedBy":    result.prepared_by,
+        "statementDate": result.statement_date,
+    })
+
+    logger.info("statement_generated",
+                case_id=case_id, statement_id=result.statement_id,
+                gcs_path=result.gcs_path)
+    return result
+
+
+# ── Download statement PDF ────────────────────────────────────────────────────
+
+@app.get(
+    "/api/v1/settlement/cases/{case_id}/statement/{statement_id}/download",
+    summary="Download a generated settlement statement PDF",
+    tags=["Statement"],
+)
+async def download_statement(
+    case_id:      str = Path(..., description="Case ID"),
+    statement_id: str = Path(..., description="Statement ID"),
+):
+    """
+    Streams the PDF directly from Cloud Storage.
+    Works locally (ADC) and in Cloud Run (service account).
+    """
+    from config import get_settings
+    import asyncio, io
+    from functools import partial
+    from google.cloud import storage as gcs
+
+    settings   = get_settings()
+    gcs_object = f"settlements/{case_id}/{statement_id}.pdf"
+
+    def _download() -> bytes:
+        client = gcs.Client()
+        bucket = client.bucket(settings.gcs_bucket)
+        blob   = bucket.blob(gcs_object)
+        if not blob.exists():
+            return b""
+        return blob.download_as_bytes()
+
+    loop  = asyncio.get_event_loop()
+    data  = await loop.run_in_executor(None, _download)
+
+    if not data:
+        raise HTTPException(status_code=404, detail="Statement PDF not found in storage.")
+
+    filename = f"settlement_{case_id}_{statement_id[:8]}.pdf"
+    return StreamingResponse(
+        io.BytesIO(data),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
