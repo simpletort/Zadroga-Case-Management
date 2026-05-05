@@ -6,12 +6,11 @@
 # Steps:
 #   1. Fetch full lead record from Lead Intake Service
 #   2. Set case status → "client_onboarding" in Case Development Service
-#   3. Create client portal account
-#   4. Send DocuSign retainer + build document checklist
-#   5. Send welcome notifications (email + SMS)
-#   6. Poll for retainer signature
-#   7. On signed: update case status → "pending_paralegal_review", auto-assign paralegal
-#   8. Trigger vcf-enrollment workflow
+#   3. Send DocuSign retainer
+#   4. Send welcome notifications (email + SMS)
+#   5. Poll for retainer signature
+#   6. On signed: update case status → "pending_paralegal_review", auto-assign paralegal
+#   7. Trigger vcf-enrollment workflow
 
 main:
   params: [args]
@@ -26,7 +25,6 @@ main:
           - deploy_env: ${sys.get_env("DEPLOY_ENV")}
           - lead_service_url: ${"https://lead-intake-" + deploy_env + "-" + default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed")}
           - case_dev_url: ${"https://case-development-" + deploy_env + "-" + default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed")}
-          - portal_url: ${"https://client-portal-" + deploy_env + "-" + default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed")}
           - ext_sync_url: ${"https://external-sync-" + deploy_env + "-" + default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed")}
           - orchestrator_url: ${"https://workflow-orchestrator-" + deploy_env + "-" + default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed")}
           - notification_url: ${"https://notification-" + deploy_env + "-" + default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed")}
@@ -80,26 +78,6 @@ main:
             updated_by: "workflow-orchestrator"
         result: status_onboarding_response
 
-    - create_portal_account:
-        call: http.post
-        args:
-          url: ${portal_url + "/api/v1/portal/auth"}
-          auth:
-            type: OIDC
-          body:
-            case_id: ${case_id}
-            email: ${client_email}
-            first_name: ${client_first_name}
-            last_name: ${client_last_name}
-            action: "create_account"
-        result: portal_response
-
-    - check_portal_created:
-        switch:
-          - condition: ${portal_response.code == 200 or portal_response.code == 201}
-            next: send_retainer
-        next: portal_creation_failed
-
     - send_retainer:
         call: http.post
         args:
@@ -112,17 +90,6 @@ main:
             template: ${config.step_parameters.send_retainer.docusign_template_id}
         result: docusign_response
 
-    - build_document_checklist:
-        call: http.post
-        args:
-          url: ${portal_url + "/api/v1/portal/checklist"}
-          auth:
-            type: OIDC
-          body:
-            case_id: ${case_id}
-            checklist_type: "standard_vcf"
-        result: checklist_response
-
     - send_welcome_notification:
         call: http.post
         args:
@@ -133,7 +100,6 @@ main:
             template: "client_welcome"
             case_id: ${case_id}
             client_email: ${client_email}
-            portal_url: ${portal_response.body.portal_login_url}
         result: welcome_notify_response
 
     - send_sms_notification:
@@ -251,16 +217,6 @@ main:
                 code: 404
                 message: ${lead_error_msg}
 
-    - portal_creation_failed:
-        steps:
-          - build_portal_error_msg:
-              assign:
-                - portal_error_msg: '${"Failed to create portal account for case: " + case_id}'
-          - raise_portal_error:
-              raise:
-                code: 500
-                message: ${portal_error_msg}
-
     - return_success:
         return:
           status: "onboarding_initiated"
@@ -268,5 +224,4 @@ main:
           lead_id: ${lead_id}
           client_email: ${client_email}
           retainer_sent: true
-          checklist_created: true
           assigned_paralegal_id: ${assigned_paralegal_id}
