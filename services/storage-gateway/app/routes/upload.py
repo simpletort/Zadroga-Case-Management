@@ -46,11 +46,14 @@ def register_file_upload(
     After upload, the virus-scanner Cloud Function is triggered automatically
     by the GCS object-finalise event.
     """
+    user = getattr(request.state, "user", {})
+    uploaded_by = user.get("uid", "unknown")
+
     result = register_upload(
         file_name=body.file_name,
         category=body.category,
         content_type=body.content_type,
-        uploaded_by="unknown",
+        uploaded_by=uploaded_by,
         case_id=body.case_id,
         size_bytes=body.size_bytes,
     )

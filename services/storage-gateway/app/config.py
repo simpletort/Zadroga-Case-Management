@@ -9,8 +9,12 @@ class Settings(BaseSettings):
     gcs_bucket_name: str = "zadroga-case-files-simpletort-prod"
     signed_url_write_expiry_minutes: int = 15
     signed_url_read_expiry_minutes: int = 60
-    env: str = "prod"  # dev | test | prod — injected via ENV trigger variable
+    environment: str = "production"  # production | staging | development
     log_level: str = "INFO"
+
+    # Comma-separated list of Cloud Run service account emails allowed to call
+    # this service via OIDC Bearer token (service-to-service auth).
+    trusted_service_accounts: list[str] = []
 
     # Virus scanning — staging / quarantine prefixes
     gcs_staging_prefix: str = "staging"
