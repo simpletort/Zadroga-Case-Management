@@ -6,11 +6,9 @@
 # Steps:
 #   1. Fetch full lead record from Lead Intake Service
 #   2. Set case status → "client_onboarding" in Case Development Service
-#   3. Send DocuSign retainer
-#   4. Send welcome notifications (email + SMS)
-#   5. Poll for retainer signature
-#   6. On signed: update case status → "pending_paralegal_review", auto-assign paralegal
-#   7. Trigger vcf-enrollment workflow
+#   3. Send welcome notifications (email + SMS)
+#   4. Update case status → "pending_paralegal_review", auto-assign paralegal
+#   5. Trigger vcf-enrollment workflow
 
 main:
   params: [args]
@@ -25,7 +23,6 @@ main:
           - deploy_env: ${sys.get_env("DEPLOY_ENV")}
           - lead_service_url: ${"https://lead-intake-" + deploy_env + "-" + default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed")}
           - case_dev_url: ${"https://case-development-" + deploy_env + "-" + default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed")}
-          - ext_sync_url: ${"https://external-sync-" + deploy_env + "-" + default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed")}
           - orchestrator_url: ${"https://workflow-orchestrator-" + deploy_env + "-" + default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed")}
           - notification_url: ${"https://notification-" + deploy_env + "-" + default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed")}
 
@@ -78,18 +75,6 @@ main:
             updated_by: "workflow-orchestrator"
         result: status_onboarding_response
 
-    - send_retainer:
-        call: http.post
-        args:
-          url: ${ext_sync_url + "/api/v1/integrations/docusign/send-retainer"}
-          auth:
-            type: OIDC
-          body:
-            case_id: ${case_id}
-            client_email: ${client_email}
-            template: ${config.step_parameters.send_retainer.docusign_template_id}
-        result: docusign_response
-
     - send_welcome_notification:
         call: http.post
         args:
@@ -114,38 +99,6 @@ main:
             phone: ${client_phone}
         result: sms_response
 
-    - wait_for_retainer:
-        call: sys.sleep
-        args:
-          seconds: 60
-
-    - check_retainer_status:
-        call: http.get
-        args:
-          url: ${ext_sync_url + "/api/v1/integrations/status?case_id=" + case_id + "&type=retainer"}
-          auth:
-            type: OIDC
-        result: retainer_status
-
-    - evaluate_retainer:
-        switch:
-          - condition: ${retainer_status.body.signed == true}
-            next: update_case_status_pending_review
-        next: send_retainer_followup
-
-    - send_retainer_followup:
-        call: http.post
-        args:
-          url: ${notification_url + "/api/v1/notifications/email"}
-          auth:
-            type: OIDC
-          body:
-            template: "retainer_reminder"
-            case_id: ${case_id}
-            client_email: ${client_email}
-        result: followup_response
-
-    # Retainer is signed — advance the case so the paralegal queue picks it up.
     - update_case_status_pending_review:
         call: http.put
         args:
@@ -178,7 +131,7 @@ main:
             type: OIDC
           body:
             paralegal_id: ${assigned_paralegal_id}
-            reason: "Auto-assigned by client-onboarding workflow after retainer signed"
+            reason: "Auto-assigned by client-onboarding workflow"
         result: assignment_response
 
     - notify_paralegal_assigned:
@@ -223,5 +176,4 @@ main:
           case_id: ${case_id}
           lead_id: ${lead_id}
           client_email: ${client_email}
-          retainer_sent: true
           assigned_paralegal_id: ${assigned_paralegal_id}
