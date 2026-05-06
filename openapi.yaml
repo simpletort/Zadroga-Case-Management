@@ -856,6 +856,15 @@ paths:
   # --- Leads ---
 
   /api/v1/leads:
+    options:
+      operationId: corsPreflightLeads
+      security: []
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     post:
       summary: Ingest a new lead from a marketing partner
       operationId: createLead
@@ -894,6 +903,15 @@ paths:
           description: Unauthorized
 
   /api/v1/leads/bulk-assign:
+    options:
+      operationId: corsPreflightLeadsBulkAssign
+      security: []
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     post:
       summary: "Bulk assign up to 100 leads to a staff member (min role: admin_staff)"
       operationId: bulkAssignLeads
@@ -909,6 +927,15 @@ paths:
           description: Insufficient role
 
   /api/v1/leads/export/csv:
+    options:
+      operationId: corsPreflightLeadsExportCsv
+      security: []
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     get:
       summary: "Export filtered leads as CSV — max 5,000 rows (min role: paralegal)"
       operationId: exportLeadsCsv
@@ -939,6 +966,17 @@ paths:
           description: Follow-up task processed
 
   /api/v1/leads/{lead_id}:
+    options:
+      operationId: corsPreflightLead
+      security: []
+      parameters:
+        - { name: lead_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     get:
       summary: "Get full case detail for a lead (min role: paralegal)"
       operationId: getLead
@@ -956,6 +994,17 @@ paths:
           description: Not found
 
   /api/v1/leads/{lead_id}/status:
+    options:
+      operationId: corsPreflightLeadStatus
+      security: []
+      parameters:
+        - { name: lead_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     patch:
       summary: "Update case status (min role: admin_staff)"
       operationId: updateLeadStatus
@@ -975,6 +1024,15 @@ paths:
   # --- Partner Management ---
 
   /api/v1/admin/partners:
+    options:
+      operationId: corsPreflightAdminPartners
+      security: []
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     post:
       summary: "Create a new marketing partner (min role: senior_partner)"
       operationId: createPartner
@@ -1001,6 +1059,17 @@ paths:
           description: Unauthorized
 
   /api/v1/admin/partners/{partner_id}/keys:
+    options:
+      operationId: corsPreflightAdminPartnerKeys
+      security: []
+      parameters:
+        - { name: partner_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     post:
       summary: "Generate a new API key for a partner (min role: senior_partner)"
       operationId: createPartnerKey
@@ -1018,6 +1087,18 @@ paths:
           description: Insufficient role
 
   /api/v1/admin/partners/{partner_id}/keys/{key_id}:
+    options:
+      operationId: corsPreflightAdminPartnerKeyById
+      security: []
+      parameters:
+        - { name: partner_id, in: path, required: true, type: string }
+        - { name: key_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     delete:
       summary: "Revoke a partner API key (min role: senior_partner)"
       operationId: revokePartnerKey
@@ -1036,6 +1117,17 @@ paths:
           description: Insufficient role
 
   /api/v1/admin/partners/{partner_id}/stats:
+    options:
+      operationId: corsPreflightAdminPartnerStats
+      security: []
+      parameters:
+        - { name: partner_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
     get:
       summary: "Partner usage stats — request count, last request, active keys (min role: senior_partner)"
       operationId: getPartnerStats

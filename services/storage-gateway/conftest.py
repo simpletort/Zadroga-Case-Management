@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi.testclient import TestClient
 
 
@@ -8,6 +8,15 @@ def mock_gcs_signing_credentials():
     """Prevent real GCP auth calls during tests."""
     with patch("app.services.gcs_service._get_signing_credentials", return_value=MagicMock()):
         yield
+
+
+@pytest.fixture(autouse=True)
+def bypass_auth(monkeypatch):
+    """Bypass AuthMiddleware in all tests — no real tokens or Firestore role lookups."""
+    async def _passthrough(self, request, call_next):
+        request.state.user = {"uid": "test-uid", "role": "admin_staff", "email": "test@simpletort.com"}
+        return await call_next(request)
+    monkeypatch.setattr("shared.middlewares.auth.AuthMiddleware.dispatch", _passthrough)
 
 
 @pytest.fixture(autouse=True)

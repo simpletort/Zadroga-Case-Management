@@ -1,7 +1,14 @@
 # SimpleTort - Client Onboarding Workflow
 # Deployed as a GCP Cloud Workflow resource named: client-onboarding
 #
-# Arguments: { case_id: string, client_email: string }
+# Arguments: { lead_id: string, case_id: string, client_email: string }
+#
+# Steps:
+#   1. Fetch full lead record from Lead Intake Service
+#   2. Set case status → "client_onboarding" in Case Development Service
+#   3. Send welcome notifications (email + SMS)
+#   4. Update case status → "pending_paralegal_review", auto-assign paralegal
+#   5. Trigger vcf-enrollment workflow
 
 main:
   params: [args]
@@ -9,14 +16,15 @@ main:
 
     - init:
         assign:
+          - lead_id: ${args.lead_id}
           - case_id: ${args.case_id}
           - client_email: ${args.client_email}
           - workflow_id: "client-onboarding"
           - deploy_env: ${sys.get_env("DEPLOY_ENV")}
-          - portal_url: ${"https://client-portal-" + deploy_env + "-" + default(default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed"), "not-deployed")}
-          - ext_sync_url: ${"https://external-sync-" + deploy_env + "-" + default(default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed"), "not-deployed")}
-          - orchestrator_url: ${"https://workflow-orchestrator-" + deploy_env + "-" + default(default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed"), "not-deployed")}
-          - notification_url: ${"https://notification-" + deploy_env + "-" + default(default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed"), "not-deployed")}
+          - lead_service_url: ${"https://lead-intake-" + deploy_env + "-" + default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed")}
+          - case_dev_url: ${"https://case-development-" + deploy_env + "-" + default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed")}
+          - orchestrator_url: ${"https://workflow-orchestrator-" + deploy_env + "-" + default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed")}
+          - notification_url: ${"https://notification-" + deploy_env + "-" + default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed")}
 
     # Fetch configurable step parameters from Firestore via the orchestrator.
     - fetch_step_config:
@@ -31,46 +39,41 @@ main:
         assign:
           - config: ${step_config_response.body}
 
-    - create_portal_account:
-        call: http.post
+    # Fetch the full lead record so subsequent steps have name, phone, and
+    # intake metadata without requiring callers to duplicate those fields.
+    - fetch_lead_data:
+        call: http.get
         args:
-          url: ${portal_url + "/api/v1/portal/auth"}
+          url: ${lead_service_url + "/api/v1/leads/" + lead_id}
           auth:
             type: OIDC
-          body:
-            case_id: ${case_id}
-            email: ${client_email}
-            action: "create_account"
-        result: portal_response
+        result: lead_response
 
-    - check_portal_created:
+    - check_lead_fetched:
         switch:
-          - condition: ${portal_response.code == 200 or portal_response.code == 201}
-            next: send_retainer
-        next: portal_creation_failed
+          - condition: ${lead_response.code == 200}
+            next: set_lead_data
+        next: lead_fetch_failed
 
-    - send_retainer:
-        call: http.post
+    - set_lead_data:
+        assign:
+          - lead: ${lead_response.body}
+          - client_first_name: ${lead_response.body.firstName}
+          - client_last_name: ${lead_response.body.lastName}
+          - client_phone: ${lead_response.body.phone}
+
+    # Advance the case status in Case Development so the paralegal dashboard
+    # reflects that onboarding is actively in progress.
+    - update_case_status_onboarding:
+        call: http.put
         args:
-          url: ${ext_sync_url + "/api/v1/integrations/docusign/send-retainer"}
+          url: ${case_dev_url + "/api/v1/cases/" + case_id + "/status"}
           auth:
             type: OIDC
           body:
-            case_id: ${case_id}
-            client_email: ${client_email}
-            template: ${config.step_parameters.send_retainer.docusign_template_id}
-        result: docusign_response
-
-    - build_document_checklist:
-        call: http.post
-        args:
-          url: ${portal_url + "/api/v1/portal/checklist"}
-          auth:
-            type: OIDC
-          body:
-            case_id: ${case_id}
-            checklist_type: "standard_vcf"
-        result: checklist_response
+            status: "client_onboarding"
+            updated_by: "workflow-orchestrator"
+        result: status_onboarding_response
 
     - send_welcome_notification:
         call: http.post
@@ -82,7 +85,6 @@ main:
             template: "client_welcome"
             case_id: ${case_id}
             client_email: ${client_email}
-            portal_url: ${portal_response.body.portal_login_url}
         result: welcome_notify_response
 
     - send_sms_notification:
@@ -94,38 +96,55 @@ main:
           body:
             template: "client_welcome_sms"
             case_id: ${case_id}
+            phone: ${client_phone}
         result: sms_response
 
-    - wait_for_retainer:
-        call: sys.sleep
+    - update_case_status_pending_review:
+        call: http.put
         args:
-          seconds: 60
-
-    - check_retainer_status:
-        call: http.get
-        args:
-          url: ${ext_sync_url + "/api/v1/integrations/status?case_id=" + case_id + "&type=retainer"}
+          url: ${case_dev_url + "/api/v1/cases/" + case_id + "/status"}
           auth:
             type: OIDC
-        result: retainer_status
+          body:
+            status: "pending_paralegal_review"
+            updated_by: "workflow-orchestrator"
+        result: status_review_response
 
-    - evaluate_retainer:
-        switch:
-          - condition: ${retainer_status.body.signed == true}
-            next: trigger_vcf_enrollment
-        next: send_retainer_followup
+    # Fetch current paralegal workloads and pick the least-loaded staff member.
+    - fetch_paralegal_workload:
+        call: http.get
+        args:
+          url: ${case_dev_url + "/api/v1/staff/paralegals/workload"}
+          auth:
+            type: OIDC
+        result: workload_response
 
-    - send_retainer_followup:
+    - set_assigned_paralegal:
+        assign:
+          - assigned_paralegal_id: ${workload_response.body.least_loaded_paralegal_id}
+
+    - assign_paralegal:
+        call: http.post
+        args:
+          url: ${case_dev_url + "/api/v1/cases/" + case_id + "/assign"}
+          auth:
+            type: OIDC
+          body:
+            paralegal_id: ${assigned_paralegal_id}
+            reason: "Auto-assigned by client-onboarding workflow"
+        result: assignment_response
+
+    - notify_paralegal_assigned:
         call: http.post
         args:
           url: ${notification_url + "/api/v1/notifications/email"}
           auth:
             type: OIDC
           body:
-            template: "retainer_reminder"
+            template: "paralegal_case_assigned"
             case_id: ${case_id}
-            client_email: ${client_email}
-        result: followup_response
+            paralegal_id: ${assigned_paralegal_id}
+        result: paralegal_notify_response
 
     - trigger_vcf_enrollment:
         call: http.post
@@ -141,20 +160,20 @@ main:
               case_id: ${case_id}
         result: enrollment_trigger_response
 
-    - portal_creation_failed:
+    - lead_fetch_failed:
         steps:
-          - build_portal_error_msg:
+          - build_lead_error_msg:
               assign:
-                - portal_error_msg: '${"Failed to create portal account for case: " + case_id}'
-          - raise_portal_error:
+                - lead_error_msg: '${"Failed to fetch lead record for lead_id: " + lead_id}'
+          - raise_lead_error:
               raise:
-                code: 500
-                message: ${portal_error_msg}
+                code: 404
+                message: ${lead_error_msg}
 
     - return_success:
         return:
           status: "onboarding_initiated"
           case_id: ${case_id}
+          lead_id: ${lead_id}
           client_email: ${client_email}
-          retainer_sent: true
-          checklist_created: true
+          assigned_paralegal_id: ${assigned_paralegal_id}
