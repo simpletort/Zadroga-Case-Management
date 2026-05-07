@@ -181,3 +181,37 @@ def get_dashboard(
             "total_pages": total_pages,
         },
     }
+
+
+def get_case_detail(db: firestore.Client, case_id: str) -> dict | None:
+    doc = db.collection("cases").document(case_id).get()
+    if not doc.exists:
+        return None
+
+    data   = doc.to_dict() or {}
+    lead   = data.get("leadData")      or {}
+    qual   = data.get("qualification") or {}
+    enroll = data.get("enrollment")    or {}
+    assign = data.get("assignment")    or {}
+
+    vcf_deadline  = enroll.get("vcfRegDeadline")
+    last_activity = data.get("updatedAt")
+
+    if hasattr(vcf_deadline, "tzinfo") and vcf_deadline is not None and vcf_deadline.tzinfo is None:
+        vcf_deadline = vcf_deadline.replace(tzinfo=timezone.utc)
+    if hasattr(last_activity, "tzinfo") and last_activity is not None and last_activity.tzinfo is None:
+        last_activity = last_activity.replace(tzinfo=timezone.utc)
+
+    return {
+        "case_id":              doc.id,
+        "first_name":           lead.get("firstName", ""),
+        "last_name":            lead.get("lastName", ""),
+        "status":               data.get("status", ""),
+        "case_type":            data.get("caseType"),
+        "vcf_deadline":         vcf_deadline,
+        "doc_completeness_pct": qual.get("vcfQualScore"),
+        "qual_score":           qual.get("medicalQualScore"),
+        "last_activity":        last_activity,
+        "assigned_paralegal":   assign.get("assignedParalegal"),
+        "is_flagged":           False,
+    }
