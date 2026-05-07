@@ -14,3 +14,4 @@ httpx==0.28.1
 slowapi==0.1.9
 structlog==25.5.0
 cryptography==46.0.5
+cachetools==5.3.3

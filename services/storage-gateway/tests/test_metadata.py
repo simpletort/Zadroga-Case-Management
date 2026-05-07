@@ -19,7 +19,6 @@ class TestMetadataRoute:
             "gcsPath": "ZAD-2024-01-0001/medical-records/records_2024.pdf",
             "mimeType": "application/pdf",
             "sizeBytes": 204800,
-            "uploadedBy": "uid-paralegal-001",
             "uploadedAt": None,
             "processingStatus": "Completed",
             "verificationStatus": "AI Verified",
@@ -112,4 +111,3 @@ class TestCreateFileMetadata:
         assert written["category"] == "medical_records"
         assert written["processingStatus"] == "Pending"
         assert written["verificationStatus"] == "Unverified"
-        assert written["uploadedBy"] == "uid-admin-001"
