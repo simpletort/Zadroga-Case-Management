@@ -15,10 +15,10 @@
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Path, Query
 
 from app.models.dashboard import DashboardResponse, DashboardSummary, DashboardPage, CaseSummary
-from app.services.dashboard_service import get_dashboard
+from app.services.dashboard_service import get_case_detail, get_dashboard
 from app.utils.firestore import get_firestore_client
 
 router = APIRouter(prefix="/api/v1", tags=["Paralegal Dashboard"])
@@ -92,3 +92,16 @@ def paralegal_dashboard(
             total_pages=raw["total_pages"],
         ),
     )
+
+
+@router.get(
+    "/dashboard/cases/{caseId}",
+    response_model=CaseSummary,
+    summary="Get a single case summary by ID",
+)
+def get_dashboard_case(caseId: str = Path(...)):
+    db = get_firestore_client()
+    result = get_case_detail(db=db, case_id=caseId)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Case not found")
+    return CaseSummary(**result)

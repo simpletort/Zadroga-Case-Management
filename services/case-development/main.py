@@ -59,6 +59,7 @@ _ROUTE_PERMISSIONS: list[tuple[str, str, str]] = [
     ("POST",   r"^/api/v1/cases/[^/]+/communications$",       "communications.write"),
     # Dashboard
     ("GET",    r"^/api/v1/dashboard/cases$",                  "cases.read"),
+    ("GET",    r"^/api/v1/dashboard/cases/[^/]+$",            "cases.read"),
     # Decision audit
     ("GET",    r"^/api/v1/audit/",                            "auditLog.read"),
     ("GET",    r"^/api/v1/cases/[^/]+/audit/",               "auditLog.read"),

@@ -65,7 +65,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import List, Optional
 
-from fastapi import FastAPI, HTTPException, Path, status
+from fastapi import FastAPI, File, Form, HTTPException, Path, UploadFile, status
 from fastapi.responses import StreamingResponse
 from google.cloud import firestore as _fs
 
@@ -122,7 +122,15 @@ from services.calculator import run_calculation
 from services.fee_calculator import calculate_attorney_fee
 from services.firestore_client import get_db
 from services.pdf_service import build_and_upload_statement
+from services.storage_service import (
+    delete_case_file,
+    get_signed_url,
+    list_case_files,
+    stream_case_file,
+    upload_case_file,
+)
 from models.statement import StatementGenerateRequest, StatementGenerateResponse
+from models.storage import CaseFileType, FileListResponse, FileUploadResponse, SignedUrlResponse
 
 logger = get_logger(__name__)
 
@@ -1781,6 +1789,160 @@ async def download_statement(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STORAGE GATEWAY
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.post(
+    "/api/v1/settlement/cases/{case_id}/files",
+    response_model=FileUploadResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Upload a file to Cloud Storage for a case",
+    tags=["Storage"],
+)
+async def upload_file(
+    case_id:        str = Path(..., description="Case ID"),
+    file:           UploadFile = File(..., description="File to upload (max 50 MB)"),
+    file_type:      CaseFileType = Form(CaseFileType.case_document, description="Category of the file"),
+    description:    Optional[str] = Form(None, description="Optional description"),
+    uploaded_by:    str = Form("", description="UID of the user uploading"),
+    linked_to_type: Optional[str] = Form(None, description="Record type this file belongs to: expense | lien | loan"),
+    linked_to_id:   Optional[str] = Form(None, description="ID of the linked record"),
+):
+    """
+    Upload any case-related file (PDF, image, Word doc, spreadsheet) to
+    Google Cloud Storage.
+
+    - Files are stored at ``cases/{caseId}/files/{fileType}/{fileId}_{filename}``
+    - Metadata is persisted in Firestore at ``settlement/files``
+    - Returns a 60-minute signed download URL (or gs:// URI in dev)
+    - Max file size: **50 MB**
+    - Allowed types: PDF, PNG, JPG, DOCX, XLSX, CSV, TXT
+    """
+    db       = get_db()
+    settings = get_settings()
+    try:
+        result = await upload_case_file(
+            db, case_id, file, file_type, description,
+            uploaded_by, settings, linked_to_type, linked_to_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    except Exception as exc:
+        logger.error("file_upload_failed", case_id=case_id, error=str(exc))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail=f"Upload failed: {exc}")
+    logger.info("file_uploaded", case_id=case_id, file_id=result.file_id,
+                filename=result.original_filename, size=result.size_bytes)
+    return result
+
+
+@app.get(
+    "/api/v1/settlement/cases/{case_id}/files",
+    response_model=FileListResponse,
+    status_code=status.HTTP_200_OK,
+    summary="List all uploaded files for a case",
+    tags=["Storage"],
+)
+async def list_files(case_id: str = Path(..., description="Case ID")):
+    """
+    Returns metadata for every file uploaded for *case_id*.
+    Does not stream file content — use the ``/download`` or ``/url`` endpoints for that.
+    """
+    db = get_db()
+    return await list_case_files(db, case_id)
+
+
+@app.delete(
+    "/api/v1/settlement/cases/{case_id}/files/{file_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a case file from Cloud Storage",
+    tags=["Storage"],
+)
+async def delete_file(
+    case_id: str = Path(..., description="Case ID"),
+    file_id: str = Path(..., description="File ID"),
+):
+    """
+    Permanently deletes the file from GCS **and** removes its Firestore metadata.
+    Returns **404** if the file ID is not found.
+    """
+    db       = get_db()
+    settings = get_settings()
+    try:
+        await delete_case_file(db, case_id, file_id, settings)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except Exception as exc:
+        logger.error("file_delete_failed", case_id=case_id, file_id=file_id, error=str(exc))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail=f"Delete failed: {exc}")
+    logger.info("file_deleted", case_id=case_id, file_id=file_id)
+
+
+@app.get(
+    "/api/v1/settlement/cases/{case_id}/files/{file_id}/download",
+    summary="Download a case file (streamed)",
+    tags=["Storage"],
+)
+async def download_file(
+    case_id: str = Path(..., description="Case ID"),
+    file_id: str = Path(..., description="File ID"),
+):
+    """
+    Streams the raw file bytes directly from Cloud Storage.
+    Sets ``Content-Disposition: attachment`` so browsers trigger a download.
+    Returns **404** if not found in storage.
+    """
+    import io
+    db       = get_db()
+    settings = get_settings()
+    try:
+        data, content_type, filename = await stream_case_file(db, case_id, file_id, settings)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except Exception as exc:
+        logger.error("file_download_failed", case_id=case_id, file_id=file_id, error=str(exc))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail=f"Download failed: {exc}")
+    return StreamingResponse(
+        io.BytesIO(data),
+        media_type=content_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get(
+    "/api/v1/settlement/cases/{case_id}/files/{file_id}/url",
+    response_model=SignedUrlResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get a 60-minute signed download URL for a case file",
+    tags=["Storage"],
+)
+async def get_file_url(
+    case_id: str = Path(..., description="Case ID"),
+    file_id: str = Path(..., description="File ID"),
+):
+    """
+    Returns a v4 signed GCS URL valid for **60 minutes**.
+    Use this when the client needs to display or link to the file directly
+    without proxying through this service.
+
+    Falls back to ``gs://`` URI when no service-account key is configured.
+    Returns **404** if the file ID is not found.
+    """
+    db       = get_db()
+    settings = get_settings()
+    try:
+        return await get_signed_url(db, case_id, file_id, settings)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except Exception as exc:
+        logger.error("signed_url_failed", case_id=case_id, file_id=file_id, error=str(exc))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail=f"Could not generate signed URL: {exc}")
 
 
 # ── Health ────────────────────────────────────────────────────────────────────

@@ -209,6 +209,17 @@ async def get_partner(
     FastAPI dependency: authenticates via API key → Firebase JWT → partner JWT.
     Attaches PartnerContext to request.state.partner.
     """
+    # Trusted internal service — AuthMiddleware already verified the OIDC token
+    service_user = getattr(request.state, "user", None)
+    if service_user and service_user.get("service"):
+        ctx = PartnerContext(
+            partner_id=service_user["service"],
+            auth_method="oidc_service",
+            partner_name=service_user["service"],
+        )
+        request.state.partner = ctx
+        return ctx
+
     api_key = request.headers.get("X-API-Key")
     if api_key:
         ctx = await verify_api_key(request, api_key)

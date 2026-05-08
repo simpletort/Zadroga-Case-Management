@@ -287,3 +287,134 @@ class TestDashboardRBAC:
             client = TestClient(m.app, raise_server_exceptions=False)
             resp = client.get("/api/v1/dashboard/cases")
         assert resp.status_code == 200
+
+
+# ── Helpers for single-doc tests ───────────────────────────────────────────
+
+def _make_single_doc(case_id, exists=True, **kwargs):
+    doc = _make_case_doc(case_id, **kwargs)
+    doc.exists = exists
+    return doc
+
+
+def _make_single_db(doc):
+    db = MagicMock()
+    db.collection.return_value.document.return_value.get.return_value = doc
+    return db
+
+
+# ── Service: get_case_detail ───────────────────────────────────────────────
+
+class TestGetCaseDetail:
+
+    def test_returns_none_when_not_found(self):
+        from app.services.dashboard_service import get_case_detail
+        doc = MagicMock()
+        doc.exists = False
+        assert get_case_detail(_make_single_db(doc), "ZAD-MISSING") is None
+
+    def test_returns_correct_fields(self):
+        from app.services.dashboard_service import get_case_detail
+        deadline = datetime(2027, 6, 1, tzinfo=timezone.utc)
+        doc = _make_single_doc(
+            "ZAD-2026-01-0001",
+            qual_score=72.0,
+            vcf_qual_score=85.0,
+            vcf_deadline=deadline,
+            paralegal_id="uid-p1",
+        )
+        result = get_case_detail(_make_single_db(doc), "ZAD-2026-01-0001")
+        assert result is not None
+        assert result["case_id"] == "ZAD-2026-01-0001"
+        assert result["first_name"] == "John"
+        assert result["last_name"] == "Doe"
+        assert result["qual_score"] == 72.0
+        assert result["doc_completeness_pct"] == 85.0
+        assert result["vcf_deadline"] == deadline
+        assert result["assigned_paralegal"] == "uid-p1"
+        assert result["is_flagged"] is False
+
+    def test_naive_datetimes_made_aware(self):
+        from app.services.dashboard_service import get_case_detail
+        naive_deadline = datetime(2027, 6, 1)
+        naive_updated  = datetime(2026, 3, 1)
+        doc = _make_single_doc("ZAD-X", vcf_deadline=naive_deadline, updated_at=naive_updated)
+        result = get_case_detail(_make_single_db(doc), "ZAD-X")
+        assert result["vcf_deadline"].tzinfo is not None
+        assert result["last_activity"].tzinfo is not None
+
+    def test_missing_nested_fields_default_gracefully(self):
+        from app.services.dashboard_service import get_case_detail
+        doc = MagicMock()
+        doc.exists = True
+        doc.id = "ZAD-SPARSE"
+        doc.to_dict.return_value = {"status": "New Lead"}
+        result = get_case_detail(_make_single_db(doc), "ZAD-SPARSE")
+        assert result["first_name"] == ""
+        assert result["last_name"] == ""
+        assert result["vcf_deadline"] is None
+        assert result["qual_score"] is None
+        assert result["doc_completeness_pct"] is None
+        assert result["assigned_paralegal"] is None
+
+    def test_case_type_and_status_mapped(self):
+        from app.services.dashboard_service import get_case_detail
+        doc = MagicMock()
+        doc.exists = True
+        doc.id = "ZAD-T"
+        doc.to_dict.return_value = {
+            "status": "Awarded",
+            "caseType": "WTC",
+            "leadData": {},
+            "qualification": {},
+            "enrollment": {},
+            "assignment": {},
+        }
+        result = get_case_detail(_make_single_db(doc), "ZAD-T")
+        assert result["status"] == "Awarded"
+        assert result["case_type"] == "WTC"
+
+
+# ── Route: GET /api/v1/dashboard/cases/{caseId} ────────────────────────────
+
+class TestGetDashboardCaseRoute:
+
+    def test_returns_200_with_full_body(self):
+        case_data = {
+            "case_id": "ZAD-2026-01-0001",
+            "first_name": "Jane",
+            "last_name": "Smith",
+            "status": "Pending Paralegal Review",
+            "case_type": "VCF",
+            "vcf_deadline": None,
+            "qual_score": 80.0,
+            "doc_completeness_pct": 60.0,
+            "last_activity": datetime(2026, 1, 1, tzinfo=timezone.utc),
+            "assigned_paralegal": "uid-p1",
+            "is_flagged": False,
+        }
+        with patch("app.routes.dashboard.get_case_detail", return_value=case_data):
+            import main as m
+            client = TestClient(m.app, raise_server_exceptions=False)
+            resp = client.get("/api/v1/dashboard/cases/ZAD-2026-01-0001")
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["case_id"] == "ZAD-2026-01-0001"
+        assert body["first_name"] == "Jane"
+        assert body["last_name"] == "Smith"
+        assert body["status"] == "Pending Paralegal Review"
+        assert body["case_type"] == "VCF"
+        assert body["qual_score"] == 80.0
+        assert body["doc_completeness_pct"] == 60.0
+        assert body["assigned_paralegal"] == "uid-p1"
+        assert body["is_flagged"] is False
+
+    def test_returns_404_when_not_found(self):
+        with patch("app.routes.dashboard.get_case_detail", return_value=None):
+            import main as m
+            client = TestClient(m.app, raise_server_exceptions=False)
+            resp = client.get("/api/v1/dashboard/cases/ZAD-DOES-NOT-EXIST")
+
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == "Case not found"
