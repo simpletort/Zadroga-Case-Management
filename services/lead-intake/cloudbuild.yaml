@@ -63,6 +63,10 @@ steps:
       - "--max-instances=10"
       - "--min-instances=0"
 
+substitutions:
+  _TRUSTED_SERVICE_ACCOUNTS: >-
+    292736139819-compute@developer.gserviceaccount.com
+
 images:
   - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
   - "$_REPO/$_SERVICE_NAME:latest"
