@@ -57,7 +57,7 @@ steps:
       - "--platform=managed"
       - "--allow-unauthenticated"
       - "--service-account=lead-intake-service-account@simpletort-zadroga-dev.iam.gserviceaccount.com"
-      - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,ENV=$_ENV,APP_ENV=$_ENV,FIREBASE_PROJECT_ID=$_FIREBASE_PROJECT_ID,JWT_AUDIENCE=$_FIREBASE_PROJECT_ID,JWT_ISSUER=https://securetoken.google.com/$_FIREBASE_PROJECT_ID,CLOUD_TASKS_HANDLER_URL=$_CLOUD_TASKS_HANDLER_URL,CLOUD_TASKS_LOCATION=$_REGION,CLOUD_TASKS_QUEUE_REGION=$_REGION,CLOUD_TASKS_SA_EMAIL=lead-intake-service-account@$PROJECT_ID.iam.gserviceaccount.com,PUBSUB_LEAD_CREATED_TOPIC=lead-created-$_ENV,PUBSUB_LEAD_SCREENED_TOPIC=lead-screened-$_ENV,PUBSUB_LEAD_FOLLOWUP_TOPIC=lead-followup-$_ENV"
+      - "--set-env-vars=^|^GCP_PROJECT_ID=$PROJECT_ID|ENV=$_ENV|APP_ENV=$_ENV|FIREBASE_PROJECT_ID=$_FIREBASE_PROJECT_ID|JWT_AUDIENCE=$_FIREBASE_PROJECT_ID|JWT_ISSUER=https://securetoken.google.com/$_FIREBASE_PROJECT_ID|CLOUD_TASKS_HANDLER_URL=$_CLOUD_TASKS_HANDLER_URL|CLOUD_TASKS_LOCATION=$_REGION|CLOUD_TASKS_QUEUE_REGION=$_REGION|CLOUD_TASKS_SA_EMAIL=lead-intake-service-account@$PROJECT_ID.iam.gserviceaccount.com|PUBSUB_LEAD_CREATED_TOPIC=lead-created-$_ENV|PUBSUB_LEAD_SCREENED_TOPIC=lead-screened-$_ENV|PUBSUB_LEAD_FOLLOWUP_TOPIC=lead-followup-$_ENV|TRUSTED_SERVICE_ACCOUNTS=$_TRUSTED_SERVICE_ACCOUNTS"
       - "--memory=512Mi"
       - "--cpu=1"
       - "--max-instances=10"

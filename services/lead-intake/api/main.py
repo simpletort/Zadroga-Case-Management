@@ -160,7 +160,9 @@ app.add_middleware(
     route_permissions=_ROUTE_PERMISSIONS,
     roles_firestore_project=settings.gcp_project_id,
     roles_firestore_database=settings.firestore_database,
-    trusted_service_accounts=settings.trusted_service_accounts,  # list[str] from config
+    trusted_service_accounts=[
+        e.strip() for e in settings.trusted_service_accounts.split(",") if e.strip()
+    ],
     skip_paths=["/health", "/", "/api/v1/docs", "/api/v1/redoc", "/api/v1/openapi.json"],
 )
 
