@@ -192,7 +192,11 @@ async def get_case(case_id: str, db: firestore.AsyncClient) -> Optional[CaseDocu
     doc      = await db.collection(settings.firestore_cases_collection).document(case_id).get()
     if not doc.exists:
         return None
-    return CaseDocument(**doc.to_dict())
+    try:
+        return CaseDocument(**doc.to_dict())
+    except Exception as exc:
+        logger.error("case_deserialisation_failed", case_id=case_id, error=str(exc))
+        raise
 
 
 async def list_cases(db: firestore.AsyncClient, filters: dict, limit: int = 50) -> list[dict]:

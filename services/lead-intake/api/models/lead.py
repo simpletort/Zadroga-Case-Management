@@ -166,10 +166,10 @@ class ErrorResponse(BaseModel):
 
 
 class Assignment(BaseModel):
-    assignedAdmin : Optional[str] = None,
-    assignedAttorney : Optional[str] = None,
-    assignedParalegal : Optional[str] = None,
-    assignmentDate : Optional[datetime] = None
+    assignedAdmin:     Optional[str]      = None
+    assignedAttorney:  Optional[str]      = None
+    assignedParalegal: Optional[str]      = None
+    assignmentDate:    Optional[datetime] = None
         
 class CaseDocument(BaseModel):
     """
