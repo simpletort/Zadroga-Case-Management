@@ -377,44 +377,75 @@ class TestGetCaseDetail:
 
 # ── Route: GET /api/v1/dashboard/cases/{caseId} ────────────────────────────
 
+def _make_route_db(doc):
+    """Return a mock Firestore client wired for a single document fetch."""
+    db = MagicMock()
+    db.collection.return_value.document.return_value.get.return_value = doc
+    return db
+
+
 class TestGetDashboardCaseRoute:
 
-    def test_returns_200_with_full_body(self):
-        case_data = {
-            "case_id": "ZAD-2026-01-0001",
-            "first_name": "Jane",
-            "last_name": "Smith",
+    def test_returns_200_with_full_document(self):
+        full_doc = {
+            "caseId": "ZAD-2026-01-0001",
             "status": "Pending Paralegal Review",
-            "case_type": "VCF",
-            "vcf_deadline": None,
-            "qual_score": 80.0,
-            "doc_completeness_pct": 60.0,
-            "last_activity": datetime(2026, 1, 1, tzinfo=timezone.utc),
-            "assigned_paralegal": "uid-p1",
-            "is_flagged": False,
+            "caseType": "VCF",
+            "leadData": {"firstName": "Jane", "lastName": "Smith"},
+            "qualification": {"medicalQualScore": 80.0, "vcfQualScore": 60.0},
+            "enrollment": {"vcfRegDeadline": None},
+            "assignment": {"assignedParalegal": "uid-p1"},
+            "updatedAt": datetime(2026, 1, 1, tzinfo=timezone.utc).isoformat(),
+            "customField": "extra data returned as-is",
         }
-        with patch("app.routes.dashboard.get_case_detail", return_value=case_data):
+        snap = MagicMock()
+        snap.exists = True
+        snap.to_dict.return_value = full_doc
+
+        with patch("app.routes.dashboard.get_firestore_client", return_value=_make_route_db(snap)):
             import main as m
             client = TestClient(m.app, raise_server_exceptions=False)
             resp = client.get("/api/v1/dashboard/cases/ZAD-2026-01-0001")
 
         assert resp.status_code == 200
         body = resp.json()
-        assert body["case_id"] == "ZAD-2026-01-0001"
-        assert body["first_name"] == "Jane"
-        assert body["last_name"] == "Smith"
+        assert body["caseId"] == "ZAD-2026-01-0001"
         assert body["status"] == "Pending Paralegal Review"
-        assert body["case_type"] == "VCF"
-        assert body["qual_score"] == 80.0
-        assert body["doc_completeness_pct"] == 60.0
-        assert body["assigned_paralegal"] == "uid-p1"
-        assert body["is_flagged"] is False
+        assert body["caseType"] == "VCF"
+        assert body["leadData"] == {"firstName": "Jane", "lastName": "Smith"}
+        assert body["qualification"]["medicalQualScore"] == 80.0
+        assert body["assignment"]["assignedParalegal"] == "uid-p1"
+        assert body["customField"] == "extra data returned as-is"
 
     def test_returns_404_when_not_found(self):
-        with patch("app.routes.dashboard.get_case_detail", return_value=None):
+        snap = MagicMock()
+        snap.exists = False
+
+        with patch("app.routes.dashboard.get_firestore_client", return_value=_make_route_db(snap)):
             import main as m
             client = TestClient(m.app, raise_server_exceptions=False)
             resp = client.get("/api/v1/dashboard/cases/ZAD-DOES-NOT-EXIST")
 
         assert resp.status_code == 404
         assert resp.json()["detail"] == "Case not found"
+
+    def test_full_document_not_filtered_to_summary_fields(self):
+        """Verify the route returns the raw Firestore doc, not the CaseSummary subset."""
+        full_doc = {
+            "caseId": "ZAD-2026-01-0002",
+            "status": "Awarded",
+            "extraNestedData": {"someKey": "someValue"},
+        }
+        snap = MagicMock()
+        snap.exists = True
+        snap.to_dict.return_value = full_doc
+
+        with patch("app.routes.dashboard.get_firestore_client", return_value=_make_route_db(snap)):
+            import main as m
+            client = TestClient(m.app, raise_server_exceptions=False)
+            resp = client.get("/api/v1/dashboard/cases/ZAD-2026-01-0002")
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["extraNestedData"] == {"someKey": "someValue"}
+        assert "case_id" not in body  # CaseSummary field — should not be present
