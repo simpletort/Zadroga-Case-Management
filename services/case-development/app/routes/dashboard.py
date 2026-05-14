@@ -13,7 +13,7 @@
 #                                   ?page_size=       items per page (default: 20, max: 100)
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException, Path, Query
 
@@ -96,12 +96,12 @@ def paralegal_dashboard(
 
 @router.get(
     "/dashboard/cases/{caseId}",
-    response_model=CaseSummary,
-    summary="Get a single case summary by ID",
+    response_model=Dict[str, Any],
+    summary="Get full case document by ID",
 )
 def get_dashboard_case(caseId: str = Path(...)):
     db = get_firestore_client()
-    result = get_case_detail(db=db, case_id=caseId)
-    if result is None:
+    doc = db.collection("cases").document(caseId).get()
+    if not doc.exists:
         raise HTTPException(status_code=404, detail="Case not found")
-    return CaseSummary(**result)
+    return doc.to_dict()
