@@ -53,7 +53,7 @@ _ROUTE_PERMISSIONS: list[tuple[str, str, str]] = [
     ("GET",    r"^/$",                                               "public"),
 
     # Leads — create
-    ("POST",   r"^/api/v1/leads$",                                   "cases.create"),
+    ("POST",   r"^/api/v1/leads$",                                   "cases.write"),
 
     # Leads — read
     ("GET",    r"^/api/v1/leads$",                                   "cases.read"),

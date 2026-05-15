@@ -897,7 +897,6 @@ paths:
     post:
       summary: Ingest a new lead from a marketing partner
       operationId: createLead
-      security: []
       x-google-backend:
         address: https://lead-intake-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
