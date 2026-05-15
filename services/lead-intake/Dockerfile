@@ -94,8 +94,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc libffi-dev && \
     rm -rf /var/lib/apt/lists/*
 
-# Install shared package first so it's available as an importable package
-COPY shared/ /build/shared/
+# Install shared package — copy only source files to prevent build artifacts
+# (shared/build/, shared/dist/, etc.) from poisoning the install.
+COPY shared/pyproject.toml /build/shared/pyproject.toml
+COPY shared/shared/ /build/shared/shared/
 RUN pip install --no-cache-dir /build/shared/
 
 # Install service dependencies

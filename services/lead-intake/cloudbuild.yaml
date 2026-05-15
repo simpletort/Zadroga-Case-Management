@@ -6,6 +6,7 @@ steps:
     args:
       - "-c"
       - |
+        pip install /workspace/shared/ --quiet --break-system-packages
         pip install -r api/requirements.txt \
                     pytest==8.3.5 \
                     pytest-asyncio==1.0.0 \
