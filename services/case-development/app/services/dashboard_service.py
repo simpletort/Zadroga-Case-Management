@@ -109,8 +109,9 @@ def get_dashboard(
             "doc_completeness_pct": None,
             "qual_score":           qual_score,
             "last_activity":        last_activity,
-            "assigned_paralegal":   assign.get("assignedParalegal"),
-            "is_flagged":           False,
+            "assigned_paralegal":      assign.get("assignedParalegal"),
+            "assigned_paralegal_name": assign.get("assignedParalegalName"),
+            "is_flagged":              False,
         })
 
     # ── 3. Post-filter ────────────────────────────────────────────────────
@@ -207,6 +208,7 @@ def get_case_detail(db: firestore.Client, case_id: str) -> dict | None:
         "doc_completeness_pct": None,
         "qual_score":           qual_score,
         "last_activity":        last_activity,
-        "assigned_paralegal":   assign.get("assignedParalegal"),
-        "is_flagged":           False,
+        "assigned_paralegal":      assign.get("assignedParalegal"),
+        "assigned_paralegal_name": assign.get("assignedParalegalName"),
+        "is_flagged":              False,
     }

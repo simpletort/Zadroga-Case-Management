@@ -15,6 +15,7 @@ def _make_case_doc(
     case_id,
     status="Pending Paralegal Review",
     paralegal_id="sarah-chen-uid",
+    paralegal_name="Sarah Chen",
     qual_score=75.0,
     updated_at=None,
 ):
@@ -28,7 +29,10 @@ def _make_case_doc(
         "firstName": "John",
         "lastName":  "Doe",
         "vcfScreeningDetails": {"score": score},
-        "assignment": {"assignedParalegal": paralegal_id},
+        "assignment": {
+            "assignedParalegal":     paralegal_id,
+            "assignedParalegalName": paralegal_name,
+        },
     }
     return doc
 
@@ -84,6 +88,7 @@ class TestDashboardServiceRetrieval:
         assert item["last_name"] == "Doe"
         assert item["qual_score"] == 82.0
         assert item["doc_completeness_pct"] is None
+        assert item["assigned_paralegal_name"] == "Sarah Chen"
         assert item["is_flagged"] is False
 
 
@@ -281,6 +286,7 @@ class TestGetCaseDetail:
         assert result["doc_completeness_pct"] is None
         assert result["vcf_deadline"] is None
         assert result["assigned_paralegal"] == "uid-p1"
+        assert result["assigned_paralegal_name"] == "Sarah Chen"
         assert result["is_flagged"] is False
 
     def test_naive_datetimes_made_aware(self):
@@ -303,6 +309,7 @@ class TestGetCaseDetail:
         assert result["qual_score"] is None
         assert result["doc_completeness_pct"] is None
         assert result["assigned_paralegal"] is None
+        assert result["assigned_paralegal_name"] is None
 
     def test_case_type_and_status_mapped(self):
         from app.services.dashboard_service import get_case_detail
