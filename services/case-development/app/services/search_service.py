@@ -78,23 +78,24 @@ def _load_cases(
     cases: list[dict] = []
     for doc in query.stream():
         data   = doc.to_dict() or {}
-        lead   = data.get("leadData") or {}
-        qual   = data.get("qualification") or {}
-        enroll = data.get("enrollment") or {}
         assign = data.get("assignment") or {}
+
+        vcf_details = data.get("vcfScreeningDetails") or {}
+        score_raw   = vcf_details.get("score")
+        qual_score  = float(score_raw) if score_raw is not None else None
 
         cases.append({
             "case_id":              doc.id,
-            "first_name":           lead.get("firstName") or "",
-            "last_name":            lead.get("lastName") or "",
-            "email":                (lead.get("email") or "").lower(),
-            "phone":                lead.get("phone") or "",
+            "first_name":           data.get("firstName") or "",
+            "last_name":            data.get("lastName") or "",
+            "email":                (data.get("email") or "").lower(),
+            "phone":                data.get("phone") or "",
             "status":               data.get("status") or "",
-            "case_type":            data.get("caseType"),
-            "vcf_deadline":         _normalize_dt(enroll.get("vcfRegDeadline")),
-            "doc_completeness_pct": qual.get("vcfQualScore"),
-            "qual_score":           qual.get("medicalQualScore"),
-            "screening_result":     qual.get("screeningResult"),
+            "case_type":            None,
+            "vcf_deadline":         None,
+            "doc_completeness_pct": None,
+            "qual_score":           qual_score,
+            "screening_result":     data.get("vcfEligibility"),
             "last_activity":        _normalize_dt(data.get("updatedAt")),
             "created_at":           _normalize_dt(data.get("createdAt")),
             "assigned_paralegal":   assign.get("assignedParalegal"),

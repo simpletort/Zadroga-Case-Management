@@ -324,23 +324,17 @@ def get_escalation_queue(
     items: list[dict] = []
 
     for doc in docs:
-        data   = doc.to_dict() or {}
-        lead   = data.get("leadData")    or {}
-        qual   = data.get("qualification") or {}
-        enroll = data.get("enrollment")  or {}
-        esc    = data.get("escalation")  or {}
+        data = doc.to_dict() or {}
+        esc  = data.get("escalation") or {}
 
-        vcf_deadline  = enroll.get("vcfRegDeadline")
-        escalated_at  = esc.get("escalatedAt")
+        escalated_at = esc.get("escalatedAt")
 
-        if vcf_deadline is not None and hasattr(vcf_deadline, "tzinfo") and vcf_deadline.tzinfo is None:
-            vcf_deadline = vcf_deadline.replace(tzinfo=timezone.utc)
         if escalated_at is not None and hasattr(escalated_at, "tzinfo") and escalated_at.tzinfo is None:
             escalated_at = escalated_at.replace(tzinfo=timezone.utc)
 
-        days_until = None
-        if vcf_deadline is not None:
-            days_until = (vcf_deadline.date() - now.date()).days
+        vcf_details = data.get("vcfScreeningDetails") or {}
+        score_raw   = vcf_details.get("score")
+        qual_score  = float(score_raw) if score_raw is not None else None
 
         # Fetch the pending escalation sub-doc for the escalation_id
         resolved = _resolve_escalation_doc(db, doc.id)
@@ -348,12 +342,12 @@ def get_escalation_queue(
 
         items.append({
             "case_id":              doc.id,
-            "first_name":           lead.get("firstName", ""),
-            "last_name":            lead.get("lastName", ""),
-            "case_type":            data.get("caseType"),
-            "vcf_deadline":         vcf_deadline,
-            "qual_score":           qual.get("medicalQualScore"),
-            "days_until_deadline":  days_until,
+            "first_name":           data.get("firstName", ""),
+            "last_name":            data.get("lastName", ""),
+            "case_type":            None,
+            "vcf_deadline":         None,
+            "qual_score":           qual_score,
+            "days_until_deadline":  None,
             "escalation_id":        escalation_id if isinstance(escalation_id, str) else "",
             "escalation_reason":    esc.get("reason", ""),
             "escalated_at":         escalated_at,
@@ -371,7 +365,7 @@ def get_escalation_queue(
     items.sort(key=_sort_key)
 
     total       = len(items)
-    overdue     = sum(1 for c in items if c["days_until_deadline"] is not None and c["days_until_deadline"] < 0)
+    overdue     = 0  # vcf_deadline not present in current schema
     total_pages = max(1, (total + page_size - 1) // page_size)
     start       = (page - 1) * page_size
     page_items  = items[start: start + page_size]
@@ -635,12 +629,9 @@ def _decide_approve(
 
     case_ref = db.collection("cases").document(case_id)
     assign   = case_data.get("assignment") or {}
-    enroll   = case_data.get("enrollment") or {}
 
     paralegal_uid = assign.get("assignedParalegal")
-    vcf_deadline  = enroll.get("vcfRegDeadline")
-    if vcf_deadline is not None and hasattr(vcf_deadline, "tzinfo") and vcf_deadline.tzinfo is None:
-        vcf_deadline = vcf_deadline.replace(tzinfo=timezone.utc)
+    vcf_deadline  = None  # not present in current schema
 
     task_ids: list[str] = []
     batch = db.batch()

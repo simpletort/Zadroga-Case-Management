@@ -29,7 +29,6 @@ def _case_snap(
     status="Pending Attorney Review",
     assigned_attorney="atty-uid",
     assigned_paralegal="para-uid",
-    vcf_deadline=None,
     qual_score=75.0,
     submitted_at=None,
     exists=True,
@@ -37,12 +36,12 @@ def _case_snap(
     snap = MagicMock()
     snap.exists = exists
     snap.id     = case_id
+    score = int(qual_score) if qual_score is not None else None
     snap.to_dict.return_value = {
-        "status":   status,
-        "caseType": "VCF",
-        "leadData": {"firstName": "John", "lastName": "Doe"},
-        "qualification": {"medicalQualScore": qual_score},
-        "enrollment": {"vcfRegDeadline": vcf_deadline},
+        "status":    status,
+        "firstName": "John",
+        "lastName":  "Doe",
+        "vcfScreeningDetails": {"score": score},
         "assignment": {
             "assignedAttorney":  assigned_attorney,
             "assignedParalegal": assigned_paralegal,
@@ -77,7 +76,6 @@ def _make_approve_db(
     case_status="Pending Attorney Review",
     assigned_attorney="atty-uid",
     assigned_paralegal="para-uid",
-    vcf_deadline=None,
 ):
     """Firestore mock for approve_for_filing with all required sub-collections."""
     db = MagicMock()
@@ -88,7 +86,6 @@ def _make_approve_db(
         status=case_status,
         assigned_attorney=assigned_attorney,
         assigned_paralegal=assigned_paralegal,
-        vcf_deadline=vcf_deadline,
     )
 
     timeline_coll = MagicMock()
@@ -161,56 +158,20 @@ class TestGetReviewQueue:
 
     # ── Sort order ────────────────────────────────────────────────────────
 
-    def test_sorted_by_vcf_deadline_soonest_first(self):
-        soon = _NOW + timedelta(days=5)
-        far  = _NOW + timedelta(days=30)
+    def test_sorted_by_oldest_submission_first(self):
+        older = _case_snap(case_id="ZAD-2026-04-0001", submitted_at=_NOW - timedelta(days=5))
+        newer = _case_snap(case_id="ZAD-2026-04-0002", submitted_at=_NOW - timedelta(days=1))
 
-        snap_far  = _case_snap(case_id="ZAD-2026-04-0002", vcf_deadline=far)
-        snap_soon = _case_snap(case_id="ZAD-2026-04-0001", vcf_deadline=soon)
-
-        db = _make_queue_db([snap_far, snap_soon])  # deliberately reversed
-
-        result = self._call(db)
-        items  = result["page"]["items"]
-
-        assert items[0]["case_id"] == "ZAD-2026-04-0001"  # soon first
-        assert items[1]["case_id"] == "ZAD-2026-04-0002"
-
-    def test_no_deadline_sorts_after_cases_with_deadline(self):
-        has_dl  = _case_snap(case_id="ZAD-2026-04-0001", vcf_deadline=_NOW + timedelta(days=10))
-        no_dl   = _case_snap(case_id="ZAD-2026-04-0002", vcf_deadline=None)
-
-        db     = _make_queue_db([no_dl, has_dl])
-        result = self._call(db)
-        items  = result["page"]["items"]
-
-        assert items[0]["case_id"] == "ZAD-2026-04-0001"  # has deadline first
-        assert items[1]["case_id"] == "ZAD-2026-04-0002"
-
-    def test_same_deadline_sorted_by_oldest_submission_first(self):
-        dl       = _NOW + timedelta(days=10)
-        older    = _case_snap(
-            case_id="ZAD-2026-04-0001",
-            vcf_deadline=dl,
-            submitted_at=_NOW - timedelta(days=5),
-        )
-        newer    = _case_snap(
-            case_id="ZAD-2026-04-0002",
-            vcf_deadline=dl,
-            submitted_at=_NOW - timedelta(days=1),
-        )
-
-        db     = _make_queue_db([newer, older])
+        db     = _make_queue_db([newer, older])  # deliberately reversed
         result = self._call(db)
         items  = result["page"]["items"]
 
         assert items[0]["case_id"] == "ZAD-2026-04-0001"  # older submission first
 
     def test_tiebreaker_highest_qual_score_first(self):
-        dl   = _NOW + timedelta(days=10)
         sub  = _NOW - timedelta(days=3)
-        high = _case_snap(case_id="ZAD-2026-04-0001", vcf_deadline=dl, submitted_at=sub, qual_score=90.0)
-        low  = _case_snap(case_id="ZAD-2026-04-0002", vcf_deadline=dl, submitted_at=sub, qual_score=50.0)
+        high = _case_snap(case_id="ZAD-2026-04-0001", submitted_at=sub, qual_score=90.0)
+        low  = _case_snap(case_id="ZAD-2026-04-0002", submitted_at=sub, qual_score=50.0)
 
         db     = _make_queue_db([low, high])
         result = self._call(db)
@@ -220,24 +181,17 @@ class TestGetReviewQueue:
 
     # ── Overdue count ─────────────────────────────────────────────────────
 
-    def test_overdue_count_includes_past_deadlines(self):
-        overdue = _case_snap(case_id="ZAD-2026-04-0001", vcf_deadline=_NOW - timedelta(days=3))
-        future  = _case_snap(case_id="ZAD-2026-04-0002", vcf_deadline=_NOW + timedelta(days=10))
-        no_dl   = _case_snap(case_id="ZAD-2026-04-0003", vcf_deadline=None)
+    def test_overdue_count_is_zero(self):
+        snaps  = [_case_snap(case_id="ZAD-{:04d}".format(i)) for i in range(3)]
+        db     = _make_queue_db(snaps)
+        result = self._call(db)
+        assert result["overdue_count"] == 0
 
-        db     = _make_queue_db([overdue, future, no_dl])
-        with patch("app.services.attorney_review_service.datetime") as mock_dt:
-            mock_dt.now.return_value = _NOW
-            result = self._call(db)
-
-        assert result["overdue_count"] == 1
-
-    def test_days_until_deadline_is_negative_when_overdue(self):
-        snap   = _case_snap(vcf_deadline=_NOW - timedelta(days=2))
+    def test_days_until_deadline_is_none(self):
+        snap   = _case_snap()
         db     = _make_queue_db([snap])
         result = self._call(db)
-
-        assert result["page"]["items"][0]["days_until_deadline"] < 0
+        assert result["page"]["items"][0]["days_until_deadline"] is None
 
     # ── Pagination ────────────────────────────────────────────────────────
 
@@ -409,23 +363,8 @@ class TestApproveForFiling:
         assert "File with VCF program"         in task_titles
         assert "Notify client of filing status" in task_titles
 
-    def test_file_with_vcf_task_has_due_date_when_deadline_set(self):
-        dl = _NOW + timedelta(days=14)
-        db = _make_approve_db(vcf_deadline=dl)
-        self._call(db)
-
-        batch     = db.batch.return_value
-        set_calls = batch.set.call_args_list
-        vcf_task  = next(
-            (c for c in set_calls
-             if (c[0][1] if c[0] else c[1]).get("title") == "File with VCF program"),
-            None,
-        )
-        assert vcf_task is not None
-        assert vcf_task[0][1].get("dueDate") is not None
-
-    def test_file_with_vcf_task_has_no_due_date_when_no_deadline(self):
-        db = _make_approve_db(vcf_deadline=None)
+    def test_file_with_vcf_task_has_no_due_date(self):
+        db = _make_approve_db()
         self._call(db)
 
         batch     = db.batch.return_value

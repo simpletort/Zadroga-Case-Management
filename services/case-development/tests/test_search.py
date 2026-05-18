@@ -21,32 +21,23 @@ def _make_case_doc(
     email="john.doe@example.com",
     phone="555-1234",
     qual_score=75.0,
-    vcf_qual_score=60.0,
-    vcf_deadline=None,
     updated_at=None,
     created_at=None,
-    screening_result="pass",
-    case_type="WTC",
+    screening_result="eligible",
 ):
     doc = MagicMock()
     doc.id = case_id
+    score = int(qual_score) if qual_score is not None else None
     doc.to_dict.return_value = {
-        "status":    status,
-        "caseType":  case_type,
-        "updatedAt": updated_at or datetime(2026, 1, 1, tzinfo=timezone.utc),
-        "createdAt": created_at or datetime(2025, 6, 1, tzinfo=timezone.utc),
-        "leadData":  {
-            "firstName": first_name,
-            "lastName":  last_name,
-            "email":     email,
-            "phone":     phone,
-        },
-        "qualification": {
-            "medicalQualScore": qual_score,
-            "vcfQualScore":     vcf_qual_score,
-            "screeningResult":  screening_result,
-        },
-        "enrollment": {"vcfRegDeadline": vcf_deadline},
+        "status":         status,
+        "updatedAt":      updated_at or datetime(2026, 1, 1, tzinfo=timezone.utc),
+        "createdAt":      created_at or datetime(2025, 6, 1, tzinfo=timezone.utc),
+        "firstName":      first_name,
+        "lastName":       last_name,
+        "email":          email,
+        "phone":          phone,
+        "vcfEligibility": screening_result,
+        "vcfScreeningDetails": {"score": score},
         "assignment": {
             "assignedParalegal": paralegal_id,
             "assignedAttorney":  attorney_id,
@@ -115,12 +106,13 @@ class TestSearchServiceRetrieval:
 
     def test_extended_fields_materialised(self):
         doc    = _make_case_doc("ZAD-2026-01-0001", email="alice@test.com", phone="555-9999",
-                                screening_result="pass", attorney_id="atty-uid")
+                                screening_result="eligible", attorney_id="atty-uid")
         result = _call_service(_make_db([doc]))
         item   = result["page"]["items"][0]
         assert item["email"] == "alice@test.com"
         assert item["phone"] == "555-9999"
-        assert item["screening_result"] == "pass"
+        assert item["screening_result"] == "eligible"
+        assert item["doc_completeness_pct"] is None
         assert item["assigned_attorney"] == "atty-uid"
         assert item["is_flagged"] is False
 
@@ -223,36 +215,14 @@ class TestSearchServiceFilters:
         result = _call_service(_make_db(docs), statuses=["New Lead", "Awarded"])
         assert result["page"]["total"] == 2
 
-    def test_case_type_filter_wtc(self):
-        docs = [
-            _make_case_doc("c1", case_type="WTC"),
-            _make_case_doc("c2", case_type="VCF"),
-        ]
-        result = _call_service(_make_db(docs), case_type="wtc")
-        assert result["page"]["total"] == 1
-        assert result["page"]["items"][0]["case_type"] == "WTC"
-
-    def test_case_type_filter_vcf(self):
-        docs = [
-            _make_case_doc("c1", case_type="WTC"),
-            _make_case_doc("c2", case_type="VCF"),
-        ]
-        result = _call_service(_make_db(docs), case_type="vcf")
-        assert result["page"]["total"] == 1
-
-    def test_case_type_all_returns_all(self):
-        docs = [_make_case_doc("c1", case_type="WTC"), _make_case_doc("c2", case_type="VCF")]
-        result = _call_service(_make_db(docs), case_type="all")
-        assert result["page"]["total"] == 2
-
     def test_screening_result_filter(self):
         docs = [
-            _make_case_doc("c1", screening_result="pass"),
-            _make_case_doc("c2", screening_result="fail"),
+            _make_case_doc("c1", screening_result="eligible"),
+            _make_case_doc("c2", screening_result="ineligible"),
         ]
-        result = _call_service(_make_db(docs), screening_result="fail")
+        result = _call_service(_make_db(docs), screening_result="ineligible")
         assert result["page"]["total"] == 1
-        assert result["page"]["items"][0]["screening_result"] == "fail"
+        assert result["page"]["items"][0]["screening_result"] == "ineligible"
 
     def test_qual_min_filter(self):
         docs = [_make_case_doc("c1", qual_score=30.0), _make_case_doc("c2", qual_score=80.0)]
@@ -265,40 +235,6 @@ class TestSearchServiceFilters:
         result = _call_service(_make_db(docs), qual_max=50.0)
         assert result["page"]["total"] == 1
         assert result["page"]["items"][0]["qual_score"] == 30.0
-
-    def test_completeness_range_filter(self):
-        docs = [
-            _make_case_doc("c1", vcf_qual_score=20.0),
-            _make_case_doc("c2", vcf_qual_score=60.0),
-            _make_case_doc("c3", vcf_qual_score=90.0),
-        ]
-        result = _call_service(_make_db(docs), completeness_min=50.0, completeness_max=80.0)
-        assert result["page"]["total"] == 1
-        assert result["page"]["items"][0]["doc_completeness_pct"] == 60.0
-
-    def test_deadline_from_filter(self):
-        past   = datetime(2025, 1, 1, tzinfo=timezone.utc)
-        future = datetime(2027, 1, 1, tzinfo=timezone.utc)
-        cutoff = datetime(2026, 1, 1, tzinfo=timezone.utc)
-        docs = [
-            _make_case_doc("c1", vcf_deadline=past),
-            _make_case_doc("c2", vcf_deadline=future),
-        ]
-        result = _call_service(_make_db(docs), deadline_from=cutoff)
-        assert result["page"]["total"] == 1
-        assert result["page"]["items"][0]["case_id"] == "c2"
-
-    def test_deadline_to_filter(self):
-        past   = datetime(2025, 1, 1, tzinfo=timezone.utc)
-        future = datetime(2027, 1, 1, tzinfo=timezone.utc)
-        cutoff = datetime(2026, 1, 1, tzinfo=timezone.utc)
-        docs = [
-            _make_case_doc("c1", vcf_deadline=past),
-            _make_case_doc("c2", vcf_deadline=future),
-        ]
-        result = _call_service(_make_db(docs), deadline_to=cutoff)
-        assert result["page"]["total"] == 1
-        assert result["page"]["items"][0]["case_id"] == "c1"
 
     def test_created_from_filter(self):
         early = datetime(2024, 1, 1, tzinfo=timezone.utc)
@@ -335,17 +271,14 @@ class TestSearchServiceFilters:
 
     def test_all_filters_combined(self):
         docs = [
-            _make_case_doc("c1", status="New Lead", qual_score=80.0, screening_result="pass",
-                           case_type="WTC"),
-            _make_case_doc("c2", status="New Lead", qual_score=30.0, screening_result="pass",
-                           case_type="WTC"),
-            _make_case_doc("c3", status="Awarded",  qual_score=80.0, screening_result="pass",
-                           case_type="WTC"),
+            _make_case_doc("c1", status="New Lead", qual_score=80.0, screening_result="eligible"),
+            _make_case_doc("c2", status="New Lead", qual_score=30.0, screening_result="eligible"),
+            _make_case_doc("c3", status="Awarded",  qual_score=80.0, screening_result="eligible"),
         ]
         result = _call_service(
             _make_db(docs),
             statuses=["New Lead"], qual_min=50.0,
-            screening_result="pass", case_type="wtc",
+            screening_result="eligible",
         )
         assert result["page"]["total"] == 1
         assert result["page"]["items"][0]["case_id"] == "c1"
@@ -479,7 +412,7 @@ class TestSearchServiceCsvExport:
 
     def test_csv_datetime_as_iso_string(self):
         dt  = datetime(2026, 3, 15, 12, 0, 0, tzinfo=timezone.utc)
-        doc = _make_case_doc("c1", vcf_deadline=dt)
+        doc = _make_case_doc("c1", created_at=dt)
         csv_output = self._call_export(_make_db([doc]))
         assert "2026-03-15" in csv_output
 
