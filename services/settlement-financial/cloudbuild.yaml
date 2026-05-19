@@ -1,49 +1,60 @@
 steps:
   # 1. Test
-  - name: 'python:3.11-slim'
+  - name: "python:3.11-slim"
     id: test
-    dir: 'services/settlement-financial'
+    dir: "services/settlement-financial"
     entrypoint: bash
     args:
-      - '-c'
+      - "-c"
       - |
-        pip install -r requirements.txt pytest pytest-asyncio pytest-mock httpx --quiet
+        pip install ../../shared --quiet
+        pip install -r requirements.txt --quiet
         pytest tests/ -v --tb=short -m "unit"
 
-  # 2. Build image
-  - name: 'gcr.io/cloud-builders/docker'
+  # 2. Build (context = repo root so Dockerfile can COPY shared/)
+  - name: "gcr.io/cloud-builders/docker"
     id: build
-    dir: 'services/settlement-financial'
-    waitFor: ['test']
+    waitFor: ["test"]
     args:
       - build
-      - '-t'
-      - '$_REPO/$_SERVICE_NAME:$COMMIT_SHA'
-      - '-t'
-      - '$_REPO/$_SERVICE_NAME:$_ENV-latest'
-      - '.'
+      - "-t"
+      - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+      - "-t"
+      - "$_REPO/$_SERVICE_NAME:$_ENV-latest"
+      - "-f"
+      - "services/settlement-financial/Dockerfile"
+      - "."
 
   # 3. Push image
-  - name: 'gcr.io/cloud-builders/docker'
+  - name: "gcr.io/cloud-builders/docker"
     id: push
-    waitFor: ['build']
-    args: ['push', '--all-tags', '$_REPO/$_SERVICE_NAME']
+    waitFor: ["build"]
+    args: ["push", "--all-tags", "$_REPO/$_SERVICE_NAME"]
 
-  # 4. Deploy (dev -> direct via deploy.sh; prod -> canary via deploy.sh -> canary-deploy.sh)
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  # 4. Deploy to Cloud Run
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     id: deploy
-    waitFor: ['push']
-    entrypoint: bash
+    waitFor: ["push"]
+    entrypoint: gcloud
     args:
-      - '-c'
-      - |
-        bash scripts/deploy.sh           $_ENV           $_SERVICE_NAME           $_REPO           $COMMIT_SHA           $_REGION           $PROJECT_ID
+      - run
+      - deploy
+      - "$_SERVICE_NAME"
+      - "--image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+      - "--region=$_REGION"
+      - "--platform=managed"
+      - "--no-allow-unauthenticated"
+      - "--set-env-vars=^|^GCP_PROJECT_ID=$PROJECT_ID|ENVIRONMENT=$_ENV|ROLES_FIRESTORE_DATABASE_ID=$_ROLES_FIRESTORE_DATABASE_ID|TRUSTED_SERVICE_ACCOUNTS=$_TRUSTED_SERVICE_ACCOUNTS"
+      - "--memory=512Mi"
+      - "--cpu=1"
+      - "--max-instances=10"
+      - "--min-instances=0"
 
 images:
-  - '$_REPO/$_SERVICE_NAME:$COMMIT_SHA'
-  - '$_REPO/$_SERVICE_NAME:$_ENV-latest'
+  - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+  - "$_REPO/$_SERVICE_NAME:$_ENV-latest"
 
 options:
   logging: CLOUD_LOGGING_ONLY
 
-timeout: '1800s'
+timeout: "1800s"
