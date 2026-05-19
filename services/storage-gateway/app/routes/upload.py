@@ -51,7 +51,7 @@ def register_file_upload(
 
     result = register_upload(
         file_name=body.file_name,
-        category=body.category,
+        folder_path=body.folder_path,
         content_type=body.content_type,
         uploaded_by=uploaded_by,
         case_id=body.case_id,
@@ -65,7 +65,7 @@ def register_file_upload(
         case_id=body.case_id,
         resource=result["staging_path"],
         metadata={
-            "category": body.category.value,
+            "folder_path": body.folder_path,
             "content_type": body.content_type,
             "size_bytes": body.size_bytes,
         },

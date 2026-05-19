@@ -15,7 +15,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routes import signed_url, metadata, lifecycle, upload, documents
+from app.routes import signed_url, metadata, lifecycle, upload, documents, browser
 from shared.middlewares import (
     AuthMiddleware,
     ErrorHandlerMiddleware,
@@ -57,6 +57,10 @@ ROUTE_PERMISSIONS: list[tuple[str, str, str]] = [
     # Document list / update
     ("GET",   r"^/api/v1/storage/cases/[^/]+/documents$",             "storage.documents.read"),
     ("PATCH", r"^/api/v1/storage/cases/[^/]+/documents/[^/]+$",       "storage.documents.write"),
+    # File browser
+    ("GET",   r"^/api/v1/storage/cases/[^/]+/browse$",                "storage.documents.read"),
+    ("POST",  r"^/api/v1/storage/cases/[^/]+/folders$",               "storage.documents.write"),
+    ("POST",  r"^/api/v1/storage/cases/[^/]+/move$",                  "storage.documents.write"),
 ]
 
 
@@ -110,3 +114,4 @@ app.include_router(metadata.router)
 app.include_router(lifecycle.router)
 app.include_router(upload.router)
 app.include_router(documents.router)
+app.include_router(browser.router)

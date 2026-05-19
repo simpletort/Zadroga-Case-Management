@@ -58,6 +58,11 @@ class AuditAction(str, Enum):
     hold_set = "hold_set"                  # PUT /cases/{caseId}/hold  hold=true
     hold_release = "hold_release"          # PUT /cases/{caseId}/hold  hold=false
 
+    # ── File browser ──────────────────────────────────────────────────────────
+    browse_folder = "browse_folder"        # GET  /cases/{caseId}/browse
+    create_folder = "create_folder"        # POST /cases/{caseId}/folders
+    move_item = "move_item"               # POST /cases/{caseId}/move
+
 
 def get_client_ip(request: Request) -> str:
     """

@@ -11,8 +11,8 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 
-from app.models.storage import DocumentCategory, SignedUrlResponse, UrlAction
-from app.services.gcs_service import build_blob_path, generate_signed_url
+from app.models.storage import SignedUrlResponse, UrlAction
+from app.services.gcs_service import generate_signed_url
 from app.utils.audit import AuditAction, log_audit_event
 from app.utils.gcs_client import get_gcs_client
 from app.config import get_settings
@@ -29,10 +29,10 @@ settings = get_settings()
 )
 def get_signed_url(
     request: Request,
-    category: DocumentCategory = Query(..., description="Document category determines GCS path"),
-    file_name: str = Query(..., description="Original file name (e.g. records_2024.pdf)"),
+    case_id: str = Query(..., description="Case the file belongs to"),
+    folder_path: str = Query(..., description="Folder path relative to caseId, e.g. 'legal-forms/2024'"),
+    file_name: str = Query(..., description="File name, e.g. records_2024.pdf"),
     action: UrlAction = Query(UrlAction.read, description="'read' for download, 'write' for upload"),
-    case_id: Optional[str] = Query(None, description="Required for case-scoped categories"),
     content_type: Optional[str] = Query(None, description="MIME type — required for write action"),
 ):
     if action == UrlAction.write and not content_type:
@@ -41,13 +41,13 @@ def get_signed_url(
             detail="content_type is required for write (upload) actions.",
         )
 
-    try:
-        blob_path = build_blob_path(category, file_name, case_id)
-    except ValueError as e:
+    if ".." in folder_path.split("/") or folder_path.startswith("/"):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(e),
+            detail="Invalid folder_path: must not escape the case directory.",
         )
+
+    blob_path = "{}/{}/{}".format(case_id, folder_path, file_name)
 
     gcs_client = get_gcs_client()
     signed_url, expires_at = generate_signed_url(
@@ -63,7 +63,7 @@ def get_signed_url(
         request=request,
         case_id=case_id,
         resource=blob_path,
-        metadata={"category": category.value, "file_name": file_name},
+        metadata={"folder_path": folder_path, "file_name": file_name},
     )
 
     return SignedUrlResponse(

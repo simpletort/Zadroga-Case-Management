@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from pydantic import BaseModel, Field
 
 
@@ -152,11 +152,9 @@ class CaseHoldResponse(BaseModel):
 
 class UploadRegistrationRequest(BaseModel):
     file_name: str = Field(..., description="Original file name including extension")
-    category: DocumentCategory
+    folder_path: str = Field(..., description="Destination folder relative to caseId, e.g. 'legal-forms/2024'")
     content_type: str = Field(..., description="MIME type of the file")
-    case_id: Optional[str] = Field(
-        None, description="Required for case-scoped document categories"
-    )
+    case_id: str = Field(..., description="Case the file belongs to — all uploads are case-scoped")
     size_bytes: Optional[int] = Field(None, ge=1)
 
 
@@ -170,9 +168,9 @@ class UploadRegistrationResponse(BaseModel):
 
 class UploadStatusResponse(BaseModel):
     file_id: str
-    case_id: Optional[str] = None
+    case_id: str
     file_name: str
-    category: DocumentCategory
+    folder_path: str = Field(..., description="Destination folder relative to caseId")
     scan_status: ScanStatus
     staging_path: str
     final_path: Optional[str] = Field(None, description="Permanent GCS path — set after clean scan")
@@ -180,3 +178,38 @@ class UploadStatusResponse(BaseModel):
     is_quarantined: bool = False
     scan_completed_at: Optional[datetime] = None
     registered_at: datetime
+
+
+# ── File Browser models ────────────────────────────────────────────────────
+
+class BrowseItem(BaseModel):
+    name: str = Field(..., description="Display name — last path segment")
+    path: str = Field(..., description="Full path relative to caseId, e.g. 'legal-forms/2024/doc.pdf'")
+    type: Literal["file", "folder"]
+    size_bytes: Optional[int] = None
+    updated_at: Optional[str] = Field(None, description="ISO-8601 last-modified timestamp")
+
+
+class BrowseResponse(BaseModel):
+    case_id: str
+    path: str = Field(..., description="The browsed path (relative to caseId); empty string = root")
+    items: list[BrowseItem]
+
+
+class CreateFolderRequest(BaseModel):
+    path: str = Field(..., description="Folder path relative to caseId, e.g. 'legal-forms/2024/contracts'")
+
+
+class CreateFolderResponse(BaseModel):
+    created: bool
+    path: str
+
+
+class MoveRequest(BaseModel):
+    source_path: str = Field(..., description="Source path relative to caseId")
+    destination_path: str = Field(..., description="Destination path relative to caseId")
+
+
+class MoveResponse(BaseModel):
+    moved: bool
+    destination: str

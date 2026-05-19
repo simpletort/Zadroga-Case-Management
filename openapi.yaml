@@ -1303,226 +1303,227 @@ paths:
   # ============================================================
   # add teh line here -- Adi
 
-  /api/v1/cases:
-    options:
-      operationId: corsPreflightCases
-      security: []
-      x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
-        path_translation: APPEND_PATH_TO_ADDRESS
-      responses:
-        204:
-          description: CORS preflight
-    post:
-      summary: "Create a new case (min role: admin_staff)"
-      operationId: createCase
-      x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
-        path_translation: APPEND_PATH_TO_ADDRESS
-      responses:
-        201:
-          description: Case created
-        401:
-          description: Unauthorized
+  # /api/v1/cases:
+  #   options:
+  #     operationId: corsPreflightCases
+  #     security: []
+  #     x-google-backend:
+  #       address: https://case-development-292736139819.us-central1.run.app
+  #       path_translation: APPEND_PATH_TO_ADDRESS
+  #     responses:
+  #       204:
+  #         description: CORS preflight
+  #   post:
+  #     summary: "Create a new case (min role: admin_staff)"
+  #     operationId: createCase
+  #     x-google-backend:
+  #       address: https://case-development-292736139819.us-central1.run.app
+  #       path_translation: APPEND_PATH_TO_ADDRESS
+  #     responses:
+  #       201:
+  #         description: Case created
+  #       401:
+  #         description: Unauthorized
 
-  /api/v1/cases/{caseId}:
-    options:
-      operationId: corsPreflightCaseById
-      security: []
-      parameters:
-        - { name: caseId, in: path, required: true, type: string }
-      x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
-        path_translation: APPEND_PATH_TO_ADDRESS
-      responses:
-        204:
-          description: CORS preflight
-    get:
-      summary: "Get full case detail (min role: paralegal)"
-      operationId: getCase
-      parameters:
-        - { name: caseId, in: path, required: true, type: string }
-      x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
-        path_translation: APPEND_PATH_TO_ADDRESS
-      responses:
-        200:
-          description: Case detail
-        401:
-          description: Unauthorized
-        404:
-          description: Not found
-    patch:
-      summary: "Update case fields (min role: paralegal)"
-      operationId: updateCase
-      parameters:
-        - { name: caseId, in: path, required: true, type: string }
-      x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
-        path_translation: APPEND_PATH_TO_ADDRESS
-      responses:
-        200:
-          description: Case updated
-        401:
-          description: Unauthorized
+  # /api/v1/cases/{caseId}:
+  #   options:
+  #     operationId: corsPreflightCaseById
+  #     security: []
+  #     parameters:
+  #       - { name: caseId, in: path, required: true, type: string }
+  #     x-google-backend:
+  #       address: https://case-development-292736139819.us-central1.run.app
+  #       path_translation: APPEND_PATH_TO_ADDRESS
+  #     responses:
+  #       204:
+  #         description: CORS preflight
+  #   get:
+  #     summary: "Get full case detail (min role: paralegal)"
+  #     operationId: getCase
+  #     parameters:
+  #       - { name: caseId, in: path, required: true, type: string }
+  #     x-google-backend:
+  #       address: https://case-development-292736139819.us-central1.run.app
+  #       path_translation: APPEND_PATH_TO_ADDRESS
+  #     responses:
+  #       200:
+  #         description: Case detail
+  #       401:
+  #         description: Unauthorized
+  #       404:
+  #         description: Not found
+  #   patch:
+  #     summary: "Update case fields (min role: paralegal)"
+  #     operationId: updateCase
+  #     parameters:
+  #       - { name: caseId, in: path, required: true, type: string }
+  #     x-google-backend:
+  #       address: https://case-development-292736139819.us-central1.run.app
+  #       path_translation: APPEND_PATH_TO_ADDRESS
+  #     responses:
+  #       200:
+  #         description: Case updated
+  #       401:
+  #         description: Unauthorized
 
-  /api/v1/cases/{caseId}/documents:
-    options:
-      operationId: corsPreflightCaseDocuments
-      security: []
-      parameters:
-        - { name: caseId, in: path, required: true, type: string }
-      x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
-        path_translation: APPEND_PATH_TO_ADDRESS
-      responses:
-        204:
-          description: CORS preflight
-    get:
-      summary: "List documents for a case (min role: paralegal)"
-      operationId: getCaseDocuments
-      parameters:
-        - { name: caseId, in: path, required: true, type: string }
-      x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
-        path_translation: APPEND_PATH_TO_ADDRESS
-      responses:
-        200:
-          description: Document list
-        401:
-          description: Unauthorized
+  # /api/v1/cases/{caseId}/documents:
+  #   options:
+  #     operationId: corsPreflightCaseDocuments
+  #     security: []
+  #     parameters:
+  #       - { name: caseId, in: path, required: true, type: string }
+  #     x-google-backend:
+  #       address: https://case-development-292736139819.us-central1.run.app
+  #       path_translation: APPEND_PATH_TO_ADDRESS
+  #     responses:
+  #       204:
+  #         description: CORS preflight
+  #   get:
+  #     summary: "List documents for a case (min role: paralegal)"
+  #     operationId: getCaseDocuments
+  #     parameters:
+  #       - { name: caseId, in: path, required: true, type: string }
+  #     x-google-backend:
+  #       address: https://case-development-292736139819.us-central1.run.app
+  #       path_translation: APPEND_PATH_TO_ADDRESS
+  #     responses:
+  #       200:
+  #         description: Document list
+  #       401:
+  #         description: Unauthorized
 
-  /api/v1/cases/{caseId}/documents/{documentId}/ai-fields:
-    options:
-      operationId: corsPreflightCaseDocAIFields
-      security: []
-      parameters:
-        - { name: caseId, in: path, required: true, type: string }
-        - { name: documentId, in: path, required: true, type: string }
-      x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
-        path_translation: APPEND_PATH_TO_ADDRESS
-      responses:
-        204:
-          description: CORS preflight
-    get:
-      summary: "AI-extracted fields for a document (min role: paralegal)"
-      operationId: getDocumentAIFields
-      parameters:
-        - { name: caseId, in: path, required: true, type: string }
-        - { name: documentId, in: path, required: true, type: string }
-      x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
-        path_translation: APPEND_PATH_TO_ADDRESS
-      responses:
-        200:
-          description: AI fields
-        401:
-          description: Unauthorized
+  # /api/v1/cases/{caseId}/documents/{documentId}/ai-fields:
+  #   options:
+  #     operationId: corsPreflightCaseDocAIFields
+  #     security: []
+  #     parameters:
+  #       - { name: caseId, in: path, required: true, type: string }
+  #       - { name: documentId, in: path, required: true, type: string }
+  #     x-google-backend:
+  #       address: https://case-development-292736139819.us-central1.run.app
+  #       path_translation: APPEND_PATH_TO_ADDRESS
+  #     responses:
+  #       204:
+  #         description: CORS preflight
+  #   get:
+  #     summary: "AI-extracted fields for a document (min role: paralegal)"
+  #     operationId: getDocumentAIFields
+  #     parameters:
+  #       - { name: caseId, in: path, required: true, type: string }
+  #       - { name: documentId, in: path, required: true, type: string }
+  #     x-google-backend:
+  #       address: https://case-development-292736139819.us-central1.run.app
+  #       path_translation: APPEND_PATH_TO_ADDRESS
+  #     responses:
+  #       200:
+  #         description: AI fields
+  #       401:
+  #         description: Unauthorized
 
-  /api/v1/cases/{caseId}/timeline:
-    options:
-      operationId: corsPreflightCaseTimeline
-      security: []
-      parameters:
-        - { name: caseId, in: path, required: true, type: string }
-      x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
-        path_translation: APPEND_PATH_TO_ADDRESS
-      responses:
-        204:
-          description: CORS preflight
-    get:
-      summary: "Timeline events for a case (min role: paralegal)"
-      operationId: getCaseTimeline
-      parameters:
-        - { name: caseId, in: path, required: true, type: string }
-      x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
-        path_translation: APPEND_PATH_TO_ADDRESS
-      responses:
-        200:
-          description: Timeline events
-        401:
-          description: Unauthorized
+  # /api/v1/cases/{caseId}/timeline:
+  #   options:
+  #     operationId: corsPreflightCaseTimeline
+  #     security: []
+  #     parameters:
+  #       - { name: caseId, in: path, required: true, type: string }
+  #     x-google-backend:
+  #       address: https://case-development-292736139819.us-central1.run.app
+  #       path_translation: APPEND_PATH_TO_ADDRESS
+  #     responses:
+  #       204:
+  #         description: CORS preflight
+  #   get:
+  #     summary: "Timeline events for a case (min role: paralegal)"
+  #     operationId: getCaseTimeline
+  #     parameters:
+  #       - { name: caseId, in: path, required: true, type: string }
+  #     x-google-backend:
+  #       address: https://case-development-292736139819.us-central1.run.app
+  #       path_translation: APPEND_PATH_TO_ADDRESS
+  #     responses:
+  #       200:
+  #         description: Timeline events
+  #       401:
+  #         description: Unauthorized
 
-  /api/v1/cases/{caseId}/enrollment:
-    options:
-      operationId: corsPreflightCaseEnrollment
-      security: []
-      parameters:
-        - { name: caseId, in: path, required: true, type: string }
-      x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
-        path_translation: APPEND_PATH_TO_ADDRESS
-      responses:
-        204:
-          description: CORS preflight
-    get:
-      summary: "Get enrollment data for a case (min role: paralegal)"
-      operationId: getCaseEnrollment
-      parameters:
-        - { name: caseId, in: path, required: true, type: string }
-      x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
-        path_translation: APPEND_PATH_TO_ADDRESS
-      responses:
-        200:
-          description: Enrollment data
-        401:
-          description: Unauthorized
-    patch:
-      summary: "Update enrollment data (min role: paralegal)"
-      operationId: updateCaseEnrollment
-      parameters:
-        - { name: caseId, in: path, required: true, type: string }
-      x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
-        path_translation: APPEND_PATH_TO_ADDRESS
-      responses:
-        200:
-          description: Updated
-        401:
-          description: Unauthorized
+  # /api/v1/cases/{caseId}/enrollment:
+  #   options:
+  #     operationId: corsPreflightCaseEnrollment
+  #     security: []
+  #     parameters:
+  #       - { name: caseId, in: path, required: true, type: string }
+  #     x-google-backend:
+  #       address: https://case-development-292736139819.us-central1.run.app
+  #                https://enrollment-workflow-292736139819.us-central1.run.app
+  #       path_translation: APPEND_PATH_TO_ADDRESS
+  #     responses:
+  #       204:
+  #         description: CORS preflight
+  #   get:
+  #     summary: "Get enrollment data for a case (min role: paralegal)"
+  #     operationId: getCaseEnrollment
+  #     parameters:
+  #       - { name: caseId, in: path, required: true, type: string }
+  #     x-google-backend:
+  #       address: https://case-development-292736139819.us-central1.run.app
+  #       path_translation: APPEND_PATH_TO_ADDRESS
+  #     responses:
+  #       200:
+  #         description: Enrollment data
+  #       401:
+  #         description: Unauthorized
+  #   patch:
+  #     summary: "Update enrollment data (min role: paralegal)"
+  #     operationId: updateCaseEnrollment
+  #     parameters:
+  #       - { name: caseId, in: path, required: true, type: string }
+  #     x-google-backend:
+  #       address: https://case-development-292736139819.us-central1.run.app
+  #       path_translation: APPEND_PATH_TO_ADDRESS
+  #     responses:
+  #       200:
+  #         description: Updated
+  #       401:
+  #         description: Unauthorized
 
-  /api/v1/cases/{caseId}/settlement:
-    options:
-      operationId: corsPreflightCaseSettlement
-      security: []
-      parameters:
-        - { name: caseId, in: path, required: true, type: string }
-      x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
-        path_translation: APPEND_PATH_TO_ADDRESS
-      responses:
-        204:
-          description: CORS preflight
-    get:
-      summary: "Get settlement data for a case (min role: paralegal)"
-      operationId: getCaseSettlement
-      parameters:
-        - { name: caseId, in: path, required: true, type: string }
-      x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
-        path_translation: APPEND_PATH_TO_ADDRESS
-      responses:
-        200:
-          description: Settlement data
-        401:
-          description: Unauthorized
-    patch:
-      summary: "Update settlement data (min role: junior_partner)"
-      operationId: updateCaseSettlement
-      parameters:
-        - { name: caseId, in: path, required: true, type: string }
-      x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
-        path_translation: APPEND_PATH_TO_ADDRESS
-      responses:
-        200:
-          description: Updated
-        401:
-          description: Unauthorized
+  # /api/v1/cases/{caseId}/settlement:
+  #   options:
+  #     operationId: corsPreflightCaseSettlement
+  #     security: []
+  #     parameters:
+  #       - { name: caseId, in: path, required: true, type: string }
+  #     x-google-backend:
+  #       address: https://case-development-292736139819.us-central1.run.app
+  #       path_translation: APPEND_PATH_TO_ADDRESS
+  #     responses:
+  #       204:
+  #         description: CORS preflight
+  #   get:
+  #     summary: "Get settlement data for a case (min role: paralegal)"
+  #     operationId: getCaseSettlement
+  #     parameters:
+  #       - { name: caseId, in: path, required: true, type: string }
+  #     x-google-backend:
+  #       address: https://case-development-292736139819.us-central1.run.app
+  #       path_translation: APPEND_PATH_TO_ADDRESS
+  #     responses:
+  #       200:
+  #         description: Settlement data
+  #       401:
+  #         description: Unauthorized
+  #   patch:
+  #     summary: "Update settlement data (min role: junior_partner)"
+  #     operationId: updateCaseSettlement
+  #     parameters:
+  #       - { name: caseId, in: path, required: true, type: string }
+  #     x-google-backend:
+  #       address: https://case-development-292736139819.us-central1.run.app
+  #       path_translation: APPEND_PATH_TO_ADDRESS
+  #     responses:
+  #       200:
+  #         description: Updated
+  #       401:
+  #         description: Unauthorized
 
   # ============================================================
   # ENROLLMENT WORKFLOW SERVICE
@@ -2059,7 +2060,7 @@ paths:
 
   # ============================================================
   # REPORTING SERVICE
-  # Cloud Run: https://reporting-service-292736139819.us-central1.run.app
+  # Cloud Run: https://reporting-kpi-292736139819.us-central1.run.app
   # ============================================================
 
   /reports/dashboard:
@@ -2067,7 +2068,7 @@ paths:
       operationId: corsPreflightReportsDashboard
       security: []
       x-google-backend:
-        address: https://reporting-service-292736139819.us-central1.run.app
+        address: https://reporting-kpi-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -2078,7 +2079,7 @@ paths:
       parameters:
         - { name: period_days, in: query, type: integer }
       x-google-backend:
-        address: https://reporting-service-292736139819.us-central1.run.app
+        address: https://reporting-kpi-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -2091,7 +2092,7 @@ paths:
       operationId: corsPreflightReportsCasesByStatus
       security: []
       x-google-backend:
-        address: https://reporting-service-292736139819.us-central1.run.app
+        address: https://reporting-kpi-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -2100,7 +2101,7 @@ paths:
       summary: Cases grouped by status with active count
       operationId: getReportsCasesByStatus
       x-google-backend:
-        address: https://reporting-service-292736139819.us-central1.run.app
+        address: https://reporting-kpi-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -2113,7 +2114,7 @@ paths:
       operationId: corsPreflightReportsFunnel
       security: []
       x-google-backend:
-        address: https://reporting-service-292736139819.us-central1.run.app
+        address: https://reporting-kpi-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -2122,7 +2123,7 @@ paths:
       summary: Funnel analysis with conversion rates across case stages
       operationId: getReportsFunnel
       x-google-backend:
-        address: https://reporting-service-292736139819.us-central1.run.app
+        address: https://reporting-kpi-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -2135,7 +2136,7 @@ paths:
       operationId: corsPreflightReportsBottlenecks
       security: []
       x-google-backend:
-        address: https://reporting-service-292736139819.us-central1.run.app
+        address: https://reporting-kpi-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -2146,7 +2147,7 @@ paths:
       parameters:
         - { name: threshold_days, in: query, type: integer }
       x-google-backend:
-        address: https://reporting-service-292736139819.us-central1.run.app
+        address: https://reporting-kpi-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -2159,7 +2160,7 @@ paths:
       operationId: corsPreflightReportsStaffPerformance
       security: []
       x-google-backend:
-        address: https://reporting-service-292736139819.us-central1.run.app
+        address: https://reporting-kpi-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -2170,7 +2171,7 @@ paths:
       parameters:
         - { name: period_days, in: query, type: integer }
       x-google-backend:
-        address: https://reporting-service-292736139819.us-central1.run.app
+        address: https://reporting-kpi-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -2183,7 +2184,7 @@ paths:
       operationId: corsPreflightReportsLeadConversion
       security: []
       x-google-backend:
-        address: https://reporting-service-292736139819.us-central1.run.app
+        address: https://reporting-kpi-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -2192,7 +2193,7 @@ paths:
       summary: Lead conversion metrics — qualification rate, conversion rate, avg intake duration
       operationId: getReportsLeadConversion
       x-google-backend:
-        address: https://reporting-service-292736139819.us-central1.run.app
+        address: https://reporting-kpi-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -2933,10 +2934,10 @@ paths:
       summary: Generate a pre-signed GCS URL for secure file upload or download
       operationId: getStorageSignedUrl
       parameters:
-        - { name: category, in: query, type: string }
-        - { name: file_name, in: query, type: string }
+        - { name: case_id, in: query, required: true, type: string }
+        - { name: folder_path, in: query, required: true, type: string }
+        - { name: file_name, in: query, required: true, type: string }
         - { name: action, in: query, type: string }
-        - { name: case_id, in: query, type: string }
         - { name: content_type, in: query, type: string }
       x-google-backend:
         address: https://storage-gateway-dev-292736139819.us-central1.run.app
@@ -3208,6 +3209,91 @@ paths:
           description: Unauthorized
         403:
           description: Insufficient role
+
+  # --- File Browser ---
+
+  /api/v1/storage/cases/{case_id}/browse:
+    options:
+      operationId: corsPreflightStorageCaseBrowse
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: List files and folders at a path within the case GCS directory
+      operationId: browseStorageCaseFolder
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+        - { name: path, in: query, type: string }
+      x-google-backend:
+        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Folder contents (files and sub-folders)
+        401:
+          description: Unauthorized
+        404:
+          description: Case not found
+
+  /api/v1/storage/cases/{case_id}/folders:
+    options:
+      operationId: corsPreflightStorageCaseFolders
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    post:
+      summary: Create a folder within the case GCS directory
+      operationId: createStorageCaseFolder
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        201:
+          description: Folder created
+        401:
+          description: Unauthorized
+
+  /api/v1/storage/cases/{case_id}/move:
+    options:
+      operationId: corsPreflightStorageCaseMove
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    post:
+      summary: Move a file or folder within the case GCS directory
+      operationId: moveStorageCaseItem
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Item moved
+        401:
+          description: Unauthorized
+        404:
+          description: Source not found
 
 securityDefinitions:
   firebase:

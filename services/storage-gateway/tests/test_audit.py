@@ -197,7 +197,7 @@ class TestUploadRegisterAudit:
                 "/api/v1/storage/upload/register",
                 json={
                     "file_name": "records.pdf",
-                    "category": "medical_records",
+                    "folder_path": "medical-records",
                     "content_type": "application/pdf",
                     "case_id": "ZAD-2024-01-0001",
                 },
@@ -224,20 +224,18 @@ class TestSignedUrlAudit:
     """Verify GET /signed-url emits signed_url_read / signed_url_write events."""
 
     def _do_signed_url(self, client, action: str = "read"):
-        with patch("app.routes.signed_url.build_blob_path") as mock_bp, \
-             patch("app.routes.signed_url.generate_signed_url") as mock_gs, \
+        with patch("app.routes.signed_url.generate_signed_url") as mock_gs, \
              patch("app.routes.signed_url.get_gcs_client"), \
              patch("app.routes.signed_url.log_audit_event") as mock_audit:
-            mock_bp.return_value = "ZAD-2024-01-0001/medical-records/records.pdf"
             mock_gs.return_value = (
                 "https://storage.googleapis.com/signed?token=abc",
                 datetime.datetime(2024, 1, 15, 13, 0, 0),
             )
             params = {
-                "category": "medical_records",
+                "case_id": "ZAD-2024-01-0001",
+                "folder_path": "medical-records",
                 "file_name": "records.pdf",
                 "action": action,
-                "case_id": "ZAD-2024-01-0001",
             }
             if action == "write":
                 params["content_type"] = "application/pdf"
