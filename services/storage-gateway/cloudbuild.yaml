@@ -9,13 +9,14 @@ steps:
         pytest tests/ -v --tb=short
 
   - name: "gcr.io/cloud-builders/docker"
-    dir: "services/storage-gateway"
     args:
       - build
       - "-t"
       - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
       - "-t"
       - "$_REPO/$_SERVICE_NAME:latest"
+      - "-f"
+      - "services/storage-gateway/Dockerfile"
       - "."
 
   - name: "gcr.io/cloud-builders/docker"

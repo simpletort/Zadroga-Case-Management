@@ -2,10 +2,14 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
+# Install shared package from repo root (available when build context is repo root)
+COPY shared/ /tmp/shared/
+RUN pip install --no-cache-dir /tmp/shared/
+
+COPY services/storage-gateway/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY services/storage-gateway/ .
 
 RUN adduser --disabled-password --gecos "" appuser
 USER appuser
