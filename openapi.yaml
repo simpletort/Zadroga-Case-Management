@@ -2915,7 +2915,7 @@ paths:
 
   # ============================================================
   # STORAGE GATEWAY SERVICE
-  # Cloud Run: https://storage-gateway-dev-292736139819.us-central1.run.app
+  # Cloud Run: https://storage-gateway-dev-dev-292736139819.us-central1.run.app
   # ============================================================
 
   # --- Signed URLs ---
@@ -2925,7 +2925,7 @@ paths:
       operationId: corsPreflightStorageSignedUrl
       security: []
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-dev-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -2940,7 +2940,7 @@ paths:
         - { name: action, in: query, type: string }
         - { name: content_type, in: query, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-dev-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -2957,7 +2957,7 @@ paths:
       parameters:
         - { name: file_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-dev-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -2969,7 +2969,7 @@ paths:
         - { name: file_id, in: path, required: true, type: string }
         - { name: case_id, in: query, required: true, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-dev-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -2988,7 +2988,7 @@ paths:
       parameters:
         - { name: case_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-dev-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -3007,7 +3007,7 @@ paths:
         - { name: page_size, in: query, type: integer }
         - { name: page_token, in: query, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-dev-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -3023,7 +3023,7 @@ paths:
         - { name: case_id, in: path, required: true, type: string }
         - { name: file_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-dev-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -3035,7 +3035,7 @@ paths:
         - { name: case_id, in: path, required: true, type: string }
         - { name: file_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-dev-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -3050,7 +3050,7 @@ paths:
       operationId: corsPreflightStorageUploadRegister
       security: []
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-dev-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -3059,7 +3059,7 @@ paths:
       summary: Register a file upload and receive a staging signed URL
       operationId: registerStorageUpload
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-dev-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         201:
@@ -3074,7 +3074,7 @@ paths:
       parameters:
         - { name: file_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-dev-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -3085,7 +3085,7 @@ paths:
       parameters:
         - { name: file_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-dev-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -3102,7 +3102,7 @@ paths:
       operationId: corsPreflightStorageLifecycle
       security: []
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-dev-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -3111,7 +3111,7 @@ paths:
       summary: "Read current bucket lifecycle rules and soft-delete policy (min role: system_admin)"
       operationId: getStorageLifecycle
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-dev-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -3124,7 +3124,7 @@ paths:
       summary: "Update bucket lifecycle rules (min role: system_admin)"
       operationId: updateStorageLifecycle
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-dev-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -3139,7 +3139,7 @@ paths:
       operationId: corsPreflightStorageLifecycleApplyDefault
       security: []
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-dev-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -3148,7 +3148,7 @@ paths:
       summary: "Apply default Zadroga lifecycle policy to bucket (min role: system_admin)"
       operationId: applyDefaultStorageLifecycle
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-dev-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -3163,7 +3163,7 @@ paths:
       operationId: corsPreflightStorageLifecycleSoftDelete
       security: []
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-dev-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -3172,7 +3172,7 @@ paths:
       summary: "Configure soft-delete retention policy (min role: system_admin)"
       operationId: updateStorageSoftDelete
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-dev-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -3189,7 +3189,7 @@ paths:
       parameters:
         - { name: case_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-dev-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -3200,7 +3200,7 @@ paths:
       parameters:
         - { name: case_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-dev-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -3219,7 +3219,7 @@ paths:
       parameters:
         - { name: case_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-dev-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -3231,7 +3231,7 @@ paths:
         - { name: case_id, in: path, required: true, type: string }
         - { name: path, in: query, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-dev-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -3248,7 +3248,7 @@ paths:
       parameters:
         - { name: case_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-dev-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -3259,7 +3259,7 @@ paths:
       parameters:
         - { name: case_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-dev-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         201:
@@ -3274,7 +3274,7 @@ paths:
       parameters:
         - { name: case_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-dev-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -3285,7 +3285,7 @@ paths:
       parameters:
         - { name: case_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-dev-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
