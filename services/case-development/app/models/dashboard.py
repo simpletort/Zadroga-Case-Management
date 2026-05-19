@@ -14,6 +14,7 @@ class CaseSummary(BaseModel):
     qual_score: Optional[float] = None             # medicalQualScore (0-100)
     last_activity: Optional[datetime] = None       # updatedAt
     assigned_paralegal: Optional[str] = None
+    assigned_paralegal_name: Optional[str] = None
     is_flagged: bool = False                        # local UI toggle, always False from API
 
 

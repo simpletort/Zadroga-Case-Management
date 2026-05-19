@@ -33,7 +33,6 @@ def _case_snap(
     status="Pending Attorney Review",
     assigned_attorney=_ATTY,
     assigned_paralegal=_PARA,
-    vcf_deadline=None,
     qual_score=80.0,
     escalation=None,
     exists=True,
@@ -41,12 +40,12 @@ def _case_snap(
     snap = MagicMock()
     snap.exists = exists
     snap.id     = case_id
+    score = int(qual_score) if qual_score is not None else None
     snap.to_dict.return_value = {
-        "status":        status,
-        "caseType":      "VCF",
-        "leadData":      {"firstName": "Jane", "lastName": "Smith"},
-        "qualification": {"medicalQualScore": qual_score},
-        "enrollment":    {"vcfRegDeadline": vcf_deadline},
+        "status":    status,
+        "firstName": "Jane",
+        "lastName":  "Smith",
+        "vcfScreeningDetails": {"score": score},
         "assignment": {
             "assignedAttorney":  assigned_attorney,
             "assignedParalegal": assigned_paralegal,
@@ -113,7 +112,6 @@ def _make_escalate_db(
     assigned_attorney=_ATTY,
     case_exists=True,
     senior_partner_snaps=None,
-    vcf_deadline=None,
 ):
     """Firestore mock for escalate_case."""
     db = MagicMock()
@@ -122,7 +120,6 @@ def _make_escalate_db(
     case_ref.get.return_value = _case_snap(
         status=case_status,
         assigned_attorney=assigned_attorney,
-        vcf_deadline=vcf_deadline,
         exists=case_exists,
     )
     case_ref.collection.return_value = MagicMock()
@@ -191,7 +188,6 @@ def _make_decide_db(
     case_status="Pending Senior Review",
     assigned_attorney=_ATTY,
     assigned_paralegal=_PARA,
-    vcf_deadline=None,
     escalation_id="esc-001",
     escalation_exists=True,
 ):
@@ -227,7 +223,6 @@ def _make_decide_db(
         status=case_status,
         assigned_attorney=assigned_attorney,
         assigned_paralegal=assigned_paralegal,
-        vcf_deadline=vcf_deadline,
         escalation={
             "escalatedAt":        _NOW,
             "escalatedBy":        _ATTY,
@@ -567,12 +562,10 @@ class TestGetEscalationQueue:
         from app.services.escalation_service import get_escalation_queue
         return get_escalation_queue(db=db, page=page, page_size=page_size)
 
-    def _escalated_case_snap(self, case_id=_CASE, vcf_deadline=None, qual_score=80.0,
-                              escalated_at=None):
+    def _escalated_case_snap(self, case_id=_CASE, qual_score=80.0, escalated_at=None):
         return _case_snap(
             case_id=case_id,
             status="Pending Senior Review",
-            vcf_deadline=vcf_deadline,
             qual_score=qual_score,
             escalation={
                 "escalatedAt":        escalated_at or _NOW,
@@ -612,46 +605,16 @@ class TestGetEscalationQueue:
 
     # ── Sort order ────────────────────────────────────────────────────────────
 
-    def test_sorted_by_vcf_deadline_soonest_first(self):
-        soon = _NOW + timedelta(days=5)
-        far  = _NOW + timedelta(days=30)
-        snap_far  = self._escalated_case_snap(case_id="ZAD-FAR",  vcf_deadline=far)
-        snap_soon = self._escalated_case_snap(case_id="ZAD-SOON", vcf_deadline=soon)
-
-        db     = _make_queue_db([snap_far, snap_soon])
-        result = self._call(db)
-        items  = result["page"]["items"]
-
-        assert items[0]["case_id"] == "ZAD-SOON"
-        assert items[1]["case_id"] == "ZAD-FAR"
-
-    def test_no_deadline_sorts_after_cases_with_deadline(self):
-        has_dl = self._escalated_case_snap(case_id="ZAD-DL",  vcf_deadline=_NOW + timedelta(days=10))
-        no_dl  = self._escalated_case_snap(case_id="ZAD-NODL", vcf_deadline=None)
-
-        db     = _make_queue_db([no_dl, has_dl])
-        result = self._call(db)
-        items  = result["page"]["items"]
-
-        assert items[0]["case_id"] == "ZAD-DL"
-        assert items[1]["case_id"] == "ZAD-NODL"
-
     def test_same_deadline_sorted_by_oldest_escalation_first(self):
-        dl     = _NOW + timedelta(days=10)
-        older  = self._escalated_case_snap(
-            case_id="ZAD-OLD", vcf_deadline=dl, escalated_at=_NOW - timedelta(days=3)
-        )
-        newer  = self._escalated_case_snap(
-            case_id="ZAD-NEW", vcf_deadline=dl, escalated_at=_NOW - timedelta(days=1)
-        )
+        older  = self._escalated_case_snap(case_id="ZAD-OLD", escalated_at=_NOW - timedelta(days=3))
+        newer  = self._escalated_case_snap(case_id="ZAD-NEW", escalated_at=_NOW - timedelta(days=1))
         db     = _make_queue_db([newer, older])
         result = self._call(db)
         assert result["page"]["items"][0]["case_id"] == "ZAD-OLD"
 
     def test_tiebreaker_highest_qual_score_first(self):
-        dl   = _NOW + timedelta(days=10)
-        high = self._escalated_case_snap(case_id="ZAD-HIGH", vcf_deadline=dl, qual_score=90.0)
-        low  = self._escalated_case_snap(case_id="ZAD-LOW",  vcf_deadline=dl, qual_score=50.0)
+        high = self._escalated_case_snap(case_id="ZAD-HIGH", qual_score=90.0)
+        low  = self._escalated_case_snap(case_id="ZAD-LOW",  qual_score=50.0)
 
         db     = _make_queue_db([low, high])
         result = self._call(db)
@@ -659,23 +622,17 @@ class TestGetEscalationQueue:
 
     # ── Overdue count ─────────────────────────────────────────────────────────
 
-    def test_overdue_count_includes_past_deadlines(self):
-        overdue = self._escalated_case_snap(case_id="ZAD-OD",  vcf_deadline=_NOW - timedelta(days=2))
-        future  = self._escalated_case_snap(case_id="ZAD-FUT", vcf_deadline=_NOW + timedelta(days=10))
-        no_dl   = self._escalated_case_snap(case_id="ZAD-NODL")
+    def test_overdue_count_is_zero(self):
+        snaps  = [self._escalated_case_snap(case_id="ZAD-{:04d}".format(i)) for i in range(3)]
+        db     = _make_queue_db(snaps)
+        result = self._call(db)
+        assert result["overdue_count"] == 0
 
-        db = _make_queue_db([overdue, future, no_dl])
-        mock_dt = MagicMock(wraps=datetime)
-        mock_dt.now.return_value = _NOW
-        with patch("app.services.escalation_service.datetime", mock_dt):
-            result = self._call(db)
-        assert result["overdue_count"] == 1
-
-    def test_days_until_deadline_negative_when_overdue(self):
-        snap   = self._escalated_case_snap(vcf_deadline=_NOW - timedelta(days=3))
+    def test_days_until_deadline_is_none(self):
+        snap   = self._escalated_case_snap()
         db     = _make_queue_db([snap])
         result = self._call(db)
-        assert result["page"]["items"][0]["days_until_deadline"] < 0
+        assert result["page"]["items"][0]["days_until_deadline"] is None
 
     # ── Pagination ────────────────────────────────────────────────────────────
 

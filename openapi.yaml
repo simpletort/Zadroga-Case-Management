@@ -74,6 +74,34 @@ paths:
         401:
           description: Unauthorized
 
+  /api/v1/dashboard/cases/{caseId}:
+    options:
+      operationId: corsPreflightDashboardCaseById
+      security: []
+      parameters:
+        - { name: caseId, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Get a single case summary by ID
+      operationId: getDashboardCaseById
+      parameters:
+        - { name: caseId, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Success
+        401:
+          description: Unauthorized
+        404:
+          description: Case not found
+
   # --- Assignment ---
 
   /api/v1/cases/{caseId}/assign:
@@ -869,7 +897,6 @@ paths:
     post:
       summary: Ingest a new lead from a marketing partner
       operationId: createLead
-      security: []
       x-google-backend:
         address: https://lead-intake-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
@@ -1496,6 +1523,1691 @@ paths:
           description: Updated
         401:
           description: Unauthorized
+
+  # ============================================================
+  # ENROLLMENT WORKFLOW SERVICE
+  # Cloud Run: https://enrollment-workflow-292736139819.us-central1.run.app
+  # ============================================================
+
+  # --- Certification ---
+
+  /api/v1/enrollment/certification/trigger:
+    options:
+      operationId: corsPreflightEnrollmentCertTrigger
+      security: []
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    post:
+      summary: Trigger WTC certification enrollment workflow for a case
+      operationId: triggerCertificationEnrollment
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Workflow triggered
+        401:
+          description: Unauthorized
+
+  /api/v1/enrollment/certification/{case_id}:
+    options:
+      operationId: corsPreflightEnrollmentCertById
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Get WTC certification enrollment status for a case
+      operationId: getCertificationEnrollment
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Certification enrollment status
+        401:
+          description: Unauthorized
+        404:
+          description: Not found
+
+  /api/v1/enrollment/certification/{case_id}/status:
+    options:
+      operationId: corsPreflightEnrollmentCertStatus
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    put:
+      summary: Update WTC certification enrollment status
+      operationId: updateCertificationEnrollmentStatus
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Status updated
+        401:
+          description: Unauthorized
+
+  # --- Registration ---
+
+  /api/v1/enrollment/registration/initiate:
+    options:
+      operationId: corsPreflightEnrollmentRegInitiate
+      security: []
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    post:
+      summary: Initiate VCF registration workflow for a case
+      operationId: initiateRegistrationEnrollment
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Registration workflow initiated
+        401:
+          description: Unauthorized
+
+  /api/v1/enrollment/registration/{case_id}:
+    options:
+      operationId: corsPreflightEnrollmentRegById
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Get VCF registration status for a case
+      operationId: getRegistrationEnrollment
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Registration status
+        401:
+          description: Unauthorized
+        404:
+          description: Not found
+
+  /api/v1/enrollment/registration/{case_id}/status:
+    options:
+      operationId: corsPreflightEnrollmentRegStatus
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    put:
+      summary: Update VCF registration enrollment status
+      operationId: updateRegistrationEnrollmentStatus
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Status updated
+        401:
+          description: Unauthorized
+
+  /api/v1/enrollment/registration/{case_id}/prefill:
+    options:
+      operationId: corsPreflightEnrollmentRegPrefill
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Get pre-filled registration form data for a case
+      operationId: getRegistrationPrefill
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Pre-filled form data
+        401:
+          description: Unauthorized
+
+  # --- Enrollment Orchestrator Status ---
+
+  /api/v1/enrollment/wtc-status:
+    options:
+      operationId: corsPreflightEnrollmentWtcStatus
+      security: []
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Check WTC certification completion status for a case
+      operationId: getEnrollmentWtcStatus
+      parameters:
+        - { name: case_id, in: query, type: string }
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: WTC status
+        401:
+          description: Unauthorized
+    put:
+      summary: Trigger certification enrollment workflow (orchestrator adapter)
+      operationId: triggerEnrollmentWtcStatus
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Workflow triggered
+        401:
+          description: Unauthorized
+
+  /api/v1/enrollment/vcf-status:
+    options:
+      operationId: corsPreflightEnrollmentVcfStatus
+      security: []
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Check VCF registration completion status for a case
+      operationId: getEnrollmentVcfStatus
+      parameters:
+        - { name: case_id, in: query, type: string }
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: VCF status
+        401:
+          description: Unauthorized
+    put:
+      summary: Trigger registration workflow (orchestrator adapter)
+      operationId: triggerEnrollmentVcfStatus
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Workflow triggered
+        401:
+          description: Unauthorized
+
+  /api/v1/enrollment/deadlines:
+    options:
+      operationId: corsPreflightEnrollmentDeadlines
+      security: []
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Get WTC and VCF deadline dates for a case
+      operationId: getEnrollmentDeadlines
+      parameters:
+        - { name: case_id, in: query, type: string }
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Deadline dates
+        401:
+          description: Unauthorized
+
+  # --- Enrollment Dashboard ---
+
+  /api/v1/dashboard/enrollment:
+    options:
+      operationId: corsPreflightDashboardEnrollment
+      security: []
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Enrollment pipeline dashboard — WTC + VCF status overview
+      operationId: getEnrollmentDashboard
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Enrollment dashboard data
+        401:
+          description: Unauthorized
+
+  /api/v1/dashboard/deadlines:
+    options:
+      operationId: corsPreflightDashboardDeadlines
+      security: []
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Deadline summary with color-coded urgency indicators
+      operationId: getDashboardDeadlines
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Deadline summary
+        401:
+          description: Unauthorized
+
+  /api/v1/dashboard/export:
+    options:
+      operationId: corsPreflightDashboardExport
+      security: []
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Export enrollment data to CSV
+      operationId: exportEnrollmentDashboard
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: CSV file download
+        401:
+          description: Unauthorized
+
+  # --- VCF ---
+
+  /api/v1/vcf/register:
+    options:
+      operationId: corsPreflightVcfRegister
+      security: []
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    post:
+      summary: Initiate VCF registration workflow for a case
+      operationId: registerVcf
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: VCF registration initiated
+        401:
+          description: Unauthorized
+
+  /api/v1/vcf/{case_id}:
+    options:
+      operationId: corsPreflightVcfById
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Get VCF registration status for a case
+      operationId: getVcfStatus
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: VCF registration status
+        401:
+          description: Unauthorized
+        404:
+          description: Not found
+
+  /api/v1/vcf/{case_id}/status:
+    options:
+      operationId: corsPreflightVcfStatus
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    put:
+      summary: Update VCF registration status
+      operationId: updateVcfStatus
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Status updated
+        401:
+          description: Unauthorized
+
+  /api/v1/vcf/{case_id}/prefill:
+    options:
+      operationId: corsPreflightVcfPrefill
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Get pre-filled VCF registration form data for a case
+      operationId: getVcfPrefill
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Pre-filled VCF form data
+        401:
+          description: Unauthorized
+
+  # --- WTC ---
+
+  /api/v1/wtc/trigger:
+    options:
+      operationId: corsPreflightWtcTrigger
+      security: []
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    post:
+      summary: Trigger WTC enrollment workflow for a case
+      operationId: triggerWtc
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: WTC workflow triggered
+        401:
+          description: Unauthorized
+
+  /api/v1/wtc/{case_id}:
+    options:
+      operationId: corsPreflightWtcById
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Get WTC enrollment status for a case
+      operationId: getWtcStatus
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: WTC enrollment status
+        401:
+          description: Unauthorized
+        404:
+          description: Not found
+
+  /api/v1/wtc/{case_id}/status:
+    options:
+      operationId: corsPreflightWtcStatus
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    put:
+      summary: Update WTC enrollment status
+      operationId: updateWtcStatus
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://enrollment-workflow-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Status updated
+        401:
+          description: Unauthorized
+
+  # ============================================================
+  # REPORTING SERVICE
+  # Cloud Run: https://reporting-service-292736139819.us-central1.run.app
+  # ============================================================
+
+  /reports/dashboard:
+    options:
+      operationId: corsPreflightReportsDashboard
+      security: []
+      x-google-backend:
+        address: https://reporting-service-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: KPI dashboard with configurable period (7–365 days)
+      operationId: getReportsDashboard
+      parameters:
+        - { name: period_days, in: query, type: integer }
+      x-google-backend:
+        address: https://reporting-service-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Dashboard KPIs
+        401:
+          description: Unauthorized
+
+  /reports/cases-by-status:
+    options:
+      operationId: corsPreflightReportsCasesByStatus
+      security: []
+      x-google-backend:
+        address: https://reporting-service-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Cases grouped by status with active count
+      operationId: getReportsCasesByStatus
+      x-google-backend:
+        address: https://reporting-service-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Cases by status
+        401:
+          description: Unauthorized
+
+  /reports/funnel:
+    options:
+      operationId: corsPreflightReportsFunnel
+      security: []
+      x-google-backend:
+        address: https://reporting-service-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Funnel analysis with conversion rates across case stages
+      operationId: getReportsFunnel
+      x-google-backend:
+        address: https://reporting-service-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Funnel analysis
+        401:
+          description: Unauthorized
+
+  /reports/bottlenecks:
+    options:
+      operationId: corsPreflightReportsBottlenecks
+      security: []
+      x-google-backend:
+        address: https://reporting-service-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Identify bottleneck statuses (configurable threshold 7–180 days)
+      operationId: getReportsBottlenecks
+      parameters:
+        - { name: threshold_days, in: query, type: integer }
+      x-google-backend:
+        address: https://reporting-service-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Bottleneck analysis
+        401:
+          description: Unauthorized
+
+  /reports/staff-performance:
+    options:
+      operationId: corsPreflightReportsStaffPerformance
+      security: []
+      x-google-backend:
+        address: https://reporting-service-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: "Staff performance metrics (period_days: 7–90)"
+      operationId: getReportsStaffPerformance
+      parameters:
+        - { name: period_days, in: query, type: integer }
+      x-google-backend:
+        address: https://reporting-service-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Staff performance metrics
+        401:
+          description: Unauthorized
+
+  /reports/lead-conversion:
+    options:
+      operationId: corsPreflightReportsLeadConversion
+      security: []
+      x-google-backend:
+        address: https://reporting-service-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Lead conversion metrics — qualification rate, conversion rate, avg intake duration
+      operationId: getReportsLeadConversion
+      x-google-backend:
+        address: https://reporting-service-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Lead conversion metrics
+        401:
+          description: Unauthorized
+
+  # ============================================================
+  # SETTLEMENT FINANCIAL SERVICE
+  # Cloud Run: https://settlement-financial-292736139819.us-central1.run.app
+  # ============================================================
+
+  # --- Settlement Calculator ---
+
+  /api/v1/settlement/calculate:
+    options:
+      operationId: corsPreflightSettlementCalculate
+      security: []
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    post:
+      summary: Preview distribution calculation without saving
+      operationId: previewSettlementCalculation
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Calculation preview
+        401:
+          description: Unauthorized
+
+  /api/v1/settlement/cases/{case_id}/calculations:
+    options:
+      operationId: corsPreflightSettlementCalculations
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    post:
+      summary: Calculate and save a new settlement distribution
+      operationId: createSettlementCalculation
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        201:
+          description: Calculation saved
+        401:
+          description: Unauthorized
+    get:
+      summary: Full calculation history for a case (newest first)
+      operationId: listSettlementCalculations
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Calculation history
+        401:
+          description: Unauthorized
+
+  /api/v1/settlement/cases/{case_id}/calculations/latest:
+    options:
+      operationId: corsPreflightSettlementCalculationLatest
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Most recent saved settlement calculation for a case
+      operationId: getLatestSettlementCalculation
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Latest calculation
+        401:
+          description: Unauthorized
+        404:
+          description: No calculation found
+
+  /api/v1/settlement/cases/{case_id}/calculations/{calculation_id}:
+    options:
+      operationId: corsPreflightSettlementCalculationById
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+        - { name: calculation_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Get a single settlement calculation by ID
+      operationId: getSettlementCalculation
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+        - { name: calculation_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Calculation detail
+        401:
+          description: Unauthorized
+        404:
+          description: Not found
+    delete:
+      summary: Delete a saved settlement calculation
+      operationId: deleteSettlementCalculation
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+        - { name: calculation_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: Deleted
+        401:
+          description: Unauthorized
+
+  # --- Expenses ---
+
+  /api/v1/settlement/cases/{case_id}/expenses:
+    options:
+      operationId: corsPreflightSettlementExpenses
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    post:
+      summary: Add an expense to a case
+      operationId: createSettlementExpense
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        201:
+          description: Expense created
+        401:
+          description: Unauthorized
+    get:
+      summary: List expenses for a case
+      operationId: listSettlementExpenses
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Expense list
+        401:
+          description: Unauthorized
+
+  /api/v1/settlement/cases/{case_id}/expenses/{expense_id}:
+    options:
+      operationId: corsPreflightSettlementExpenseById
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+        - { name: expense_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    delete:
+      summary: Delete an expense from a case
+      operationId: deleteSettlementExpense
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+        - { name: expense_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: Deleted
+        401:
+          description: Unauthorized
+
+  # --- Expense Receipts ---
+
+  /api/v1/settlement/cases/{case_id}/expenses/{expense_id}/receipt:
+    options:
+      operationId: corsPreflightSettlementExpenseReceipt
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+        - { name: expense_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    put:
+      summary: Attach a receipt file to an expense
+      operationId: attachExpenseReceipt
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+        - { name: expense_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Receipt attached
+        401:
+          description: Unauthorized
+    delete:
+      summary: Remove receipt from an expense
+      operationId: removeExpenseReceipt
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+        - { name: expense_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: Receipt removed
+        401:
+          description: Unauthorized
+
+  # --- Expense Categories ---
+
+  /api/v1/settlement/expense-categories:
+    options:
+      operationId: corsPreflightSettlementExpenseCategories
+      security: []
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Get built-in and custom expense categories
+      operationId: getExpenseCategories
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Expense categories
+        401:
+          description: Unauthorized
+    put:
+      summary: Update custom expense categories
+      operationId: updateExpenseCategories
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Categories updated
+        401:
+          description: Unauthorized
+
+  # --- Liens ---
+
+  /api/v1/settlement/cases/{case_id}/liens:
+    options:
+      operationId: corsPreflightSettlementLiens
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    post:
+      summary: Add a lien to a case
+      operationId: createSettlementLien
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        201:
+          description: Lien created
+        401:
+          description: Unauthorized
+    get:
+      summary: List liens for a case
+      operationId: listSettlementLiens
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Lien list
+        401:
+          description: Unauthorized
+
+  /api/v1/settlement/cases/{case_id}/liens/{lien_id}:
+    options:
+      operationId: corsPreflightSettlementLienById
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+        - { name: lien_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    patch:
+      summary: Update a lien on a case
+      operationId: updateSettlementLien
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+        - { name: lien_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Lien updated
+        401:
+          description: Unauthorized
+    delete:
+      summary: Delete a lien from a case
+      operationId: deleteSettlementLien
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+        - { name: lien_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: Deleted
+        401:
+          description: Unauthorized
+
+  # --- Loans ---
+
+  /api/v1/settlement/cases/{case_id}/loans:
+    options:
+      operationId: corsPreflightSettlementLoans
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    post:
+      summary: Add a pre-settlement loan to a case
+      operationId: createSettlementLoan
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        201:
+          description: Loan created
+        401:
+          description: Unauthorized
+    get:
+      summary: List pre-settlement loans for a case
+      operationId: listSettlementLoans
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Loan list
+        401:
+          description: Unauthorized
+
+  /api/v1/settlement/cases/{case_id}/loans/{loan_id}:
+    options:
+      operationId: corsPreflightSettlementLoanById
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+        - { name: loan_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    patch:
+      summary: Update a pre-settlement loan
+      operationId: updateSettlementLoan
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+        - { name: loan_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Loan updated
+        401:
+          description: Unauthorized
+    delete:
+      summary: Delete a pre-settlement loan
+      operationId: deleteSettlementLoan
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+        - { name: loan_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: Deleted
+        401:
+          description: Unauthorized
+
+  # --- Disbursements ---
+
+  /api/v1/settlement/cases/{case_id}/disbursements:
+    options:
+      operationId: corsPreflightSettlementDisbursements
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    post:
+      summary: Record a disbursement for a case
+      operationId: createSettlementDisbursement
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        201:
+          description: Disbursement recorded
+        401:
+          description: Unauthorized
+    get:
+      summary: List disbursements for a case
+      operationId: listSettlementDisbursements
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Disbursement list
+        401:
+          description: Unauthorized
+
+  # --- Fee Management ---
+
+  /api/v1/settlement/firm-fee-config:
+    options:
+      operationId: corsPreflightFirmFeeConfig
+      security: []
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Get firm-wide attorney fee configuration
+      operationId: getFirmFeeConfig
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Fee configuration
+        401:
+          description: Unauthorized
+    put:
+      summary: "Update firm-wide attorney fee configuration (min role: senior_partner)"
+      operationId: updateFirmFeeConfig
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Fee configuration updated
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient role
+
+  /api/v1/settlement/fee-config-audit:
+    options:
+      operationId: corsPreflightFeeConfigAudit
+      security: []
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Audit log of fee configuration changes
+      operationId: getFeeConfigAudit
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Fee config audit log
+        401:
+          description: Unauthorized
+
+  /api/v1/settlement/fee/preview:
+    options:
+      operationId: corsPreflightSettlementFeePreview
+      security: []
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    post:
+      summary: Preview attorney fee calculation using firm-wide config
+      operationId: previewSettlementFee
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Fee preview
+        401:
+          description: Unauthorized
+
+  /api/v1/settlement/cases/{case_id}/fee-override:
+    options:
+      operationId: corsPreflightSettlementFeeOverride
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Get case-level attorney fee override
+      operationId: getCaseFeeOverride
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Fee override
+        401:
+          description: Unauthorized
+    put:
+      summary: "Set case-level attorney fee override (min role: senior_partner)"
+      operationId: setCaseFeeOverride
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Fee override set
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient role
+    delete:
+      summary: "Remove case-level attorney fee override (min role: senior_partner)"
+      operationId: removeCaseFeeOverride
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: Override removed
+        401:
+          description: Unauthorized
+
+  /api/v1/settlement/cases/{case_id}/fee/preview:
+    options:
+      operationId: corsPreflightCaseFeePreview
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    post:
+      summary: Preview attorney fee calculation using case-specific override
+      operationId: previewCaseFee
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Fee preview
+        401:
+          description: Unauthorized
+
+  # --- Settlement Statement ---
+
+  /api/v1/settlement/cases/{case_id}/statement/generate:
+    options:
+      operationId: corsPreflightSettlementStatementGenerate
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    post:
+      summary: Generate and upload settlement statement PDF — returns signed URL
+      operationId: generateSettlementStatement
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Statement generated with signed download URL
+        401:
+          description: Unauthorized
+
+  /api/v1/settlement/cases/{case_id}/statement/download:
+    options:
+      operationId: corsPreflightSettlementStatementDownload
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Download previously generated settlement statement
+      operationId: downloadSettlementStatement
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Settlement statement download URL
+        401:
+          description: Unauthorized
+        404:
+          description: No statement generated yet
+
+  # ============================================================
+  # STORAGE GATEWAY SERVICE
+  # Cloud Run: https://storage-gateway-dev-292736139819.us-central1.run.app
+  # ============================================================
+
+  # --- Signed URLs ---
+
+  /api/v1/storage/signed-url:
+    options:
+      operationId: corsPreflightStorageSignedUrl
+      security: []
+      x-google-backend:
+        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Generate a pre-signed GCS URL for secure file upload or download
+      operationId: getStorageSignedUrl
+      parameters:
+        - { name: category, in: query, type: string }
+        - { name: file_name, in: query, type: string }
+        - { name: action, in: query, type: string }
+        - { name: case_id, in: query, type: string }
+        - { name: content_type, in: query, type: string }
+      x-google-backend:
+        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Pre-signed URL
+        401:
+          description: Unauthorized
+
+  # --- File Metadata ---
+
+  /api/v1/storage/{file_id}/metadata:
+    options:
+      operationId: corsPreflightStorageMetadata
+      security: []
+      parameters:
+        - { name: file_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Get file metadata including AI processing results
+      operationId: getStorageFileMetadata
+      parameters:
+        - { name: file_id, in: path, required: true, type: string }
+        - { name: case_id, in: query, required: true, type: string }
+      x-google-backend:
+        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: File metadata
+        401:
+          description: Unauthorized
+        404:
+          description: Not found
+
+  # --- Case Documents ---
+
+  /api/v1/storage/cases/{case_id}/documents:
+    options:
+      operationId: corsPreflightStorageCaseDocuments
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: List and filter case documents with pagination
+      operationId: listStorageCaseDocuments
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+        - { name: category, in: query, type: string }
+        - { name: processing_status, in: query, type: string }
+        - { name: verification_status, in: query, type: string }
+        - { name: scan_status, in: query, type: string }
+        - { name: uploaded_after, in: query, type: string }
+        - { name: uploaded_before, in: query, type: string }
+        - { name: page_size, in: query, type: integer }
+        - { name: page_token, in: query, type: string }
+      x-google-backend:
+        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Paginated document list
+        401:
+          description: Unauthorized
+
+  /api/v1/storage/cases/{case_id}/documents/{file_id}:
+    options:
+      operationId: corsPreflightStorageCaseDocumentById
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+        - { name: file_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    patch:
+      summary: Update document processing metadata (processing_status, verification_status, extracted_data)
+      operationId: updateStorageCaseDocument
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+        - { name: file_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Document updated
+        401:
+          description: Unauthorized
+
+  # --- Upload Registration ---
+
+  /api/v1/storage/upload/register:
+    options:
+      operationId: corsPreflightStorageUploadRegister
+      security: []
+      x-google-backend:
+        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    post:
+      summary: Register a file upload and receive a staging signed URL
+      operationId: registerStorageUpload
+      x-google-backend:
+        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        201:
+          description: Upload registered — staging signed URL returned
+        401:
+          description: Unauthorized
+
+  /api/v1/storage/upload/{file_id}/status:
+    options:
+      operationId: corsPreflightStorageUploadStatus
+      security: []
+      parameters:
+        - { name: file_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Poll virus-scan status of a registered upload
+      operationId: getStorageUploadStatus
+      parameters:
+        - { name: file_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Scan status
+        401:
+          description: Unauthorized
+        404:
+          description: Not found
+
+  # --- Lifecycle Management ---
+
+  /api/v1/storage/lifecycle:
+    options:
+      operationId: corsPreflightStorageLifecycle
+      security: []
+      x-google-backend:
+        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: "Read current bucket lifecycle rules and soft-delete policy (min role: system_admin)"
+      operationId: getStorageLifecycle
+      x-google-backend:
+        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Lifecycle rules
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient role
+    put:
+      summary: "Update bucket lifecycle rules (min role: system_admin)"
+      operationId: updateStorageLifecycle
+      x-google-backend:
+        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Lifecycle updated
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient role
+
+  /api/v1/storage/lifecycle/apply-default:
+    options:
+      operationId: corsPreflightStorageLifecycleApplyDefault
+      security: []
+      x-google-backend:
+        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    post:
+      summary: "Apply default Zadroga lifecycle policy to bucket (min role: system_admin)"
+      operationId: applyDefaultStorageLifecycle
+      x-google-backend:
+        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Default lifecycle applied
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient role
+
+  /api/v1/storage/lifecycle/soft-delete:
+    options:
+      operationId: corsPreflightStorageLifecycleSoftDelete
+      security: []
+      x-google-backend:
+        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    put:
+      summary: "Configure soft-delete retention policy (min role: system_admin)"
+      operationId: updateStorageSoftDelete
+      x-google-backend:
+        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Soft-delete policy updated
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient role
+
+  /api/v1/storage/cases/{case_id}/hold:
+    options:
+      operationId: corsPreflightStorageCaseHold
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    put:
+      summary: "Set or release hold on case documents — prevents lifecycle transitions (min role: system_admin)"
+      operationId: setStorageCaseHold
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Hold updated
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient role
 
 securityDefinitions:
   firebase:

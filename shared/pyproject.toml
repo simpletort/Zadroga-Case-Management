@@ -2,13 +2,23 @@
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["shared*"]
+exclude = ["build*", "dist*"]
+
 [project]
 name = "simpletort-shared"
-version = "0.1.0"
+version = "0.2.0"
 requires-python = ">=3.11"
 dependencies = [
     "starlette>=0.36",
+    "fastapi>=0.100",
     "google-auth>=2.28",
     "google-cloud-firestore>=2.14",
+    "google-cloud-secret-manager>=2.16",
     "cachetools>=5.3",
+    # Added for unified auth middleware:
+    "python-jose[cryptography]>=3.3",
+    "httpx>=0.24",
 ]

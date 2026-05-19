@@ -84,6 +84,7 @@ class LeadRequest(BaseModel):
     lastName:              str                    = Field(..., min_length=1, max_length=100)
     email:                 EmailStr
     phone:                 str                    = Field(..., examples=["+12125551234"])
+    dateOfBirth:           Optional[date]         = Field(None, description="Client date of birth (YYYY-MM-DD)")
     address:               Optional[Address]      = None
     exposureLocation:      str                    = Field(..., min_length=1, max_length=500)
     exposureDates:         ExposureDates
@@ -180,11 +181,15 @@ class CaseDocument(BaseModel):
     status:       CaseStatus    = CaseStatus.NEW_LEAD
     vcfEligibility: VCFEligibility = VCFEligibility.PENDING
 
+    # True = still a lead; False = converted to an active case (flipped by update_case_status when status → Active)
+    isLead: bool = True
+
     # Claimant
     firstName:             str
     lastName:              str
     email:                 str
     phone:                 str
+    dateOfBirth:           Optional[date]    = None  # optional — not always provided at intake
     address:               Optional[Address] = None
     exposureLocation:      str
     exposureDateStart:     date
@@ -248,6 +253,7 @@ class CaseDocument(BaseModel):
             lastName=lead.lastName,
             email=str(lead.email),
             phone=lead.phone,
+            dateOfBirth=lead.dateOfBirth,
             address=lead.address,
             exposureLocation=lead.exposureLocation,
             exposureDateStart=lead.exposureDates.start,

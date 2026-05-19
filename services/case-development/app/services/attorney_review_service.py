@@ -87,35 +87,28 @@ def get_review_queue(
 
     for doc in docs:
         data   = doc.to_dict() or {}
-        lead   = data.get("leadData")    or {}
-        qual   = data.get("qualification") or {}
-        enroll = data.get("enrollment")  or {}
-        assign = data.get("assignment")  or {}
+        assign = data.get("assignment") or {}
 
-        vcf_deadline          = enroll.get("vcfRegDeadline")
-        submitted_for_review  = data.get("submittedForReviewAt")
+        submitted_for_review = data.get("submittedForReviewAt")
 
-        # Normalise tz-naive Timestamps from Firestore
-        if vcf_deadline is not None and hasattr(vcf_deadline, "tzinfo") and vcf_deadline.tzinfo is None:
-            vcf_deadline = vcf_deadline.replace(tzinfo=timezone.utc)
         if submitted_for_review is not None and hasattr(submitted_for_review, "tzinfo") and submitted_for_review.tzinfo is None:
             submitted_for_review = submitted_for_review.replace(tzinfo=timezone.utc)
 
-        days_until = None
-        if vcf_deadline is not None:
-            days_until = (vcf_deadline.date() - now.date()).days
+        vcf_details = data.get("vcfScreeningDetails") or {}
+        score_raw   = vcf_details.get("score")
+        qual_score  = float(score_raw) if score_raw is not None else None
 
         items.append({
             "case_id":                 doc.id,
-            "first_name":              lead.get("firstName", ""),
-            "last_name":               lead.get("lastName", ""),
-            "case_type":               data.get("caseType"),
-            "vcf_deadline":            vcf_deadline,
-            "qual_score":              qual.get("medicalQualScore"),
+            "first_name":              data.get("firstName", ""),
+            "last_name":               data.get("lastName", ""),
+            "case_type":               None,
+            "vcf_deadline":            None,
+            "qual_score":              qual_score,
             "submitted_for_review_at": submitted_for_review,
             "assigned_paralegal":      assign.get("assignedParalegal"),
-            "assigned_paralegal_name": assign.get("assignedParalegaName"),  # stored on case
-            "days_until_deadline":     days_until,
+            "assigned_paralegal_name": assign.get("assignedParalegalName"),
+            "days_until_deadline":     None,
         })
 
     # ── Sort ──────────────────────────────────────────────────────────────────
@@ -131,7 +124,7 @@ def get_review_queue(
     items.sort(key=_sort_key)
 
     total       = len(items)
-    overdue     = sum(1 for c in items if c["days_until_deadline"] is not None and c["days_until_deadline"] < 0)
+    overdue     = 0  # vcf_deadline not present in current schema
     total_pages = max(1, (total + page_size - 1) // page_size)
     start       = (page - 1) * page_size
     page_items  = items[start: start + page_size]
@@ -199,14 +192,9 @@ def _approve_single(
         )
 
     # Paralegal to notify
-    assign          = case_data.get("assignment") or {}
-    paralegal_uid   = assign.get("assignedParalegal")
-    enroll          = case_data.get("enrollment") or {}
-    vcf_deadline    = enroll.get("vcfRegDeadline")
-
-    # Normalise tz
-    if vcf_deadline is not None and hasattr(vcf_deadline, "tzinfo") and vcf_deadline.tzinfo is None:
-        vcf_deadline = vcf_deadline.replace(tzinfo=timezone.utc)
+    assign        = case_data.get("assignment") or {}
+    paralegal_uid = assign.get("assignedParalegal")
+    vcf_deadline  = None  # not present in current schema
 
     notif_id    = str(uuid.uuid4())
     timeline_id = str(uuid.uuid4())

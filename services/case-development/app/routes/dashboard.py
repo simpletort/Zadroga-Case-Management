@@ -13,12 +13,12 @@
 #                                   ?page_size=       items per page (default: 20, max: 100)
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Path, Query
 
 from app.models.dashboard import DashboardResponse, DashboardSummary, DashboardPage, CaseSummary
-from app.services.dashboard_service import get_dashboard
+from app.services.dashboard_service import get_case_detail, get_dashboard
 from app.utils.firestore import get_firestore_client
 
 router = APIRouter(prefix="/api/v1", tags=["Paralegal Dashboard"])
@@ -92,3 +92,16 @@ def paralegal_dashboard(
             total_pages=raw["total_pages"],
         ),
     )
+
+
+@router.get(
+    "/dashboard/cases/{caseId}",
+    response_model=Dict[str, Any],
+    summary="Get full case document by ID",
+)
+def get_dashboard_case(caseId: str = Path(...)):
+    db = get_firestore_client()
+    doc = db.collection("cases").document(caseId).get()
+    if not doc.exists:
+        raise HTTPException(status_code=404, detail="Case not found")
+    return doc.to_dict()

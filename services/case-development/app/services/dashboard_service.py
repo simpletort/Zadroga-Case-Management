@@ -88,32 +88,30 @@ def get_dashboard(
 
     for doc in docs:
         data    = doc.to_dict() or {}
-        lead    = data.get("leadData")    or {}
-        qual    = data.get("qualification") or {}
-        enroll  = data.get("enrollment")  or {}
         assign  = data.get("assignment")  or {}
 
-        vcf_deadline  = enroll.get("vcfRegDeadline")
         last_activity = data.get("updatedAt")
 
-        # Normalise Firestore Timestamps to aware datetime
-        if hasattr(vcf_deadline, "tzinfo") and vcf_deadline.tzinfo is None:
-            vcf_deadline = vcf_deadline.replace(tzinfo=timezone.utc)
         if hasattr(last_activity, "tzinfo") and last_activity is not None and last_activity.tzinfo is None:
             last_activity = last_activity.replace(tzinfo=timezone.utc)
 
+        vcf_details = data.get("vcfScreeningDetails") or {}
+        score_raw   = vcf_details.get("score")
+        qual_score  = float(score_raw) if score_raw is not None else None
+
         cases.append({
             "case_id":              doc.id,
-            "first_name":           lead.get("firstName", ""),
-            "last_name":            lead.get("lastName", ""),
+            "first_name":           data.get("firstName", ""),
+            "last_name":            data.get("lastName", ""),
             "status":               data.get("status", ""),
-            "case_type":            data.get("caseType"),
-            "vcf_deadline":         vcf_deadline,
-            "doc_completeness_pct": qual.get("vcfQualScore"),
-            "qual_score":           qual.get("medicalQualScore"),
+            "case_type":            None,
+            "vcf_deadline":         None,
+            "doc_completeness_pct": None,
+            "qual_score":           qual_score,
             "last_activity":        last_activity,
-            "assigned_paralegal":   assign.get("assignedParalegal"),
-            "is_flagged":           False,
+            "assigned_paralegal":      assign.get("assignedParalegal"),
+            "assigned_paralegal_name": assign.get("assignedParalegalName"),
+            "is_flagged":              False,
         })
 
     # ── 3. Post-filter ────────────────────────────────────────────────────
@@ -180,4 +178,37 @@ def get_dashboard(
             "page_size":   page_size,
             "total_pages": total_pages,
         },
+    }
+
+
+def get_case_detail(db: firestore.Client, case_id: str) -> dict | None:
+    doc = db.collection("cases").document(case_id).get()
+    if not doc.exists:
+        return None
+
+    data   = doc.to_dict() or {}
+    assign = data.get("assignment") or {}
+
+    last_activity = data.get("updatedAt")
+
+    if hasattr(last_activity, "tzinfo") and last_activity is not None and last_activity.tzinfo is None:
+        last_activity = last_activity.replace(tzinfo=timezone.utc)
+
+    vcf_details = data.get("vcfScreeningDetails") or {}
+    score_raw   = vcf_details.get("score")
+    qual_score  = float(score_raw) if score_raw is not None else None
+
+    return {
+        "case_id":              doc.id,
+        "first_name":           data.get("firstName", ""),
+        "last_name":            data.get("lastName", ""),
+        "status":               data.get("status", ""),
+        "case_type":            None,
+        "vcf_deadline":         None,
+        "doc_completeness_pct": None,
+        "qual_score":           qual_score,
+        "last_activity":        last_activity,
+        "assigned_paralegal":      assign.get("assignedParalegal"),
+        "assigned_paralegal_name": assign.get("assignedParalegalName"),
+        "is_flagged":              False,
     }
