@@ -66,8 +66,15 @@ from decimal import Decimal
 from typing import List, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, Path, UploadFile, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from google.cloud import firestore as _fs
+from shared.middlewares import (
+    AuthMiddleware,
+    ErrorHandlerMiddleware,
+    LoggingMiddleware,
+    get_cors_origins,
+)
 
 from config import get_settings
 from logging_config import get_logger, setup_logging
@@ -190,6 +197,62 @@ async def lifespan(app: FastAPI):
     logger.info("settlement_service_shutdown")
 
 
+# ── Route → permission map (used by AuthMiddleware) ───────────────────────────
+
+_ROUTE_PERMISSIONS: list[tuple[str, str, str]] = [
+    # Settlement preview
+    ("POST",   r"^/api/v1/settlement/calculate$",                                    "settlement.read"),
+    # Case inputs
+    ("PUT",    r"^/api/v1/settlement/cases/[^/]+/inputs$",                           "settlement.write"),
+    ("GET",    r"^/api/v1/settlement/cases/[^/]+/inputs$",                           "settlement.read"),
+    ("POST",   r"^/api/v1/settlement/cases/[^/]+/calculate$",                        "settlement.write"),
+    # Calculations
+    ("POST",   r"^/api/v1/settlement/cases/[^/]+/calculations$",                     "settlement.write"),
+    ("GET",    r"^/api/v1/settlement/cases/[^/]+/calculations",                      "settlement.read"),
+    ("DELETE", r"^/api/v1/settlement/cases/[^/]+/calculations/[^/]+$",               "settlement.delete"),
+    # Expenses
+    ("POST",   r"^/api/v1/settlement/cases/[^/]+/expenses$",                         "settlement.write"),
+    ("GET",    r"^/api/v1/settlement/cases/[^/]+/expenses$",                         "settlement.read"),
+    ("PATCH",  r"^/api/v1/settlement/cases/[^/]+/expenses/[^/]+$",                   "settlement.write"),
+    ("DELETE", r"^/api/v1/settlement/cases/[^/]+/expenses/[^/]+$",                   "settlement.delete"),
+    ("PUT",    r"^/api/v1/settlement/cases/[^/]+/expenses/[^/]+/receipt$",           "settlement.write"),
+    ("DELETE", r"^/api/v1/settlement/cases/[^/]+/expenses/[^/]+/receipt$",           "settlement.delete"),
+    # Liens
+    ("POST",   r"^/api/v1/settlement/cases/[^/]+/liens$",                            "settlement.write"),
+    ("GET",    r"^/api/v1/settlement/cases/[^/]+/liens$",                            "settlement.read"),
+    ("PATCH",  r"^/api/v1/settlement/cases/[^/]+/liens/[^/]+$",                      "settlement.write"),
+    ("DELETE", r"^/api/v1/settlement/cases/[^/]+/liens/[^/]+$",                      "settlement.delete"),
+    # Loans
+    ("POST",   r"^/api/v1/settlement/cases/[^/]+/loans$",                            "settlement.write"),
+    ("GET",    r"^/api/v1/settlement/cases/[^/]+/loans$",                            "settlement.read"),
+    ("PATCH",  r"^/api/v1/settlement/cases/[^/]+/loans/[^/]+$",                      "settlement.write"),
+    ("DELETE", r"^/api/v1/settlement/cases/[^/]+/loans/[^/]+$",                      "settlement.delete"),
+    # Disbursements
+    ("POST",   r"^/api/v1/settlement/cases/[^/]+/disbursements$",                    "settlement.write"),
+    ("GET",    r"^/api/v1/settlement/cases/[^/]+/disbursements$",                    "settlement.read"),
+    # Fee configuration
+    ("GET",    r"^/api/v1/fee-config",                                               "feeConfig.read"),
+    ("PUT",    r"^/api/v1/fee-config$",                                              "feeConfig.write"),
+    ("POST",   r"^/api/v1/fee-config/calculate$",                                    "settlement.read"),
+    ("GET",    r"^/api/v1/settlement/cases/[^/]+/fee-override$",                     "feeConfig.read"),
+    ("PUT",    r"^/api/v1/settlement/cases/[^/]+/fee-override$",                     "feeConfig.write"),
+    ("DELETE", r"^/api/v1/settlement/cases/[^/]+/fee-override$",                     "feeConfig.write"),
+    ("POST",   r"^/api/v1/settlement/cases/[^/]+/fee-config/calculate$",             "settlement.read"),
+    # Expense categories (admin)
+    ("GET",    r"^/api/v1/admin/expense-categories$",                                "feeConfig.read"),
+    ("PUT",    r"^/api/v1/admin/expense-categories$",                                "feeConfig.write"),
+    # Statement PDF
+    ("POST",   r"^/api/v1/settlement/cases/[^/]+/statement/generate$",              "settlement.approve"),
+    ("GET",    r"^/api/v1/settlement/cases/[^/]+/statement/[^/]+/download$",        "settlement.read"),
+    # File storage
+    ("POST",   r"^/api/v1/settlement/cases/[^/]+/files$",                           "storage.write"),
+    ("GET",    r"^/api/v1/settlement/cases/[^/]+/files$",                           "storage.read"),
+    ("DELETE", r"^/api/v1/settlement/cases/[^/]+/files/[^/]+$",                     "storage.delete"),
+    ("GET",    r"^/api/v1/settlement/cases/[^/]+/files/[^/]+/download$",            "storage.read"),
+    ("GET",    r"^/api/v1/settlement/cases/[^/]+/files/[^/]+/url$",                 "storage.read"),
+]
+
+
 # ── App ───────────────────────────────────────────────────────────────────────
 
 app = FastAPI(
@@ -203,6 +266,27 @@ app = FastAPI(
     openapi_url="/openapi.json",
     docs_url="/docs",
     lifespan=lifespan,
+)
+
+_settings = get_settings()
+
+app.add_middleware(ErrorHandlerMiddleware)
+app.add_middleware(LoggingMiddleware)
+app.add_middleware(
+    AuthMiddleware,
+    route_permissions=_ROUTE_PERMISSIONS,
+    roles_firestore_project=_settings.gcp_project_id,
+    roles_firestore_database=_settings.roles_firestore_database_id,
+    trusted_service_accounts=[
+        e.strip() for e in _settings.trusted_service_accounts.split(",") if e.strip()
+    ],
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_cors_origins(_settings.environment),
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allow_headers=["Authorization", "Content-Type", "x-apigateway-api-userinfo"],
 )
 
 

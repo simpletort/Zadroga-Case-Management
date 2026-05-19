@@ -15,7 +15,8 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     # ── Runtime environment ───────────────────────────────────────────────
     app_env: str = Field("development", alias="APP_ENV")
-    gcp_project_id: str = Field("simpletort-prod", alias="GCP_PROJECT_ID")
+    environment: str = Field("production", alias="ENVIRONMENT")
+    gcp_project_id: str = Field("simpletort-zadroga-dev", alias="GCP_PROJECT_ID")
 
     @property
     def is_production(self) -> bool:
@@ -27,6 +28,12 @@ class Settings(BaseSettings):
         "/secrets/firebase-sa-key.json",
         alias="FIREBASE_SA_KEY_PATH",
     )
+
+    # Roles Firestore database (for AuthMiddleware permission lookups)
+    roles_firestore_database_id: str = Field("(default)", alias="ROLES_FIRESTORE_DATABASE_ID")
+
+    # Comma-separated service account emails trusted for service-to-service OIDC calls
+    trusted_service_accounts: str = Field("", alias="TRUSTED_SERVICE_ACCOUNTS")
 
     # Firestore collection name for saved calculations
     settlement_calculations_collection: str = Field(
