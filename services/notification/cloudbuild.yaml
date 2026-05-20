@@ -37,9 +37,12 @@ substitutions:
   _REPO: ""                        # set in trigger — Artifact Registry repo path
   _ENV: dev
   _TWILIO_FROM_NUMBER: ""          # set in trigger
-  _CLOUD_TASKS_QUEUE: sms-dispatch
-  _CLOUD_TASKS_QUEUE_REGION: us-east1
+  _CLOUD_TASKS_QUEUE: simpletort-tasks
+  _CLOUD_TASKS_QUEUE_REGION: us-central1
   _NOTIFICATION_SA_EMAIL: ""       # set in trigger — notification-sa@PROJECT_ID.iam.gserviceaccount.com
+  _FIRESTORE_DATABASE_ID: "(default)"       # set in trigger — simpletort-dev for dev, (default) for prod
+  _ROLES_FIRESTORE_DATABASE_ID: "(default)" # Firestore DB for AuthMiddleware role lookups
+  _TRUSTED_SERVICE_ACCOUNTS: ""             # comma-separated SA emails for service-to-service auth
 
 options:
   logging: CLOUD_LOGGING_ONLY
@@ -61,6 +64,7 @@ steps:
     args:
       - "-c"
       - |
+        pip install ../../shared --quiet
         pip install -r requirements.txt \
                     pytest==8.1.0 \
                     pytest-asyncio==0.23.6 \
@@ -83,13 +87,14 @@ steps:
 
   - name: "gcr.io/cloud-builders/docker"
     id: build
-    dir: "services/notification"
     args:
       - build
       - "-t"
       - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
       - "-t"
       - "$_REPO/$_SERVICE_NAME:$_ENV-latest"
+      - "-f"
+      - "services/notification/Dockerfile"
       - "."
     waitFor: ["test"]
 
@@ -141,11 +146,15 @@ steps:
 
         ENV_VARS="GCP_PROJECT_ID=$PROJECT_ID"
         ENV_VARS="$$ENV_VARS,APP_ENV=$_ENV"
+        ENV_VARS="$$ENV_VARS,ENVIRONMENT=$_ENV"
         ENV_VARS="$$ENV_VARS,TWILIO_FROM_NUMBER=$_TWILIO_FROM_NUMBER"
         ENV_VARS="$$ENV_VARS,CLOUD_TASKS_QUEUE=$_CLOUD_TASKS_QUEUE"
         ENV_VARS="$$ENV_VARS,CLOUD_TASKS_QUEUE_REGION=$_CLOUD_TASKS_QUEUE_REGION"
         ENV_VARS="$$ENV_VARS,NOTIFICATION_SA_EMAIL=$_NOTIFICATION_SA_EMAIL"
         ENV_VARS="$$ENV_VARS,NOTIFICATION_SERVICE_URL=$$SERVICE_URL"
+        ENV_VARS="$$ENV_VARS,FIRESTORE_DATABASE_ID=$_FIRESTORE_DATABASE_ID"
+        ENV_VARS="$$ENV_VARS,ROLES_FIRESTORE_DATABASE_ID=$_ROLES_FIRESTORE_DATABASE_ID"
+        ENV_VARS="$$ENV_VARS,TRUSTED_SERVICE_ACCOUNTS=$_TRUSTED_SERVICE_ACCOUNTS"
 
         SECRETS="TWILIO_ACCOUNT_SID=TWILIO_ACCOUNT_SID:latest"
         SECRETS="$$SECRETS,TWILIO_AUTH_TOKEN=TWILIO_AUTH_TOKEN:latest"

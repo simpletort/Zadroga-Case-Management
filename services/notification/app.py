@@ -47,8 +47,15 @@ from typing import Optional
 import google.auth.transport.requests
 import google.oauth2.id_token
 from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field
+from shared.middlewares import (
+    AuthMiddleware,
+    ErrorHandlerMiddleware,
+    LoggingMiddleware,
+    get_cors_origins,
+)
 
 from config import get_settings
 from logging_config import get_logger, setup_logging
@@ -79,6 +86,25 @@ async def lifespan(app: FastAPI):
     logger.info("notification_service_shutdown")
 
 
+# ── Route → permission map (used by AuthMiddleware) ───────────────────────────
+
+_ROUTE_PERMISSIONS: list[tuple[str, str, str]] = [
+    # Cloud Tasks SMS/Email handlers — called by Cloud Tasks service account
+    ("POST", r"^/tasks/sms$",                              "notifications.send"),
+    ("POST", r"^/tasks/email$",                            "notifications.send"),
+    # Internal email endpoints — called by internal services
+    ("POST", r"^/internal/email/preview$",                 "notifications.read"),
+    ("POST", r"^/internal/email/send$",                    "notifications.send"),
+    ("POST", r"^/internal/email/enqueue$",                 "notifications.send"),
+    # Reminder scheduling — called by case-reminder-trigger Cloud Function
+    ("POST", r"^/internal/reminders/schedule$",            "notifications.send"),
+    ("DELETE", r"^/internal/reminders/[^/]+$",             "notifications.send"),
+    # Twilio webhooks — authenticated via Twilio signature (no RBAC needed)
+    ("POST", r"^/webhooks/twilio/status$",                 "notifications.webhook"),
+    ("POST", r"^/webhooks/twilio/inbound$",                "notifications.webhook"),
+]
+
+
 app = FastAPI(
     title="ZAD Notification Service",
     version="1.0.0",
@@ -86,6 +112,27 @@ app = FastAPI(
     openapi_url="/openapi.json",
     docs_url="/docs",
     lifespan=lifespan,
+)
+
+_settings = get_settings()
+
+app.add_middleware(ErrorHandlerMiddleware)
+app.add_middleware(LoggingMiddleware)
+app.add_middleware(
+    AuthMiddleware,
+    route_permissions=_ROUTE_PERMISSIONS,
+    roles_firestore_project=_settings.gcp_project_id,
+    roles_firestore_database=_settings.roles_firestore_database_id,
+    trusted_service_accounts=[
+        e.strip() for e in _settings.trusted_service_accounts.split(",") if e.strip()
+    ],
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_cors_origins(_settings.environment),
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Authorization", "Content-Type", "x-apigateway-api-userinfo"],
 )
 
 

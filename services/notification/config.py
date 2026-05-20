@@ -16,6 +16,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     # ── Runtime environment ───────────────────────────────────────────────
     app_env: str = Field("development", alias="APP_ENV")
+    environment: str = Field("production", alias="ENVIRONMENT")
     gcp_project_id: str = Field("simpletort-prod", alias="GCP_PROJECT_ID")
 
     @property
@@ -42,6 +43,12 @@ class Settings(BaseSettings):
     cases_collection: str = Field(
         "cases", alias="FIRESTORE_CASES_COLLECTION"
     )
+
+    # Roles Firestore database (for AuthMiddleware permission lookups)
+    roles_firestore_database_id: str = Field("(default)", alias="ROLES_FIRESTORE_DATABASE_ID")
+
+    # Comma-separated service account emails trusted for service-to-service calls
+    trusted_service_accounts: str = Field("", alias="TRUSTED_SERVICE_ACCOUNTS")
     email_delivery_records_collection: str = Field(
         "email_delivery_records", alias="FIRESTORE_EMAIL_DELIVERY_RECORDS_COLLECTION"
     )
