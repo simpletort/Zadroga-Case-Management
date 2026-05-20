@@ -62,17 +62,27 @@ class TestRegisterUpload:
         )
         assert resp.status_code == 422
 
-    def test_register_missing_folder_path_returns_422(self, client):
-        resp = client.post(
-            "/api/v1/storage/upload/register",
-            json={
-                "file_name": "records.pdf",
-                "content_type": "application/pdf",
-                "case_id": "ZAD-2024-01-0001",
-                # folder_path intentionally omitted
-            },
-        )
-        assert resp.status_code == 422
+    def test_register_missing_folder_path_defaults_to_case_root(self, client):
+        with patch("app.routes.upload.register_upload") as mock_register:
+            mock_register.return_value = {
+                "file_id": "abc-123",
+                "staging_path": "staging/abc-123/records.pdf",
+                "signed_url": "https://storage.googleapis.com/signed",
+                "expires_at": "2024-01-01T00:00:00",
+                "bucket": "zadroga-case-files-test",
+            }
+            resp = client.post(
+                "/api/v1/storage/upload/register",
+                json={
+                    "file_name": "records.pdf",
+                    "content_type": "application/pdf",
+                    "case_id": "ZAD-2024-01-0001",
+                    # folder_path omitted — should default to "" (case root)
+                },
+            )
+        assert resp.status_code == 201
+        _, kwargs = mock_register.call_args
+        assert kwargs["folder_path"] == ""
 
     def test_register_path_traversal_returns_422(self, client):
         with patch("app.routes.upload.register_upload") as mock_register:
