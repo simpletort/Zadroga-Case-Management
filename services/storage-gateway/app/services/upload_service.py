@@ -69,7 +69,7 @@ def register_upload(
 
     file_id = str(uuid.uuid4())
     staging_path = _staging_path(file_id, file_name)
-    final_path = "{}/{}/{}".format(case_id, folder_path, file_name)
+    final_path = "{}/{}/{}".format(case_id, folder_path, file_name) if folder_path else "{}/{}".format(case_id, file_name)
     registered_at = datetime.now(tz=timezone.utc)
 
     db = get_firestore_client()

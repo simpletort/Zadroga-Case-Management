@@ -30,7 +30,7 @@ settings = get_settings()
 def get_signed_url(
     request: Request,
     case_id: str = Query(..., description="Case the file belongs to"),
-    folder_path: str = Query(..., description="Folder path relative to caseId, e.g. 'legal-forms/2024'"),
+    folder_path: str = Query("", description="Folder path relative to caseId, e.g. 'legal-forms/2024'. Empty = case root."),
     file_name: str = Query(..., description="File name, e.g. records_2024.pdf"),
     action: UrlAction = Query(UrlAction.read, description="'read' for download, 'write' for upload"),
     content_type: Optional[str] = Query(None, description="MIME type — required for write action"),
@@ -47,7 +47,7 @@ def get_signed_url(
             detail="Invalid folder_path: must not escape the case directory.",
         )
 
-    blob_path = "{}/{}/{}".format(case_id, folder_path, file_name)
+    blob_path = "{}/{}/{}".format(case_id, folder_path, file_name) if folder_path else "{}/{}".format(case_id, file_name)
 
     gcs_client = get_gcs_client()
     signed_url, expires_at = generate_signed_url(

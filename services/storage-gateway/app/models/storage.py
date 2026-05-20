@@ -152,7 +152,7 @@ class CaseHoldResponse(BaseModel):
 
 class UploadRegistrationRequest(BaseModel):
     file_name: str = Field(..., description="Original file name including extension")
-    folder_path: str = Field(..., description="Destination folder relative to caseId, e.g. 'legal-forms/2024'")
+    folder_path: str = Field("", description="Destination folder relative to caseId, e.g. 'legal-forms/2024'. Empty = case root.")
     content_type: str = Field(..., description="MIME type of the file")
     case_id: str = Field(..., description="Case the file belongs to — all uploads are case-scoped")
     size_bytes: Optional[int] = Field(None, ge=1)

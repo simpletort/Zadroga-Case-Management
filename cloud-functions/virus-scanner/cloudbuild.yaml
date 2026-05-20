@@ -47,12 +47,12 @@ steps:
     args:
       - run
       - deploy
-      - "$_SERVICE_NAME"
+      - "$_SERVICE_NAME-$_ENV"
       - "--image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
       - "--region=$_REGION"
       - "--platform=managed"
       - "--no-allow-unauthenticated"
-      - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,GCS_BUCKET_NAME=$_BUCKET,ENV=$_ENV"
+      - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,GCS_BUCKET_NAME=$_BUCKET,ENV=$_ENV,FIRESTORE_DATABASE_ID=$_FIRESTORE_DATABASE_ID"
       - "--memory=1Gi"
       - "--cpu=1"
       - "--timeout=300s"
