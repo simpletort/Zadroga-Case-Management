@@ -87,6 +87,17 @@ class Permission(str, Enum):
     AUDIT_LOG_READ      = "auditLog.read"
     SYSTEM_ADMIN        = "system.admin"
 
+    # Storage
+    STORAGE_SIGNED_URL      = "storage.signed_url"
+    STORAGE_METADATA_READ   = "storage.metadata.read"
+    STORAGE_LIFECYCLE_READ  = "storage.lifecycle.read"
+    STORAGE_LIFECYCLE_WRITE = "storage.lifecycle.write"
+    STORAGE_HOLD_WRITE      = "storage.hold.write"
+    STORAGE_UPLOAD_WRITE    = "storage.upload.write"
+    STORAGE_UPLOAD_READ     = "storage.upload.read"
+    STORAGE_DOCUMENTS_READ  = "storage.documents.read"
+    STORAGE_DOCUMENTS_WRITE = "storage.documents.write"
+
     # Kept for internal API guards (not stored in Firestore roles)
     MANAGE_USERS        = "staff.manage"
     VIEW_AUDIT_LOG      = "auditLog.read"
@@ -102,6 +113,11 @@ ROLE_PERMISSIONS: dict[Role, Set[Permission]] = {
         Permission.DOCUMENTS_UPLOAD,
         Permission.COMMUNICATIONS_READ,
         Permission.TIMELINE_READ,
+        Permission.STORAGE_SIGNED_URL,
+        Permission.STORAGE_METADATA_READ,
+        Permission.STORAGE_UPLOAD_WRITE,
+        Permission.STORAGE_UPLOAD_READ,
+        Permission.STORAGE_DOCUMENTS_READ,
     },
 
     Role.ADMIN_STAFF: {
@@ -123,6 +139,12 @@ ROLE_PERMISSIONS: dict[Role, Set[Permission]] = {
         Permission.DISBURSEMENTS_READ,
         Permission.STAFF_READ,
         Permission.MANAGE_USERS,        # allows user management API
+        Permission.STORAGE_SIGNED_URL,
+        Permission.STORAGE_METADATA_READ,
+        Permission.STORAGE_UPLOAD_WRITE,
+        Permission.STORAGE_UPLOAD_READ,
+        Permission.STORAGE_DOCUMENTS_READ,
+        Permission.STORAGE_DOCUMENTS_WRITE,
     },
 
     Role.PARALEGAL: {
@@ -145,6 +167,12 @@ ROLE_PERMISSIONS: dict[Role, Set[Permission]] = {
         Permission.DISBURSEMENTS_READ,
         Permission.STAFF_READ,
         Permission.REPORTS_READ,
+        Permission.STORAGE_SIGNED_URL,
+        Permission.STORAGE_METADATA_READ,
+        Permission.STORAGE_UPLOAD_WRITE,
+        Permission.STORAGE_UPLOAD_READ,
+        Permission.STORAGE_DOCUMENTS_READ,
+        Permission.STORAGE_DOCUMENTS_WRITE,
     },
 
     Role.JUNIOR_PARTNER: {
@@ -171,6 +199,14 @@ ROLE_PERMISSIONS: dict[Role, Set[Permission]] = {
         Permission.REPORTS_READ,
         Permission.ANALYTICS_READ,
         Permission.SETTINGS_READ,
+        Permission.STORAGE_SIGNED_URL,
+        Permission.STORAGE_METADATA_READ,
+        Permission.STORAGE_UPLOAD_WRITE,
+        Permission.STORAGE_UPLOAD_READ,
+        Permission.STORAGE_DOCUMENTS_READ,
+        Permission.STORAGE_DOCUMENTS_WRITE,
+        Permission.STORAGE_LIFECYCLE_READ,
+        Permission.STORAGE_HOLD_WRITE,
     },
 
     Role.SENIOR_PARTNER: {p for p in Permission},  # all permissions
