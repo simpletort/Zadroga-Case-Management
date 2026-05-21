@@ -111,6 +111,16 @@ def virus_scan(event: CloudEvent) -> None:
         return
 
     upload_data = upload_snap.to_dict()
+
+    # Skip re-processing if a previous invocation already completed the scan.
+    existing_status = upload_data.get("scanStatus")
+    if existing_status in ("clean", "infected"):
+        logger.info(
+            "Skipping re-scan: fileId=%s already has scanStatus=%s",
+            file_id, existing_status,
+        )
+        return
+
     case_id: str | None = upload_data.get("caseId")
     category: str = upload_data.get("category", "")
     final_path: str = upload_data.get("finalPath", "")
@@ -135,6 +145,13 @@ def virus_scan(event: CloudEvent) -> None:
         logger.info("Downloaded %s → %s", blob_path, tmp_path)
     except Exception as exc:
         logger.error("Download failed for %s: %s", blob_path, exc)
+        if upload_data.get("scanStatus") in ("clean", "infected"):
+            logger.info(
+                "Staging file gone but scan already completed "
+                "(scanStatus=%s); ignoring download error for fileId=%s",
+                upload_data.get("scanStatus"), file_id,
+            )
+            return
         _mark_error(upload_ref, db, case_id, file_id, str(exc))
         return
 

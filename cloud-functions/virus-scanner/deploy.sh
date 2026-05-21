@@ -33,8 +33,9 @@ gcloud run deploy "${SERVICE_NAME}" \
   --platform=managed \
   --no-allow-unauthenticated \
   --set-env-vars="GCP_PROJECT_ID=${PROJECT_ID},GCS_BUCKET_NAME=${BUCKET},ENV=${ENV}" \
-  --memory=1Gi \
+  --memory=2Gi \
   --cpu=1 \
+  --concurrency=1 \
   --timeout=300s \
   --max-instances=5 \
   --min-instances=0 \
