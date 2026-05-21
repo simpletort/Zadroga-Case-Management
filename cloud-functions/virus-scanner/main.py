@@ -240,6 +240,7 @@ def _handle_clean(
             "scanStatus": "clean",
             "gcsPath": final_path,
             "scanCompletedAt": scan_completed_at,
+            "processingStatus": "Completed",
         })
 
     updates = {
@@ -295,6 +296,7 @@ def _handle_infected(
             "scanStatus": "infected",
             "isQuarantined": True,
             "scanCompletedAt": scan_completed_at,
+            "processingStatus": "Failed",
         })
 
     updates = {
