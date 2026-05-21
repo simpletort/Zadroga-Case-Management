@@ -71,6 +71,7 @@ def generate_signed_url(
     action: UrlAction,
     content_type: Optional[str] = None,
     expiry_minutes: Optional[int] = None,
+    inline: bool = False,
 ) -> tuple[str, datetime.datetime]:
     """
     Generate a v4 signed URL for the given blob path.
@@ -99,6 +100,8 @@ def generate_signed_url(
     }
     if action == UrlAction.write and content_type:
         kwargs["content_type"] = content_type
+    if action == UrlAction.read and inline:
+        kwargs["response_disposition"] = "inline"
 
     signed_url = blob.generate_signed_url(**kwargs)
     expires_at = datetime.datetime.utcnow() + expiration

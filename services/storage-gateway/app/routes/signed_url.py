@@ -34,6 +34,7 @@ def get_signed_url(
     file_name: str = Query(..., description="File name, e.g. records_2024.pdf"),
     action: UrlAction = Query(UrlAction.read, description="'read' for download, 'write' for upload"),
     content_type: Optional[str] = Query(None, description="MIME type — required for write action"),
+    inline: bool = Query(False, description="Return Content-Disposition: inline so browsers display the file rather than downloading it"),
 ):
     if action == UrlAction.write and not content_type:
         raise HTTPException(
@@ -55,6 +56,7 @@ def get_signed_url(
         blob_path=blob_path,
         action=action,
         content_type=content_type,
+        inline=inline,
     )
 
     audit_action = AuditAction.signed_url_read if action == UrlAction.read else AuditAction.signed_url_write
