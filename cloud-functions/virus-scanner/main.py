@@ -235,19 +235,19 @@ def _handle_clean(
             file_id, final_path,
         )
 
-    updates = {
-        "scanStatus": "clean",
-        "scanCompletedAt": scan_completed_at,
-        "scanResult": raw_output[:2048],    # cap stored output size
-    }
-    upload_ref.update(updates)
-
     if case_id:
         _case_doc_ref(db, case_id, file_id).update({
             "scanStatus": "clean",
             "gcsPath": final_path,
             "scanCompletedAt": scan_completed_at,
         })
+
+    updates = {
+        "scanStatus": "clean",
+        "scanCompletedAt": scan_completed_at,
+        "scanResult": raw_output[:2048],    # cap stored output size
+    }
+    upload_ref.update(updates)
 
     logger.info("Clean file finalised: fileId=%s path=%s", file_id, final_path)
 
@@ -290,6 +290,13 @@ def _handle_infected(
     except Exception as exc:
         logger.error("Staging delete failed for %s: %s", blob_path, exc)
 
+    if case_id:
+        _case_doc_ref(db, case_id, file_id).update({
+            "scanStatus": "infected",
+            "isQuarantined": True,
+            "scanCompletedAt": scan_completed_at,
+        })
+
     updates = {
         "scanStatus": "infected",
         "scanCompletedAt": scan_completed_at,
@@ -298,13 +305,6 @@ def _handle_infected(
         "quarantinePath": quarantine_path,
     }
     upload_ref.update(updates)
-
-    if case_id:
-        _case_doc_ref(db, case_id, file_id).update({
-            "scanStatus": "infected",
-            "isQuarantined": True,
-            "scanCompletedAt": scan_completed_at,
-        })
 
     # Pub/Sub notification (non-fatal)
     publish_virus_detected(
