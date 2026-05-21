@@ -87,3 +87,52 @@ class TestSignedUrlRoute:
         call_kwargs = mock_blob.generate_signed_url.call_args.kwargs
         assert call_kwargs["expiration"] == datetime.timedelta(minutes=15)
         assert call_kwargs["method"] == "PUT"
+
+    def test_inline_true_sets_response_disposition(self, client):
+        mock_blob = MagicMock()
+        mock_blob.generate_signed_url.return_value = "https://storage.googleapis.com/signed?token=abc"
+
+        mock_bucket = MagicMock()
+        mock_bucket.blob.return_value = mock_blob
+
+        with patch("app.routes.signed_url.get_gcs_client") as mock_gcs:
+            mock_gcs.return_value.bucket.return_value = mock_bucket
+
+            resp = client.get(
+                "/api/v1/storage/signed-url",
+                params={
+                    "case_id": "ZAD-2024-01-0001",
+                    "folder_path": "legal-forms",
+                    "file_name": "intake.pdf",
+                    "action": "read",
+                    "inline": "true",
+                },
+            )
+
+        assert resp.status_code == 200
+        call_kwargs = mock_blob.generate_signed_url.call_args.kwargs
+        assert call_kwargs.get("response_disposition") == "inline"
+
+    def test_inline_false_by_default_no_response_disposition(self, client):
+        mock_blob = MagicMock()
+        mock_blob.generate_signed_url.return_value = "https://storage.googleapis.com/signed?token=abc"
+
+        mock_bucket = MagicMock()
+        mock_bucket.blob.return_value = mock_blob
+
+        with patch("app.routes.signed_url.get_gcs_client") as mock_gcs:
+            mock_gcs.return_value.bucket.return_value = mock_bucket
+
+            resp = client.get(
+                "/api/v1/storage/signed-url",
+                params={
+                    "case_id": "ZAD-2024-01-0001",
+                    "folder_path": "legal-forms",
+                    "file_name": "intake.pdf",
+                    "action": "read",
+                },
+            )
+
+        assert resp.status_code == 200
+        call_kwargs = mock_blob.generate_signed_url.call_args.kwargs
+        assert "response_disposition" not in call_kwargs
