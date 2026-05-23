@@ -159,7 +159,7 @@ def get_overdue_tasks_per_user() -> Dict[str, int]:
 
     overdue = (
         db.collection_group("tasks")
-        .where("status", "==", "Open")
+        .where("status", "in", ["pending", "in_progress", "overdue"])
         .where("dueAt", "<", now_ts)
         .stream()
     )
