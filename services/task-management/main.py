@@ -1,5 +1,5 @@
 """
-SimpleTort — Task Service
+SimpleTort — Task Management Service
 Cloud Run | Python 3.11+ | FastAPI 0.110.x | Pydantic 2.x
 """
 
@@ -7,9 +7,13 @@ import logging
 import sys
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+
+from shared.middlewares.auth import AuthMiddleware
+from shared.middlewares.cors import get_cors_origins
+from shared.middlewares.error_handler import ErrorHandlerMiddleware
+from shared.middlewares.logging import LoggingMiddleware
 
 from app.config import get_settings
 from app.routes import tasks, user_tasks, internal
@@ -28,35 +32,45 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     from app.utils.firestore import get_firestore_client
     get_firestore_client()
-    logger.info("Task service started — Firestore client initialised")
+    logger.info("Task management service started — Firestore client initialised")
     yield
-    logger.info("Task service shutting down")
+    logger.info("Task management service shutting down")
 
 
 app = FastAPI(
-    title="SimpleTort Task Service",
+    title="SimpleTort Task Management Service",
     version="1.0.0",
     lifespan=lifespan,
     docs_url="/docs" if settings.environment != "production" else None,
     redoc_url=None,
 )
 
+# Routes that require elevated permissions beyond basic auth.
+# All other routes require only a valid authenticated session (any role).
+_ROUTE_PERMISSIONS: list[tuple[str, str, str]] = [
+    ("POST",   r"^/api/v1/tasks/[^/]+/assign$", "tasks.assign"),   # paralegal+
+    ("POST",   r"^/api/v1/tasks/[^/]+/skip$",   "tasks.skip"),     # junior_partner+
+    ("DELETE", r"^/api/v1/tasks/[^/]+$",         "tasks.delete"),   # senior_partner+
+]
+
+app.add_middleware(ErrorHandlerMiddleware)
+app.add_middleware(LoggingMiddleware)
+app.add_middleware(
+    AuthMiddleware,
+    route_permissions=_ROUTE_PERMISSIONS,
+    roles_firestore_project=settings.gcp_project_id,
+    roles_firestore_database=settings.firestore_database_id,
+    trusted_service_accounts=settings.trusted_service_accounts,
+    skip_paths=["/health", "/internal/reminders"],
+    app_env=settings.environment,
+)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://staff.simpletort.com"],
+    allow_origins=get_cors_origins(settings.environment),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "DELETE"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["Authorization", "Content-Type", "x-apigateway-api-userinfo"],
 )
-
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    logger.error("Unhandled error on %s: %s", request.url, exc, exc_info=True)
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "An internal error occurred. Please try again."},
-    )
 
 
 @app.get("/health", include_in_schema=False)

@@ -4,12 +4,12 @@ HTTP layer tests — exercises FastAPI routes with mocked business logic and aut
 All task_service functions are mocked so these tests cover:
   - Correct HTTP status codes
   - Request body validation
-  - Auth/role enforcement
+  - Role enforcement (via inline ROLE_HIERARCHY checks in route handlers)
   - Query parameter handling
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, AsyncMock
 from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 
@@ -19,7 +19,7 @@ from app.models.task import (
 
 
 # ---------------------------------------------------------------------------
-# Fixtures
+# Helpers
 # ---------------------------------------------------------------------------
 
 def _make_task_response(
@@ -40,45 +40,44 @@ def _make_task_response(
     )
 
 
-def _auth_override(role: str = "admin_staff", uid: str = "uid-test"):
-    from app.utils.auth import get_current_user
-    return {get_current_user: lambda: {"uid": uid, "role": role}}
+def _make_bypass(role: str, uid: str):
+    """Return an async method that injects request.state.user and skips real auth."""
+    async def bypass(self, request, call_next):
+        request.state.user = {"uid": uid, "role": role}
+        return await call_next(request)
+    return bypass
 
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
 
 @pytest.fixture
 def client():
     from main import app
-    from app.utils.auth import get_current_user
-    app.dependency_overrides[get_current_user] = lambda: {"uid": "uid-test", "role": "admin_staff"}
-    yield TestClient(app)
-    app.dependency_overrides.clear()
+    with patch("shared.middlewares.auth.AuthMiddleware.dispatch", _make_bypass("admin_staff", "uid-test")):
+        yield TestClient(app)
 
 
 @pytest.fixture
 def paralegal_client():
     from main import app
-    from app.utils.auth import get_current_user
-    app.dependency_overrides[get_current_user] = lambda: {"uid": "uid-para", "role": "paralegal"}
-    yield TestClient(app)
-    app.dependency_overrides.clear()
+    with patch("shared.middlewares.auth.AuthMiddleware.dispatch", _make_bypass("paralegal", "uid-para")):
+        yield TestClient(app)
 
 
 @pytest.fixture
 def partner_client():
     from main import app
-    from app.utils.auth import get_current_user
-    app.dependency_overrides[get_current_user] = lambda: {"uid": "uid-partner", "role": "junior_partner"}
-    yield TestClient(app)
-    app.dependency_overrides.clear()
+    with patch("shared.middlewares.auth.AuthMiddleware.dispatch", _make_bypass("junior_partner", "uid-partner")):
+        yield TestClient(app)
 
 
 @pytest.fixture
 def senior_client():
     from main import app
-    from app.utils.auth import get_current_user
-    app.dependency_overrides[get_current_user] = lambda: {"uid": "uid-senior", "role": "senior_partner"}
-    yield TestClient(app)
-    app.dependency_overrides.clear()
+    with patch("shared.middlewares.auth.AuthMiddleware.dispatch", _make_bypass("senior_partner", "uid-senior")):
+        yield TestClient(app)
 
 
 # ---------------------------------------------------------------------------
@@ -140,9 +139,9 @@ class TestCreateTaskRoute:
         resp = client.post("/api/v1/tasks", json={"caseId": "ZAD-2026-05-0001"})
         assert resp.status_code == 422
 
-    def test_create_task_unauthenticated_returns_403(self):
+    def test_create_task_unauthenticated_returns_401(self):
         from main import app
-        # No dependency override — no auth header → HTTPBearer raises 403
+        # No middleware bypass — real middleware returns 401 for missing auth
         bare_client = TestClient(app, raise_server_exceptions=False)
         resp = bare_client.post("/api/v1/tasks", json={
             "caseId": "ZAD-2026-05-0001",
@@ -335,8 +334,8 @@ class TestAssignTaskRoute:
         )
         assert resp.status_code == 200
 
-    def test_assign_missing_both_fields_returns_422(self, client):
-        resp = client.post(
+    def test_assign_missing_both_fields_returns_422(self, paralegal_client):
+        resp = paralegal_client.post(
             "/api/v1/tasks/task-abc/assign?caseId=ZAD-2026-05-0001",
             json={},
         )
