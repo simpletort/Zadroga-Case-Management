@@ -56,6 +56,7 @@ def _make_bypass(role: str, uid: str):
 def client():
     from main import app
     with patch("shared.middlewares.auth.AuthMiddleware.dispatch", _make_bypass("admin_staff", "uid-test")):
+        app.middleware_stack = None  # force rebuild with patched dispatch
         yield TestClient(app)
 
 
@@ -63,6 +64,7 @@ def client():
 def paralegal_client():
     from main import app
     with patch("shared.middlewares.auth.AuthMiddleware.dispatch", _make_bypass("paralegal", "uid-para")):
+        app.middleware_stack = None
         yield TestClient(app)
 
 
@@ -70,6 +72,7 @@ def paralegal_client():
 def partner_client():
     from main import app
     with patch("shared.middlewares.auth.AuthMiddleware.dispatch", _make_bypass("junior_partner", "uid-partner")):
+        app.middleware_stack = None
         yield TestClient(app)
 
 
@@ -77,6 +80,7 @@ def partner_client():
 def senior_client():
     from main import app
     with patch("shared.middlewares.auth.AuthMiddleware.dispatch", _make_bypass("senior_partner", "uid-senior")):
+        app.middleware_stack = None
         yield TestClient(app)
 
 
