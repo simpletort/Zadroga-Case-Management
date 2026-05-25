@@ -145,7 +145,7 @@ class TestCreateTaskRoute:
 
     def test_create_task_unauthenticated_returns_401(self):
         from main import app
-        # No middleware bypass — real middleware returns 401 for missing auth
+        app.middleware_stack = None  # ensure real middleware is rebuilt (no bypass from prior fixture)
         bare_client = TestClient(app, raise_server_exceptions=False)
         resp = bare_client.post("/api/v1/tasks", json={
             "caseId": "ZAD-2026-05-0001",
