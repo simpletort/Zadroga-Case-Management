@@ -10,13 +10,14 @@ steps:
         pytest tests/ -v --tb=short
 
   - name: "gcr.io/cloud-builders/docker"
-    dir: "services/task-management"
     args:
       - build
       - "-t"
       - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
       - "-t"
       - "$_REPO/$_SERVICE_NAME:latest"
+      - "-f"
+      - "services/task-management/Dockerfile"
       - "."
 
   - name: "gcr.io/cloud-builders/docker"
