@@ -3295,6 +3295,295 @@ paths:
         404:
           description: Source not found
 
+  # ============================================================
+  # TASK MANAGEMENT SERVICE
+  # Cloud Run: https://task-management-292736139819.us-central1.run.app
+  # Min role required per endpoint is enforced by the service itself (RBAC).
+  # ============================================================
+
+  # --- Create / Get / Update task ---
+
+  /api/v1/tasks:
+    options:
+      operationId: corsPreflightTasks
+      security: []
+      x-google-backend:
+        address: https://task-management-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    post:
+      summary: "Create a new task on a case (min role: admin_staff)"
+      operationId: createTask
+      x-google-backend:
+        address: https://task-management-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        201:
+          description: Task created
+        401:
+          description: Unauthorized
+        422:
+          description: Validation error
+
+  /api/v1/tasks/{taskId}:
+    options:
+      operationId: corsPreflightTaskById
+      security: []
+      parameters:
+        - { name: taskId, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://task-management-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: "Get a single task by ID (min role: admin_staff)"
+      operationId: getTask
+      parameters:
+        - { name: taskId, in: path, required: true, type: string }
+        - { name: caseId, in: query, type: string }
+      x-google-backend:
+        address: https://task-management-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Success
+        401:
+          description: Unauthorized
+        404:
+          description: Task not found
+    patch:
+      summary: "Update task fields (min role: admin_staff)"
+      operationId: updateTask
+      parameters:
+        - { name: taskId, in: path, required: true, type: string }
+        - { name: caseId, in: query, required: true, type: string }
+      x-google-backend:
+        address: https://task-management-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Task updated
+        401:
+          description: Unauthorized
+        404:
+          description: Task not found
+        422:
+          description: Validation error
+    delete:
+      summary: "Permanently delete a task (min role: senior_partner)"
+      operationId: deleteTask
+      parameters:
+        - { name: taskId, in: path, required: true, type: string }
+        - { name: caseId, in: query, required: true, type: string }
+      x-google-backend:
+        address: https://task-management-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: Task deleted
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient role
+        404:
+          description: Task not found
+
+  # --- Task lifecycle actions ---
+
+  /api/v1/tasks/{taskId}/start:
+    options:
+      operationId: corsPreflightTaskStart
+      security: []
+      parameters:
+        - { name: taskId, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://task-management-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    post:
+      summary: "Transition task to in_progress (min role: admin_staff)"
+      operationId: startTask
+      parameters:
+        - { name: taskId, in: path, required: true, type: string }
+        - { name: caseId, in: query, required: true, type: string }
+      x-google-backend:
+        address: https://task-management-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Task started
+        401:
+          description: Unauthorized
+        409:
+          description: Invalid status transition
+
+  /api/v1/tasks/{taskId}/complete:
+    options:
+      operationId: corsPreflightTaskComplete
+      security: []
+      parameters:
+        - { name: taskId, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://task-management-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    post:
+      summary: "Mark a task as completed (min role: admin_staff)"
+      operationId: completeTask
+      parameters:
+        - { name: taskId, in: path, required: true, type: string }
+        - { name: caseId, in: query, required: true, type: string }
+      x-google-backend:
+        address: https://task-management-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Task completed
+        401:
+          description: Unauthorized
+        409:
+          description: Task already in terminal status
+        422:
+          description: Validation error
+
+  /api/v1/tasks/{taskId}/skip:
+    options:
+      operationId: corsPreflightTaskSkip
+      security: []
+      parameters:
+        - { name: taskId, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://task-management-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    post:
+      summary: "Skip a task with a reason (min role: junior_partner)"
+      operationId: skipTask
+      parameters:
+        - { name: taskId, in: path, required: true, type: string }
+        - { name: caseId, in: query, required: true, type: string }
+      x-google-backend:
+        address: https://task-management-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Task skipped
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient role
+        409:
+          description: Task already in terminal status
+        422:
+          description: Validation error
+
+  /api/v1/tasks/{taskId}/assign:
+    options:
+      operationId: corsPreflightTaskAssign
+      security: []
+      parameters:
+        - { name: taskId, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://task-management-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    post:
+      summary: "Assign task to a user or role (min role: admin_staff for self, junior_partner for others)"
+      operationId: assignTask
+      parameters:
+        - { name: taskId, in: path, required: true, type: string }
+        - { name: caseId, in: query, required: true, type: string }
+      x-google-backend:
+        address: https://task-management-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Task assigned
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient role
+        422:
+          description: Validation error
+
+  # --- Case task list ---
+
+  /api/v1/cases/{caseId}/tasks:
+    options:
+      operationId: corsPreflightCaseTasks
+      security: []
+      parameters:
+        - { name: caseId, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://task-management-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: "List all tasks for a case (min role: admin_staff)"
+      operationId: listCaseTasks
+      parameters:
+        - { name: caseId, in: path, required: true, type: string }
+        - { name: status, in: query, type: string }
+        - { name: priority, in: query, type: string }
+        - { name: limit, in: query, type: integer }
+      x-google-backend:
+        address: https://task-management-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Success
+        401:
+          description: Unauthorized
+        422:
+          description: Invalid filter value
+
+  # --- User task list ---
+
+  /api/v1/users/{userId}/tasks:
+    options:
+      operationId: corsPreflightUserTasks
+      security: []
+      parameters:
+        - { name: userId, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://task-management-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: "List tasks assigned to a user (min role: admin_staff for own, senior_partner for others)"
+      operationId: listUserTasks
+      parameters:
+        - { name: userId, in: path, required: true, type: string }
+        - { name: status, in: query, type: string }
+        - { name: overdue_only, in: query, type: boolean }
+        - { name: limit, in: query, type: integer }
+      x-google-backend:
+        address: https://task-management-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Success
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient role
+
 securityDefinitions:
   firebase:
     authorizationUrl: ""

@@ -57,6 +57,9 @@ class Permission(str, Enum):
     TASKS_READ          = "tasks.read"
     TASKS_WRITE         = "tasks.write"
     TASKS_COMPLETE      = "tasks.complete"
+    TASKS_ASSIGN        = "tasks.assign"   # paralegal+ — reassign any task
+    TASKS_SKIP          = "tasks.skip"     # junior_partner+ — skip a task with reason
+    TASKS_DELETE        = "tasks.delete"   # senior_partner+ — hard delete a task
 
     # Communications
     COMMUNICATIONS_READ  = "communications.read"
@@ -159,6 +162,7 @@ ROLE_PERMISSIONS: dict[Role, Set[Permission]] = {
         Permission.TASKS_READ,
         Permission.TASKS_WRITE,
         Permission.TASKS_COMPLETE,
+        Permission.TASKS_ASSIGN,
         Permission.COMMUNICATIONS_READ,
         Permission.COMMUNICATIONS_WRITE,
         Permission.TIMELINE_READ,
@@ -188,6 +192,8 @@ ROLE_PERMISSIONS: dict[Role, Set[Permission]] = {
         Permission.TASKS_READ,
         Permission.TASKS_WRITE,
         Permission.TASKS_COMPLETE,
+        Permission.TASKS_ASSIGN,
+        Permission.TASKS_SKIP,
         Permission.COMMUNICATIONS_READ,
         Permission.COMMUNICATIONS_WRITE,
         Permission.TIMELINE_READ,
