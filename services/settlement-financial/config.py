@@ -42,7 +42,10 @@ class Settings(BaseSettings):
     )
 
     # ── Cloud Storage ─────────────────────────────────────────────────────
-    gcs_bucket: str = Field("zadroga-case-files-dev", alias="GCS_BUCKET")
+    gcs_bucket: str = Field("case-files-dev", alias="GCS_BUCKET")
+
+    # Storage Gateway service URL (Cloud Run) — all case file ops go through here
+    storage_gateway_url: str = Field("", alias="STORAGE_GATEWAY_URL")
 
     # ── Firm logo ─────────────────────────────────────────────────────────
     # Absolute path to the logo file on the container filesystem.

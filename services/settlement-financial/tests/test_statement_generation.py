@@ -234,16 +234,27 @@ class TestAssemblePdfData:
         assert data["memo"]           == "Ref: ZAD-001"
 
     @pytest.mark.asyncio
-    async def test_missing_firestore_docs_no_crash(self):
+    async def test_missing_case_and_financial_docs_no_crash(self):
+        """Case/inputs/expenses docs absent → zeros, but firm data must be present."""
         from services.pdf_service import _assemble_pdf_data
         from models.statement import StatementGenerateRequest
-        db = _make_db()
+        # firm_data is required; only case/financial docs are absent
+        db = _make_db(firm_data=FIRM)
         data, _, _ = await _assemble_pdf_data(db, "ZAD-MISSING", StatementGenerateRequest())
         assert data["gross_award"]    == Decimal("0")
         assert data["total_expenses"] == Decimal("0")
         assert data["expenses"] == []
         assert data["liens"]    == []
         assert data["loans"]    == []
+
+    @pytest.mark.asyncio
+    async def test_missing_firm_name_raises_config_error(self):
+        """firmSettings/profile.firmName absent → ConfigError (no silent fallback)."""
+        from services.pdf_service import _assemble_pdf_data, ConfigError
+        from models.statement import StatementGenerateRequest
+        db = _make_db(firm_data={})   # profile doc exists but firmName key is missing
+        with pytest.raises(ConfigError, match="firmSettings/profile.firmName is required"):
+            await _assemble_pdf_data(db, "ZAD-001", StatementGenerateRequest())
 
 
 # ── Tests: build_and_upload_statement ────────────────────────────────────────
@@ -333,11 +344,21 @@ class TestStatementEndpoint:
         from main import app
         return TestClient(app)
 
-    @patch("main.build_and_upload_statement", new_callable=lambda: lambda *a, **kw: AsyncMock)
-    @patch("main.get_db", return_value=MagicMock())
+    @patch("main.get_db")
     @patch("main.get_settings", return_value=MagicMock(gcs_bucket="test-bucket", firm_logo_path=""))
-    def test_endpoint_returns_201(self, mock_settings, mock_get_db, mock_build_cls):
+    def test_endpoint_returns_201(self, mock_settings, mock_get_db):
         from models.statement import StatementGenerateResponse
+
+        # The endpoint calls db.collection(...).document(...).collection(...).document(...).set(...)
+        # after build_and_upload_statement returns.  Make .set() awaitable.
+        mock_db = MagicMock()
+        (mock_db.collection.return_value
+                .document.return_value
+                .collection.return_value
+                .document.return_value
+                .set) = AsyncMock()
+        mock_get_db.return_value = mock_db
+
         expected = StatementGenerateResponse(
             case_id        = "ZAD-001",
             statement_id   = str(uuid.uuid4()),

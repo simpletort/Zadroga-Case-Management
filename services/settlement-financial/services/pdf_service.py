@@ -26,6 +26,16 @@ from models.statement import StatementGenerateRequest, StatementGenerateResponse
 from templates.settlement_statement_template import build_settlement_pdf
 
 
+# ── Exceptions ────────────────────────────────────────────────────────────────
+
+class ConfigError(RuntimeError):
+    """
+    Raised when a required firmSettings value is missing from Firestore.
+    Seed the missing document using scripts/seed_firm_settings.py before
+    generating settlement statements.
+    """
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _dec(val, default: str = "0") -> Decimal:
@@ -44,8 +54,14 @@ def _today_display() -> str:
 async def _load_firm_settings(db) -> dict[str, str]:
     doc = await db.collection("firmSettings").document("profile").get()
     data = doc.to_dict() if doc.exists else {}
+    firm_name = data.get("firmName")
+    if not firm_name:
+        raise ConfigError(
+            "firmSettings/profile.firmName is required for settlement statement generation. "
+            "Seed the value using scripts/seed_firm_settings.py or the admin API."
+        )
     return {
-        "firm_name":    data.get("firmName",    "Law Firm"),
+        "firm_name":    firm_name,
         "firm_address": data.get("firmAddress", ""),
         "firm_phone":   data.get("firmPhone",   ""),
         "firm_email":   data.get("firmEmail",   ""),
@@ -56,12 +72,12 @@ async def _load_case_info(db, case_id: str) -> dict[str, str]:
     doc = await db.collection("cases").document(case_id).get()
     data = doc.to_dict() if doc.exists else {}
 
-    # Try direct clientName field; fall back to leadData composite name
+    # Try direct clientName field; fall back to top-level or leadData firstName/lastName
     client_name = data.get("clientName") or data.get("client_name")
     if not client_name:
         lead  = data.get("leadData", {})
-        first = lead.get("firstName", "")
-        last  = lead.get("lastName", "")
+        first = lead.get("firstName", "") or data.get("firstName", "")
+        last  = lead.get("lastName", "")  or data.get("lastName", "")
         client_name = f"{first} {last}".strip() or "—"
 
     return {
