@@ -59,6 +59,7 @@ GET /health
 """
 from __future__ import annotations
 
+import asyncio
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -147,6 +148,10 @@ _INPUTS_DOC     = "inputs"
 
 # Documents inside settlement/ that are NOT saved calculations
 _SETTLEMENT_RESERVED = {"inputs", "expenses", "liens", "loans", "disbursements", "fee_override"}
+
+def _is_reserved(doc_id: str) -> bool:
+    """Return True for any doc that is not a saved calculation UUID."""
+    return doc_id in _SETTLEMENT_RESERVED or doc_id.startswith("statement_")
 
 
 # ── Firestore reference helpers ───────────────────────────────────────────────
@@ -266,21 +271,47 @@ app = FastAPI(
     openapi_url="/openapi.json",
     docs_url="/docs",
     lifespan=lifespan,
+    swagger_ui_init_oauth={},
+    openapi_tags=[],
 )
+
+# Bearer token security scheme — enables the Authorize button in Swagger UI
+from fastapi.openapi.utils import get_openapi
+
+def _custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    schema.setdefault("components", {})
+    schema["components"]["securitySchemes"] = {
+        "BearerAuth": {"type": "http", "scheme": "bearer"}
+    }
+    schema["security"] = [{"BearerAuth": []}]
+    app.openapi_schema = schema
+    return schema
+
+app.openapi = _custom_openapi
 
 _settings = get_settings()
 
 app.add_middleware(ErrorHandlerMiddleware)
 app.add_middleware(LoggingMiddleware)
-app.add_middleware(
-    AuthMiddleware,
-    route_permissions=_ROUTE_PERMISSIONS,
-    roles_firestore_project=_settings.gcp_project_id,
-    roles_firestore_database=_settings.roles_firestore_database_id,
-    trusted_service_accounts=[
-        e.strip() for e in _settings.trusted_service_accounts.split(",") if e.strip()
-    ],
-)
+if not _settings.is_development:
+    app.add_middleware(
+        AuthMiddleware,
+        route_permissions=_ROUTE_PERMISSIONS,
+        roles_firestore_project=_settings.gcp_project_id,
+        roles_firestore_database=_settings.roles_firestore_database_id,
+        trusted_service_accounts=[
+            e.strip() for e in _settings.trusted_service_accounts.split(",") if e.strip()
+        ],
+        skip_paths=["/health", "/docs", "/openapi.json", "/redoc"],
+    )
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_cors_origins(_settings.environment),
@@ -574,8 +605,8 @@ async def get_case_inputs(case_id: str = Path(..., description="Case ID")):
 )
 async def calculate_from_inputs(case_id: str = Path(..., description="Case ID")):
     """
-    Reads gross_award, attorney_fee_pct and line items from
-    ``cases/{caseId}/settlement/inputs`` and runs the calculation automatically.
+    Reads gross_award and attorney_fee_pct from ``cases/{caseId}/settlement/inputs``,
+    then pulls live line items from the expenses, liens, and loans subcollection docs.
 
     Returns **404** if inputs have not been saved yet.
     Returns **422** if net-to-client would be negative.
@@ -592,15 +623,32 @@ async def calculate_from_inputs(case_id: str = Path(..., description="Case ID"))
         )
     inputs_data = inputs_doc.to_dict()
 
-    def _items(raw: list):
-        return [LineItem(description=i["description"], amount=Decimal(i["amount"])) for i in (raw or [])]
+    # Fetch live line items from the dedicated subcollection docs
+    expenses_doc, liens_doc, loans_doc = await asyncio.gather(
+        _expenses_ref(db, case_id).get(),
+        _liens_ref(db, case_id).get(),
+        _loans_ref(db, case_id).get(),
+    )
+
+    def _expense_items(raw: list) -> list:
+        return [LineItem(description=i.get("description", ""), amount=Decimal(str(i["amount"]))) for i in (raw or [])]
+
+    def _lien_items(raw: list) -> list:
+        return [LineItem(description=i.get("lienholder", i.get("description", "")), amount=Decimal(str(i["amount"]))) for i in (raw or [])]
+
+    def _loan_items(raw: list) -> list:
+        return [LineItem(description=i.get("lender", i.get("description", "")), amount=Decimal(str(i["amount"]))) for i in (raw or [])]
+
+    case_expenses = _expense_items((expenses_doc.to_dict() or {}).get("items", []) if expenses_doc.exists else [])
+    liens         = _lien_items((liens_doc.to_dict() or {}).get("items", []) if liens_doc.exists else [])
+    client_loans  = _loan_items((loans_doc.to_dict() or {}).get("items", []) if loans_doc.exists else [])
 
     calc_request = CalculationRequest(
         gross_award=Decimal(inputs_data["gross_award"]),
         attorney_fee_pct=Decimal(inputs_data["attorney_fee_pct"]),
-        case_expenses=_items(inputs_data.get("case_expenses", [])),
-        liens=_items(inputs_data.get("liens", [])),
-        client_loans=_items(inputs_data.get("client_loans", [])),
+        case_expenses=case_expenses,
+        liens=liens,
+        client_loans=client_loans,
         notes=inputs_data.get("notes"),
     )
 
@@ -670,7 +718,7 @@ async def list_calculations(
 
     docs = []
     async for doc in _calcs_ref(db, case_id).stream():
-        if doc.id in _SETTLEMENT_RESERVED:
+        if _is_reserved(doc.id):
             continue
         docs.append(_doc_to_saved(doc.id, doc.to_dict()))
 
@@ -690,7 +738,7 @@ async def get_latest_calculation(case_id: str = Path(..., description="Case ID")
     db   = get_db()
     docs = []
     async for doc in _calcs_ref(db, case_id).stream():
-        if doc.id in _SETTLEMENT_RESERVED:
+        if _is_reserved(doc.id):
             continue
         docs.append(_doc_to_saved(doc.id, doc.to_dict()))
 

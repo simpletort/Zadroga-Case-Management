@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         return self.app_env == "production"
 
+    @property
+    def is_development(self) -> bool:
+        return self.app_env == "development"
+
     # ── Firestore ─────────────────────────────────────────────────────────
     firestore_database_id: str = Field("(default)", alias="FIRESTORE_DATABASE_ID")
     firebase_service_account_key_path: str = Field(
