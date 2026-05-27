@@ -435,14 +435,24 @@ def test_calculate_from_inputs_success(client):
     mock_inputs_snap.exists = True
     mock_inputs_snap.to_dict.return_value = inputs_doc
 
+    # Empty snapshots for expenses, liens, loans subcollection docs
+    mock_empty_snap = MagicMock()
+    mock_empty_snap.exists = True
+    mock_empty_snap.to_dict.return_value = {"items": []}
+
     mock_calc_snap = MagicMock()
     mock_calc_snap.to_dict.return_value = calc_doc
 
-    # _inputs_ref and _calcs_ref.document(uuid) share the same 4-level mock chain.
-    # Use side_effect so first .get() → inputs snap, second .get() → calc snap.
+    # Call order: inputs → expenses → liens → loans (asyncio.gather) → calc snap
     mock_shared_ref = MagicMock()
     mock_shared_ref.set = AsyncMock()
-    mock_shared_ref.get = AsyncMock(side_effect=[mock_inputs_snap, mock_calc_snap])
+    mock_shared_ref.get = AsyncMock(side_effect=[
+        mock_inputs_snap,   # _inputs_ref.get()
+        mock_empty_snap,    # _expenses_ref.get()
+        mock_empty_snap,    # _liens_ref.get()
+        mock_empty_snap,    # _loans_ref.get()
+        mock_calc_snap,     # _calcs_ref.document(calc_id).get()
+    ])
 
     mock_db = MagicMock()
     (mock_db.collection.return_value
