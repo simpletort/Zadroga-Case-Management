@@ -52,19 +52,32 @@ def _today_display() -> str:
 # ── Async Firestore loaders ───────────────────────────────────────────────────
 
 async def _load_firm_settings(db) -> dict[str, str]:
-    doc = await db.collection("firmSettings").document("profile").get()
-    data = doc.to_dict() if doc.exists else {}
-    firm_name = data.get("firmName")
+    """
+    Reads firm info from individual firmSettings documents.
+    Each doc has a ``value`` field: firm_name, firm_email, firm_phone, firm_address.
+    """
+    name_doc, email_doc, phone_doc, address_doc = await asyncio.gather(
+        db.collection("firmSettings").document("firm_name").get(),
+        db.collection("firmSettings").document("firm_email").get(),
+        db.collection("firmSettings").document("firm_phone").get(),
+        db.collection("firmSettings").document("firm_address").get(),
+    )
+
+    def _val(doc) -> str:
+        return (doc.to_dict() or {}).get("value", "") if doc.exists else ""
+
+    firm_name = _val(name_doc)
     if not firm_name:
         raise ConfigError(
-            "firmSettings/profile.firmName is required for settlement statement generation. "
-            "Seed the value using scripts/seed_firm_settings.py or the admin API."
+            "firmSettings/firm_name.value is required for settlement statement generation. "
+            "Add a 'firm_name' document with a 'value' field in the firmSettings collection."
         )
+
     return {
         "firm_name":    firm_name,
-        "firm_address": data.get("firmAddress", ""),
-        "firm_phone":   data.get("firmPhone",   ""),
-        "firm_email":   data.get("firmEmail",   ""),
+        "firm_address": _val(address_doc),
+        "firm_phone":   _val(phone_doc),
+        "firm_email":   _val(email_doc),
     }
 
 
