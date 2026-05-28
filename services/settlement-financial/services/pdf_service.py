@@ -22,8 +22,11 @@ from typing import Any
 from google.cloud import storage as gcs
 
 from config import Settings
+from logging_config import get_logger
 from models.statement import StatementGenerateRequest, StatementGenerateResponse
 from templates.settlement_statement_template import build_settlement_pdf
+
+logger = get_logger(__name__)
 
 
 # ── Exceptions ────────────────────────────────────────────────────────────────
@@ -65,6 +68,11 @@ async def _load_firm_settings(db) -> dict[str, str]:
 
     def _val(doc) -> str:
         return (doc.to_dict() or {}).get("value", "") if doc.exists else ""
+
+    logger.info("firm_settings_loaded",
+                firm_name_exists=name_doc.exists,
+                firm_address_exists=address_doc.exists,
+                firm_address_value=_val(address_doc))
 
     firm_name = _val(name_doc)
     if not firm_name:
