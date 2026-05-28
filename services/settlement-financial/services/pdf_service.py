@@ -289,7 +289,7 @@ async def build_and_upload_statement(
             partial(build_settlement_pdf, pdf_data, tmp_path, logo_path=logo_path)
         )
 
-        gcs_object = f"settlements/{case_id}/{statement_id}.pdf"
+        gcs_object = f"{case_id}/settlements/{statement_id}.pdf"
         sa_key     = settings.firebase_service_account_key_path
         pdf_url = await loop.run_in_executor(
             None,
