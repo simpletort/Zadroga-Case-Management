@@ -30,7 +30,7 @@ async def _fetch_prefix(db: firestore.AsyncClient) -> str:
     if _case_id_prefix_cache is not None:
         return _case_id_prefix_cache
     doc = await db.collection("firmSettings").document("case_id_prefix").get()
-    _case_id_prefix_cache = doc.get("prefix", "CASE") if doc.exists else "CASE"
+    _case_id_prefix_cache = (doc.to_dict() or {}).get("prefix", "CASE") if doc.exists else "CASE"
     return _case_id_prefix_cache
 
 
