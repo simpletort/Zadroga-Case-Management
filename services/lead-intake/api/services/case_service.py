@@ -22,13 +22,24 @@ from logging_config import get_logger
 
 logger = get_logger(__name__)
 
-
-def _counter_doc_id(year: int, month: int) -> str:
-    return f"ZAD-{year:04d}-{month:02d}"
+_case_id_prefix_cache: Optional[str] = None
 
 
-def _case_id(year: int, month: int, count: int) -> str:
-    return f"ZAD-{year:04d}-{month:02d}-{count:04d}"
+async def _fetch_prefix(db: firestore.AsyncClient) -> str:
+    global _case_id_prefix_cache
+    if _case_id_prefix_cache is not None:
+        return _case_id_prefix_cache
+    doc = await db.collection("firmSettings").document("case_id_prefix").get()
+    _case_id_prefix_cache = doc.get("prefix", "CASE") if doc.exists else "CASE"
+    return _case_id_prefix_cache
+
+
+def _counter_doc_id(prefix: str, year: int, month: int) -> str:
+    return f"{prefix}-{year:04d}-{month:02d}"
+
+
+def _case_id(prefix: str, year: int, month: int, count: int) -> str:
+    return f"{prefix}-{year:04d}-{month:02d}-{count:04d}"
 
 
 async def _get_next_case_id(
@@ -37,7 +48,8 @@ async def _get_next_case_id(
     now:         datetime,
 ) -> str:
     settings    = get_settings()
-    counter_id  = _counter_doc_id(now.year, now.month)
+    prefix      = await _fetch_prefix(db)
+    counter_id  = _counter_doc_id(prefix, now.year, now.month)
     counter_ref = db.collection(settings.firestore_counters_collection).document(counter_id)
     counter_doc = await counter_ref.get(transaction=transaction)
     current_count = counter_doc.to_dict().get("count", 0) if counter_doc.exists else 0
@@ -47,7 +59,7 @@ async def _get_next_case_id(
         {"count": new_count, "updatedAt": firestore.SERVER_TIMESTAMP, "yearMonth": counter_id},
         merge=True,
     )
-    return _case_id(now.year, now.month, new_count)
+    return _case_id(prefix, now.year, now.month, new_count)
 
 
 async def create_case(
@@ -259,12 +271,6 @@ async def update_case_vcf_status(
         "updatedAt":           firestore.SERVER_TIMESTAMP,
     })
     logger.info("case_vcf_updated", case_id=case_id, vcf_eligibility=vcf_eligibility)
-
-# """
-# api/services/case_service.py — Firestore case CRUD with atomic ID generation.
-
-# Changes vs original:
-#   - apply_vcf_screening_result(): writes VCF screening output + creates
 #     staff in-app notification in the notifications collection.
 #   - write_staff_screening_notification(): writes a Firestore notification
 #     document for the assigned paralegal/admin_staff to see in their dashboard.

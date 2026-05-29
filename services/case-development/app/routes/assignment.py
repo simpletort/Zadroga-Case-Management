@@ -34,6 +34,7 @@ def override_assignment(
         assignment=AssignmentInfo(
             assigned_paralegal=result["assigned_paralegal"],
             assigned_paralegal_name=result["assigned_paralegal_name"],
+            assigned_by=result.get("assigned_by"),
             assignment_date=result["assignment_date"],
         ),
         overridden_from=result.get("overridden_from"),
@@ -55,6 +56,7 @@ def read_assignment(
         assignment=AssignmentInfo(
             assigned_paralegal=result["assigned_paralegal"],
             assigned_paralegal_name=result["assigned_paralegal_name"],
+            assigned_by=result.get("assigned_by"),
             assignment_date=result["assignment_date"],
         ),
     )

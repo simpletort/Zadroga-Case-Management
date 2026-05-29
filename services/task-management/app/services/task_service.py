@@ -226,12 +226,13 @@ def list_case_tasks(
     priority_filter: Optional[str] = None,
     limit: int = 50,
 ) -> TaskListResponse:
+    from google.cloud.firestore_v1.base_query import FieldFilter
     query = _tasks_ref(case_id)
 
     if status_filter:
-        query = query.where("status", "==", status_filter)
+        query = query.where(filter=FieldFilter("status", "==", status_filter))
     if priority_filter:
-        query = query.where("priority", "==", priority_filter)
+        query = query.where(filter=FieldFilter("priority", "==", priority_filter))
 
     query = query.order_by("createdAt").limit(min(limit, 200))
     docs = list(query.stream())
@@ -245,13 +246,14 @@ def list_user_tasks(
     overdue_only: bool = False,
     limit: int = 50,
 ) -> TaskListResponse:
+    from google.cloud.firestore_v1.base_query import FieldFilter
     db = get_firestore_client()
-    query = db.collection_group("tasks").where("assignedTo", "==", user_id)
+    query = db.collection_group("tasks").where(filter=FieldFilter("assignedTo", "==", user_id))
 
     if overdue_only:
-        query = query.where("status", "==", TaskStatus.OVERDUE.value)
+        query = query.where(filter=FieldFilter("status", "==", TaskStatus.OVERDUE.value))
     elif status_filter:
-        query = query.where("status", "==", status_filter)
+        query = query.where(filter=FieldFilter("status", "==", status_filter))
 
     query = query.order_by("dueAt").limit(min(limit, 200))
     docs = list(query.stream())

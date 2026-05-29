@@ -142,7 +142,7 @@ class UpdateStatusRequest(BaseModel):
 # ── Response models ───────────────────────────────────────────────────────────
 
 class LeadCreatedResponse(BaseModel):
-    leadId:             str           = Field(..., pattern=r'^ZAD-\d{4}-\d{2}-\d{4}$')
+    leadId:             str           = Field(..., pattern=r'^[A-Z]+-\d{4}-\d{2}-\d{4}$')
     status:             CaseStatus
     vcfScreeningStatus: VCFEligibility
     requestId:          str

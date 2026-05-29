@@ -72,7 +72,55 @@
         { "fieldPath": "assignment.assignedAttorney", "order": "ASCENDING" },
         { "fieldPath": "status", "order": "ASCENDING" }
       ]
-    }
+    },
+
+    { "collectionGroup": "tasks", "queryScope": "COLLECTION_GROUP", "fields": [
+        { "fieldPath": "assignedTo", "order": "ASCENDING" },
+        { "fieldPath": "dueAt",      "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "tasks", "queryScope": "COLLECTION_GROUP", "fields": [
+        { "fieldPath": "assignedTo", "order": "ASCENDING" },
+        { "fieldPath": "status",     "order": "ASCENDING" },
+        { "fieldPath": "dueAt",      "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "tasks", "queryScope": "COLLECTION", "fields": [
+        { "fieldPath": "status",    "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "tasks", "queryScope": "COLLECTION", "fields": [
+        { "fieldPath": "priority",  "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "tasks", "queryScope": "COLLECTION", "fields": [
+        { "fieldPath": "status",    "order": "ASCENDING" },
+        { "fieldPath": "priority",  "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+    ]}
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "collectionGroup": "tasks",
+      "fieldPath": "taskId",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "tasks",
+      "fieldPath": "assignedTo",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
+      "collectionGroup": "tasks",
+      "fieldPath": "dueAt",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    }
+  ]
 }

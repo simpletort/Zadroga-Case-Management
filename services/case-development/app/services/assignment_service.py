@@ -33,9 +33,11 @@ def get_assignment_info(db: firestore.Client, case_id: str) -> dict:
     case_data  = case_snap.to_dict() or {}
     assignment = case_data.get("assignment") or {}
     paralegal_id = assignment.get("assignedParalegal", "")
+    display_name = assignment.get("assignedParalegalName")
+    assigned_by  = assignment.get("assignedBy")
 
-    display_name = None
-    if paralegal_id:
+    # Fallback for older case docs that predate assignedParalegalName being stored
+    if paralegal_id and not display_name:
         staff_snap = db.collection("staff").document(paralegal_id).get()
         if staff_snap.exists:
             display_name = (staff_snap.to_dict() or {}).get("displayName")
@@ -43,6 +45,7 @@ def get_assignment_info(db: firestore.Client, case_id: str) -> dict:
     return {
         "assigned_paralegal":      paralegal_id or None,
         "assigned_paralegal_name": display_name,
+        "assigned_by":             assigned_by,
         "assignment_date":         assignment.get("assignmentDate"),
     }
 
@@ -156,6 +159,7 @@ def manual_assign(
     return {
         "assigned_paralegal":      new_paralegal_id,
         "assigned_paralegal_name": display_name,
+        "assigned_by":             actor_uid,
         "assignment_date":         assigned_at,
         "overridden_from":         overridden_from,
     }
