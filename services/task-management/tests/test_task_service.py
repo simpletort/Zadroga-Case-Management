@@ -572,7 +572,10 @@ class TestListTasks:
 
         where_call = (mock_db.collection.return_value.document.return_value
                       .collection.return_value.where.call_args)
-        assert where_call[0] == ("status", "==", "pending")
+        ff = where_call.kwargs["filter"]
+        assert ff.field_path == "status"
+        assert ff.op_string == "=="
+        assert ff.value == "pending"
         assert result.count == 0
 
     @patch("app.services.task_service.get_firestore_client")
@@ -604,9 +607,11 @@ class TestListTasks:
         list_user_tasks("uid-para-1", overdue_only=True)
 
         # First where: assignedTo filter, second where: status == overdue
-        second_where = (mock_db.collection_group.return_value.where.return_value
-                        .where.call_args[0])
-        assert second_where == ("status", "==", "overdue")
+        ff = (mock_db.collection_group.return_value.where.return_value
+              .where.call_args.kwargs["filter"])
+        assert ff.field_path == "status"
+        assert ff.op_string == "=="
+        assert ff.value == "overdue"
 
 
 # ---------------------------------------------------------------------------
