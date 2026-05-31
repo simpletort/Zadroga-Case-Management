@@ -30,7 +30,7 @@ from logging_config import setup_logging, get_logger
 from middleware.rate_limiter import limiter, rate_limit_exceeded_handler
 from shared.middlewares.auth import AuthMiddleware
 from shared.middlewares.cors import get_cors_origins
-from routers import leads, partners
+from routers import leads, partners, settings
 
 
 # ---------------------------------------------------------------------------
@@ -75,6 +75,10 @@ _ROUTE_PERMISSIONS: list[tuple[str, str, str]] = [
     ("POST",   r"^/api/v1/admin/partners/[^/]+/keys$",               "staff.write"),
     ("DELETE", r"^/api/v1/admin/partners/[^/]+/keys/[^/]+$",         "staff.write"),
     ("GET",    r"^/api/v1/admin/partners/[^/]+/stats$",              "staff.read"),
+
+    # Admin — firm settings (senior_partner / system_admin only)
+    ("GET",    r"^/api/v1/admin/settings/case-id-prefix$",           "staff.read"),
+    ("PATCH",  r"^/api/v1/admin/settings/case-id-prefix$",           "staff.write"),
 ]
 
 
@@ -217,8 +221,9 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 # Routers
 # ---------------------------------------------------------------------------
 
-app.include_router(leads.router,    prefix="/api/v1")
-app.include_router(partners.router, prefix="/api/v1")
+app.include_router(leads.router,     prefix="/api/v1")
+app.include_router(partners.router,  prefix="/api/v1")
+app.include_router(settings.router,  prefix="/api/v1")
 
 
 # ---------------------------------------------------------------------------

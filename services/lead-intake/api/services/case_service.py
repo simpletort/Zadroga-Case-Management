@@ -34,6 +34,12 @@ async def _fetch_prefix(db: firestore.AsyncClient) -> str:
     return _case_id_prefix_cache
 
 
+def reset_prefix_cache() -> None:
+    """Invalidate the in-process prefix cache. Call after updating firmSettings/case_id_prefix."""
+    global _case_id_prefix_cache
+    _case_id_prefix_cache = None
+
+
 def _counter_doc_id(prefix: str, year: int, month: int) -> str:
     return f"{prefix}-{year:04d}-{month:02d}"
 
