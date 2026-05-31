@@ -30,7 +30,8 @@ from logging_config import setup_logging, get_logger
 from middleware.rate_limiter import limiter, rate_limit_exceeded_handler
 from shared.middlewares.auth import AuthMiddleware
 from shared.middlewares.cors import get_cors_origins
-from routers import leads, partners, settings
+from routers import leads, partners
+from routers import settings as settings_router
 
 
 # ---------------------------------------------------------------------------
@@ -221,9 +222,9 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 # Routers
 # ---------------------------------------------------------------------------
 
-app.include_router(leads.router,     prefix="/api/v1")
-app.include_router(partners.router,  prefix="/api/v1")
-app.include_router(settings.router,  prefix="/api/v1")
+app.include_router(leads.router,          prefix="/api/v1")
+app.include_router(partners.router,       prefix="/api/v1")
+app.include_router(settings_router.router, prefix="/api/v1")
 
 
 # ---------------------------------------------------------------------------
