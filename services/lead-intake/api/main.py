@@ -80,6 +80,13 @@ _ROUTE_PERMISSIONS: list[tuple[str, str, str]] = [
     # Admin — firm settings (senior_partner / system_admin only)
     ("GET",    r"^/api/v1/admin/settings/case-id-prefix$",           "staff.read"),
     ("PATCH",  r"^/api/v1/admin/settings/case-id-prefix$",           "staff.write"),
+
+    # Admin — screening rules CRUD
+    ("GET",    r"^/api/v1/admin/settings/screening-rules$",          "staff.read"),
+    ("POST",   r"^/api/v1/admin/settings/screening-rules$",          "staff.write"),
+    ("GET",    r"^/api/v1/admin/settings/screening-rules/[^/]+$",    "staff.read"),
+    ("PUT",    r"^/api/v1/admin/settings/screening-rules/[^/]+$",    "staff.write"),
+    ("DELETE", r"^/api/v1/admin/settings/screening-rules/[^/]+$",    "staff.write"),
 ]
 
 

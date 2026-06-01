@@ -53,7 +53,6 @@ from services.pubsub_service import (
     publish_lead_created, publish_lead_screened, publish_lead_followup,
 )
 from services.tasks_service import create_followup_task
-from services.validation import validate_lead
 from services.vcf_screener import run_screening
 
 logger    = get_logger(__name__)
@@ -91,15 +90,6 @@ async def create_lead(
 ) -> LeadCreatedResponse:
     request_id = str(uuid.uuid4())
     logger.info("lead_intake_started", request_id=request_id, partner_id=partner.partner_id)
-
-    # Domain validation
-    validation_result = validate_lead(lead)
-    if not validation_result.is_valid:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=_err(request_id, "VALIDATION_ERROR", "Request validation failed",
-                        validation_result.errors),
-        )
 
     # Idempotency — same X-Request-ID returns the original case
     client_request_id = request.headers.get("X-Request-ID")
@@ -147,7 +137,7 @@ async def create_lead(
     screening_result = None
     try:
         case_dict        = case.to_firestore_dict()
-        screening_result = run_screening(case.caseId, case_dict)
+        screening_result = await run_screening(case.caseId, case_dict, db)
         await apply_vcf_screening_result(
             case_id           = case.caseId,
             eligibility       = screening_result.eligibility,

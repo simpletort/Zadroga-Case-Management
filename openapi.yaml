@@ -1172,6 +1172,278 @@ paths:
         403:
           description: Insufficient role
 
+  # --- Firm Settings ---
+
+  /api/v1/admin/settings/case-id-prefix:
+    options:
+      operationId: corsPreflightAdminCaseIdPrefix
+      security: []
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: "Get the current firm-wide case ID prefix (min role: senior_partner)"
+      operationId: getCaseIdPrefix
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Current case ID prefix and metadata
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient role
+        404:
+          description: Prefix not yet configured
+    patch:
+      summary: "Update the firm-wide case ID prefix (min role: senior_partner)"
+      operationId: updateCaseIdPrefix
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - prefix
+            properties:
+              prefix:
+                type: string
+                pattern: '^[A-Z]+$'
+                minLength: 1
+                maxLength: 10
+                description: "Uppercase letters only, 1-10 chars (e.g. ZAD, CASE, TORT)"
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Prefix updated — cache invalidated immediately
+        400:
+          description: Invalid prefix (not uppercase alpha or out of length range)
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient role
+
+  /api/v1/admin/settings/screening-rules:
+    options:
+      operationId: corsPreflightScreeningRules
+      security: []
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: "List all screening rules (min role: senior_partner)"
+      operationId: listScreeningRules
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Array of screening rule objects ordered by `order`
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient role
+    post:
+      summary: "Create a new screening rule (min role: senior_partner)"
+      operationId: createScreeningRule
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - ruleId
+              - name
+              - severity
+              - operator
+              - params
+              - passCode
+              - failCode
+            properties:
+              ruleId:
+                type: string
+                pattern: '^[A-Z0-9_]+$'
+                minLength: 1
+                maxLength: 50
+                description: "Unique rule identifier, uppercase letters/digits/underscores (e.g. R01_EXPOSURE_SITE)"
+              name:
+                type: string
+                minLength: 1
+                maxLength: 100
+              description:
+                type: string
+              enabled:
+                type: boolean
+                default: true
+              severity:
+                type: string
+                enum: [hard_fail, soft_flag]
+              operator:
+                type: string
+                enum: [fields_not_empty, in_list, date_overlap, boolean_equals, number_in_range]
+              params:
+                type: object
+                description: "Operator-specific config (fields, field, values, match_type, field_start, field_end, range_start, range_end, expected, min, max)"
+              passCode:
+                type: string
+                minLength: 1
+                maxLength: 50
+              failCode:
+                type: string
+                minLength: 1
+                maxLength: 50
+              passReason:
+                type: string
+              failReason:
+                type: string
+              order:
+                type: integer
+                minimum: 0
+                default: 0
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        201:
+          description: Rule created
+        400:
+          description: Validation error
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient role
+        409:
+          description: A rule with this ruleId already exists
+
+  /api/v1/admin/settings/screening-rules/{rule_id}:
+    options:
+      operationId: corsPreflightScreeningRule
+      security: []
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      parameters:
+        - name: rule_id
+          in: path
+          required: true
+          type: string
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: "Get a single screening rule (min role: senior_partner)"
+      operationId: getScreeningRule
+      parameters:
+        - name: rule_id
+          in: path
+          required: true
+          type: string
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Screening rule object
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient role
+        404:
+          description: Rule not found
+    put:
+      summary: "Replace a screening rule (min role: senior_partner)"
+      operationId: updateScreeningRule
+      parameters:
+        - name: rule_id
+          in: path
+          required: true
+          type: string
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - ruleId
+              - name
+              - severity
+              - operator
+              - params
+              - passCode
+              - failCode
+            properties:
+              ruleId:
+                type: string
+              name:
+                type: string
+              description:
+                type: string
+              enabled:
+                type: boolean
+              severity:
+                type: string
+                enum: [hard_fail, soft_flag]
+              operator:
+                type: string
+                enum: [fields_not_empty, in_list, date_overlap, boolean_equals, number_in_range]
+              params:
+                type: object
+              passCode:
+                type: string
+              failCode:
+                type: string
+              passReason:
+                type: string
+              failReason:
+                type: string
+              order:
+                type: integer
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Rule replaced
+        400:
+          description: Validation error
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient role
+        404:
+          description: Rule not found
+    delete:
+      summary: "Delete a screening rule (min role: senior_partner)"
+      operationId: deleteScreeningRule
+      parameters:
+        - name: rule_id
+          in: path
+          required: true
+          type: string
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: Rule deleted
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient role
+        404:
+          description: Rule not found
+
   # ============================================================
   # NOTIFICATION SERVICE
   # Cloud Run: https://notification-dev-292736139819.us-central1.run.app

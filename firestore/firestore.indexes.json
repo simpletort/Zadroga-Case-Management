@@ -83,9 +83,7 @@
         { "fieldPath": "channel",   "order": "ASCENDING"  },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
-    }
-  ],
-    ,
+    },
 
     { "collectionGroup": "tasks", "queryScope": "COLLECTION_GROUP", "fields": [
         { "fieldPath": "assignedTo", "order": "ASCENDING" },
@@ -96,20 +94,28 @@
         { "fieldPath": "status",     "order": "ASCENDING" },
         { "fieldPath": "dueAt",      "order": "ASCENDING" }
     ]},
+    { "collectionGroup": "tasks", "queryScope": "COLLECTION", "fields": [
+        { "fieldPath": "status",    "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "tasks", "queryScope": "COLLECTION", "fields": [
+        { "fieldPath": "priority",  "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "tasks", "queryScope": "COLLECTION", "fields": [
+        { "fieldPath": "status",    "order": "ASCENDING" },
+        { "fieldPath": "priority",  "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+    ]},
 
-    { "collectionGroup": "tasks", "queryScope": "COLLECTION", "fields": [
-        { "fieldPath": "status",    "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "ASCENDING" }
-    ]},
-    { "collectionGroup": "tasks", "queryScope": "COLLECTION", "fields": [
-        { "fieldPath": "priority",  "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "ASCENDING" }
-    ]},
-    { "collectionGroup": "tasks", "queryScope": "COLLECTION", "fields": [
-        { "fieldPath": "status",    "order": "ASCENDING" },
-        { "fieldPath": "priority",  "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "ASCENDING" }
-    ]}
+    {
+      "collectionGroup": "screeningRules",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "enabled", "order": "ASCENDING" },
+        { "fieldPath": "order",   "order": "ASCENDING" }
+      ]
+    }
   ],
 
   "fieldOverrides": [
