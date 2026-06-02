@@ -17,20 +17,20 @@ templates = [
             "channel": "EMAIL",
             "triggerEvent": "new_lead_created",
             "isActive": True,
-            "subject": "Welcome to Zadroga Law, {{clientName}} — Your Case {{caseId}}",
+            "subject": "Welcome to {{firmName}}, {{clientName}} — Your Case {{caseId}}",
             "htmlBody": """<html>
 <body style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto;">
-  <h2 style="color: #1a3c6e;">Welcome to Zadroga Law</h2>
+  <h2 style="color: #1a3c6e;">Welcome to {{firmName}}</h2>
   <p>Dear {{clientName}},</p>
-  <p>Thank you for choosing Zadroga Law. We have received your case and our team is ready to assist you.</p>
+  <p>Thank you for choosing {{firmName}}. We have received your case and our team is ready to assist you.</p>
   <p><strong>Case ID:</strong> {{caseId}}</p>
   <p>Your dedicated attorney will be in touch shortly to discuss the next steps in your case.</p>
   <p>If you have any immediate questions, please don't hesitate to reach out to us.</p>
   <br>
-  <p>Warm regards,<br><strong>The Zadroga Law Team</strong></p>
+  <p>Warm regards,<br><strong>The {{firmName}} Team</strong></p>
 </body>
 </html>""",
-            "body": "Dear {{clientName}}, welcome to Zadroga Law. Your case {{caseId}} has been received and our team will be in touch shortly.",
+            "body": "Dear {{clientName}}, welcome to {{firmName}}. Your case {{caseId}} has been received and our team will be in touch shortly.",
         },
     },
     {
@@ -54,7 +54,7 @@ templates = [
   <p><a href="{{portalUrl}}" style="background:#1a3c6e; color:white; padding:10px 20px; text-decoration:none; border-radius:4px; display:inline-block;">Upload Documents Now</a></p>
   <p>If you have already uploaded your documents, please disregard this message.</p>
   <br>
-  <p>Thank you,<br><strong>The Zadroga Law Team</strong></p>
+  <p>Thank you,<br><strong>The {{firmName}} Team</strong></p>
 </body>
 </html>""",
             "body": "Dear {{clientName}}, this is a reminder that documents are still needed for case {{caseId}}. Deadline: {{deadlineLabel}}. Upload at: {{portalUrl}}",
@@ -81,7 +81,7 @@ templates = [
   <p><a href="{{portalUrl}}" style="background:#c0392b; color:white; padding:10px 20px; text-decoration:none; border-radius:4px; display:inline-block;">Upload Documents Now</a></p>
   <p>If you need assistance, please contact our office directly.</p>
   <br>
-  <p>Thank you,<br><strong>The Zadroga Law Team</strong></p>
+  <p>Thank you,<br><strong>The {{firmName}} Team</strong></p>
 </body>
 </html>""",
             "body": "Dear {{clientName}}, this is your final reminder. Documents are still needed for case {{caseId}}. Please upload immediately at: {{portalUrl}}",

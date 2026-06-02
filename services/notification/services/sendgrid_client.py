@@ -87,6 +87,7 @@ def send_email_via_sendgrid(
     html_body: str,
     *,
     case_id: Optional[str] = None,
+    from_name: Optional[str] = None,
 ) -> EmailResult:
     """
     Send a pre-rendered HTML email via the SendGrid Mail Send API.
@@ -104,6 +105,11 @@ def send_email_via_sendgrid(
         Optional case ID passed as a SendGrid custom arg for delivery-event
         correlation.  This is the only reference to the case stored at
         SendGrid — no PII is included.
+    from_name:
+        Optional sender display name.  When provided it overrides the
+        ``SENDGRID_FROM_NAME`` setting.  Pass the value loaded from
+        ``firmSettings/notifications.fromName`` so multi-tenant deployments
+        can display their own firm name without a redeploy.
 
     Returns
     -------
@@ -113,8 +119,9 @@ def send_email_via_sendgrid(
     settings = get_settings()
     client = _get_client()
 
+    effective_from_name = from_name or settings.sendgrid_from_name
     message = Mail(
-        from_email=From(settings.sendgrid_from_email, settings.sendgrid_from_name),
+        from_email=From(settings.sendgrid_from_email, effective_from_name),
         to_emails=To(to),
         subject=Subject(subject),
         html_content=HtmlContent(html_body),

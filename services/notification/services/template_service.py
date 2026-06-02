@@ -228,6 +228,8 @@ async def render_template(
     template_id: str,
     variables: dict,
     db: AsyncClient,
+    *,
+    template_data: Optional[dict] = None,
 ) -> RenderedTemplate:
     """
     Fetch a Firestore template and render it with the supplied variables.
@@ -246,6 +248,11 @@ async def render_template(
         ``{"clientName": "Jane Doe", "caseId": "ZAD-2026-001"}``.
     db:
         Async Firestore client.
+    template_data:
+        Optional pre-loaded template dict.  When provided the Firestore fetch
+        is skipped and this dict is used directly.  Pass the return value of
+        :func:`load_notification_template` to enable practice-area overrides
+        without an extra round-trip.
 
     Returns
     -------
@@ -262,7 +269,7 @@ async def render_template(
         If one or more ``{{placeholder}}`` variables are absent from
         *variables*.  The exception message lists every missing variable name.
     """
-    template = await fetch_template(template_id, db)
+    template = template_data if template_data is not None else await fetch_template(template_id, db)
 
     body_tmpl: str = template.get("body", "")
     subject_tmpl: str = template.get("subject", "")
@@ -332,3 +339,75 @@ async def fetch_and_render(
     if _PLACEHOLDER_RE.search(body):
         return _substitute(body, variables)
     return _render_body(body, variables)
+
+
+# ── Practice-area template loader ──────────────────────────────────────────────
+
+async def load_notification_template(
+    db: AsyncClient,
+    template_id: str,
+    practice_area: Optional[str] = None,
+) -> dict:
+    """
+    Load a notification template with optional per-practice-area override.
+
+    Lookup order
+    ------------
+    1. ``practiceAreaConfig/{practice_area}/notifications/{template_id}``
+       — used when *practice_area* is provided **and** the override doc
+       exists with ``isActive: true``.  Errors in this lookup are silently
+       ignored so a misconfigured override never blocks email delivery.
+    2. ``{sms_templates_collection}/{template_id}``
+       — base template via :func:`fetch_template`.
+
+    Parameters
+    ----------
+    db:
+        Async Firestore client.
+    template_id:
+        Template document ID, e.g. ``"welcome_email"``.
+    practice_area:
+        Optional practice-area slug (e.g. ``"mass_tort"``).  When provided
+        the practice-area-specific override is checked first.
+
+    Returns
+    -------
+    dict
+        Raw Firestore template document dict.
+
+    Raises
+    ------
+    TemplateNotFoundError
+        If the base template does not exist in Firestore.
+    TemplateDisabledError
+        If the base template is disabled (``isActive: false``).
+    """
+    if practice_area:
+        try:
+            doc = await (
+                db.collection("practiceAreaConfig")
+                  .document(practice_area)
+                  .collection("notifications")
+                  .document(template_id)
+                  .get()
+            )
+            if doc.exists:
+                data = doc.to_dict()
+                is_active = data.get("isActive", data.get("active", True))
+                if is_active:
+                    logger.info(
+                        "notification_template_override_used",
+                        template_id=template_id,
+                        practice_area=practice_area,
+                    )
+                    return data
+        except Exception as exc:
+            logger.warning(
+                "notification_template_override_lookup_failed",
+                template_id=template_id,
+                practice_area=practice_area,
+                error=str(exc),
+            )
+
+    # Fall through to base template
+    return await fetch_template(template_id, db)

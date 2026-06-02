@@ -56,6 +56,7 @@ from services.template_service import (
     RenderedTemplate,
     TemplateDisabledError,
     TemplateNotFoundError,
+    load_notification_template,
     render_template,
 )
 from services.delivery_tracking_service import (
@@ -64,6 +65,38 @@ from services.delivery_tracking_service import (
 )
 
 logger = get_logger(__name__)
+
+
+# ── Firm-level notification settings ─────────────────────────────────────────
+
+async def _load_firm_notification_settings(db: AsyncClient) -> dict:
+    """
+    Load firm-level email defaults from ``firmSettings/notifications``.
+
+    Returns a dict with template-variable keys:
+
+    * ``firmName``     — sender display name (``fromName`` field)
+    * ``firmReplyTo``  — reply-to address (``replyTo`` field)
+    * ``firmLogoUrl``  — logo URL for email header (``logoUrl`` field)
+
+    All values default to empty string when the document is absent or the
+    field is missing — callers should treat empty string as "not configured".
+    Firestore errors are caught and logged; never raises.
+    """
+    try:
+        doc = await db.collection("firmSettings").document("notifications").get()
+        data = doc.to_dict() if doc.exists else {}
+    except Exception as exc:
+        logger.warning(
+            "firm_notification_settings_load_failed",
+            error=str(exc),
+        )
+        data = {}
+    return {
+        "firmName":    data.get("fromName", ""),
+        "firmReplyTo": data.get("replyTo",  ""),
+        "firmLogoUrl": data.get("logoUrl",  ""),
+    }
 
 
 @dataclass
@@ -142,6 +175,7 @@ async def send_email(
     *,
     case_id: Optional[str] = None,
     request_id: Optional[str] = None,
+    practice_area: Optional[str] = None,
 ) -> EmailDispatchResult:
     """
     Dispatch an email message.
@@ -161,6 +195,10 @@ async def send_email(
         passed to SendGrid as a custom arg (no other PII sent to SendGrid).
     request_id:
         Upstream trace/request ID — written to the delivery record.
+    practice_area:
+        Optional practice-area slug (e.g. ``"mass_tort"``).  When provided,
+        :func:`load_notification_template` checks for a per-practice-area
+        template override before falling back to the base template.
 
     Returns
     -------
@@ -181,10 +219,21 @@ async def send_email(
     )
 
     # ── Step 1: Fetch template and render subject + HTML body ─────────────
+    # Load firm-level notification settings (fromName → firmName, replyTo,
+    # logoUrl) and merge them into variables.  Caller-supplied values take
+    # precedence so individual sends can override firm defaults.
+    firm_settings = await _load_firm_notification_settings(db)
+    merged_variables = {**firm_settings, **variables}
+
     rendered_subject: Optional[str] = None
     rendered_html: Optional[str] = None
     try:
-        rendered: RenderedTemplate = await render_template(template_id, variables, db)
+        # load_notification_template checks for per-practice-area overrides
+        # before falling back to the base template in notificationTemplates/.
+        template_dict = await load_notification_template(db, template_id, practice_area)
+        rendered: RenderedTemplate = await render_template(
+            template_id, merged_variables, db, template_data=template_dict
+        )
         rendered_subject = rendered.subject
         rendered_html = rendered.html_body
     except (TemplateNotFoundError, TemplateDisabledError, MissingVariableError) as exc:
@@ -240,11 +289,14 @@ async def send_email(
 
     # ── Step 2: Send via SendGrid ─────────────────────────────────────────
     # sendgrid_client never raises; always returns an EmailResult.
+    # Pass from_name so the email "From" display name uses the value from
+    # firmSettings/notifications.fromName rather than a hardcoded default.
     email_result: EmailResult = send_email_via_sendgrid(
         to=to,
         subject=rendered_subject,
         html_body=rendered_html,
         case_id=case_id,
+        from_name=firm_settings.get("firmName") or None,
     )
 
     status = "sent" if email_result.success else "failed"

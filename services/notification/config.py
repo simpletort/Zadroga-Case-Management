@@ -62,7 +62,7 @@ class Settings(BaseSettings):
         "notifications@zadroga.com", alias="SENDGRID_FROM_EMAIL"
     )
     sendgrid_from_name: str = Field(
-        "Zadroga Law", alias="SENDGRID_FROM_NAME"
+        "", alias="SENDGRID_FROM_NAME"
     )
 
     # ── Twilio ────────────────────────────────────────────────────────────
