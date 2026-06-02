@@ -15,11 +15,9 @@ from __future__ import annotations
 
 import sys
 import os
-from typing import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-import pytest_asyncio
 
 
 # ── Make the notification service importable from the tests directory ─────────
