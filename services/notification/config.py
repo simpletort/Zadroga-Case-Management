@@ -31,8 +31,11 @@ class Settings(BaseSettings):
     )
 
     # Firestore collection names (suffixed with -dev in non-prod)
+    # Default changed from "sms_templates" to "notificationTemplates" — all
+    # email and SMS templates live in notificationTemplates in Firestore.
+    # Override via FIRESTORE_SMS_TEMPLATES_COLLECTION env var if needed.
     sms_templates_collection: str = Field(
-        "sms_templates", alias="FIRESTORE_SMS_TEMPLATES_COLLECTION"
+        "notificationTemplates", alias="FIRESTORE_SMS_TEMPLATES_COLLECTION"
     )
     opt_outs_collection: str = Field(
         "notification_opt_outs", alias="FIRESTORE_OPT_OUTS_COLLECTION"
