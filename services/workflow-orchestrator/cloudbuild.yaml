@@ -58,19 +58,39 @@ steps:
       - "--min-instances=0"
 
   # 5. Deploy Cloud Workflows definitions
+  #
+  # Service URLs are injected via Cloud Build substitution variables so they
+  # can be configured per-environment in the trigger without code changes.
+  # Reference values for each environment live in cloud_workflows/env/*.yaml.
+  #
+  # Required trigger substitutions (in addition to the standard ones above):
+  #   _LEAD_INTAKE_URL, _CASE_DEVELOPMENT_URL, _WORKFLOW_ORCHESTRATOR_URL,
+  #   _NOTIFICATION_URL, _ENROLLMENT_WORKFLOW_URL, _EVIDENCE_MANAGEMENT_URL,
+  #   _SETTLEMENT_FINANCIAL_URL, _EXTERNAL_SYNC_URL, _TASK_MANAGEMENT_URL
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     id: deploy-workflows
     entrypoint: bash
     args:
       - -c
       - |
+        SERVICE_VARS="DEPLOY_ENV=$_ENV"
+        SERVICE_VARS="$$SERVICE_VARS,LEAD_INTAKE_URL=$_LEAD_INTAKE_URL"
+        SERVICE_VARS="$$SERVICE_VARS,CASE_DEVELOPMENT_URL=$_CASE_DEVELOPMENT_URL"
+        SERVICE_VARS="$$SERVICE_VARS,WORKFLOW_ORCHESTRATOR_URL=$_WORKFLOW_ORCHESTRATOR_URL"
+        SERVICE_VARS="$$SERVICE_VARS,NOTIFICATION_URL=$_NOTIFICATION_URL"
+        SERVICE_VARS="$$SERVICE_VARS,ENROLLMENT_WORKFLOW_URL=$_ENROLLMENT_WORKFLOW_URL"
+        SERVICE_VARS="$$SERVICE_VARS,EVIDENCE_MANAGEMENT_URL=$_EVIDENCE_MANAGEMENT_URL"
+        SERVICE_VARS="$$SERVICE_VARS,SETTLEMENT_FINANCIAL_URL=$_SETTLEMENT_FINANCIAL_URL"
+        SERVICE_VARS="$$SERVICE_VARS,EXTERNAL_SYNC_URL=$_EXTERNAL_SYNC_URL"
+        SERVICE_VARS="$$SERVICE_VARS,TASK_MANAGEMENT_URL=$_TASK_MANAGEMENT_URL"
         for f in services/workflow-orchestrator/cloud_workflows/*.yaml; do
           name=$(basename "$f" .yaml)
-          echo "Deploying workflow: $name"
+          echo "Deploying workflow: $name (env: $_ENV)"
           gcloud workflows deploy "$name" \
             --location=$_REGION \
             --source="$f" \
-            --service-account=$_WORKFLOWS_SA
+            --service-account=$_WORKFLOWS_SA \
+            --set-env-vars="$$SERVICE_VARS"
         done
 
 images:

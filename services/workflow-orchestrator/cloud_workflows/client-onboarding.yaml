@@ -21,10 +21,10 @@ main:
           - client_email: ${args.client_email}
           - workflow_id: "client-onboarding"
           - deploy_env: ${sys.get_env("DEPLOY_ENV")}
-          - lead_service_url: ${"https://lead-intake-" + deploy_env + "-" + default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed")}
-          - case_dev_url: ${"https://case-development-" + deploy_env + "-" + default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed")}
-          - orchestrator_url: ${"https://workflow-orchestrator-" + deploy_env + "-" + default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed")}
-          - notification_url: ${"https://notification-" + deploy_env + "-" + default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed")}
+          - lead_service_url: ${sys.get_env("LEAD_INTAKE_URL")}
+          - case_dev_url: ${sys.get_env("CASE_DEVELOPMENT_URL")}
+          - orchestrator_url: ${sys.get_env("WORKFLOW_ORCHESTRATOR_URL")}
+          - notification_url: ${sys.get_env("NOTIFICATION_URL")}
 
     # Fetch configurable step parameters from Firestore via the orchestrator.
     - fetch_step_config:
