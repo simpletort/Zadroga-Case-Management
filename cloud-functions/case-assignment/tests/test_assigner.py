@@ -13,6 +13,7 @@ from assigner import (
     _load_balance_pick,
     _round_robin_pick,
     _get_available_paralegals,
+    _get_assignment_role,
     _under_cap,
 )
 
@@ -232,7 +233,8 @@ def test_round_robin_all_at_cap_returns_none():
 
 def test_assign_case_no_paralegals_returns_none():
     db = _mock_db_for_assigner(paralegals=[])
-    with patch("assigner._get_available_paralegals", return_value=[]):
+    with patch("assigner._get_available_paralegals", return_value=[]), \
+         patch("assigner._get_assignment_role", return_value="paralegal"):
         result = assign_case(db, "ZAD-2024-01-0001")
     assert result is None
 
@@ -245,6 +247,7 @@ def test_assign_case_load_balance_success():
 
     with patch("assigner._get_available_paralegals", return_value=paralegals), \
          patch("assigner._get_setting", return_value="load_balancing"), \
+         patch("assigner._get_assignment_role", return_value="paralegal"), \
          patch("assigner._do_assign") as mock_do_assign:
         result = assign_case(MagicMock(), "ZAD-2024-01-0001")
 
@@ -261,6 +264,7 @@ def test_assign_case_round_robin_success():
 
     with patch("assigner._get_available_paralegals", return_value=paralegals), \
          patch("assigner._get_setting", return_value="round_robin"), \
+         patch("assigner._get_assignment_role", return_value="paralegal"), \
          patch("assigner._round_robin_pick", return_value=paralegals[0]) as mock_rr, \
          patch("assigner._do_assign") as mock_do_assign:
         result = assign_case(MagicMock(), "ZAD-2024-01-0002")
@@ -293,3 +297,75 @@ def test_idempotency_guard_in_do_assign(mocker):
 
     # transaction.update should NOT have been called (case already assigned)
     case_ref.update.assert_not_called()
+
+
+# ── _get_assignment_role ───────────────────────────────────────────────────
+
+class TestGetAssignmentRole:
+
+    def _snap(self, exists=True, data=None):
+        snap = MagicMock()
+        snap.exists = exists
+        snap.to_dict.return_value = data or {}
+        return snap
+
+    def test_reads_assign_to_role_from_firestore(self):
+        db = MagicMock()
+        db.collection.return_value.document.return_value.get.return_value = self._snap(
+            data={"value": "load_balancing", "assignToRole": "admin_staff"}
+        )
+        assert _get_assignment_role(db) == "admin_staff"
+
+    def test_defaults_to_paralegal_when_field_absent(self):
+        db = MagicMock()
+        db.collection.return_value.document.return_value.get.return_value = self._snap(
+            data={"value": "round_robin"}  # assignToRole not set
+        )
+        assert _get_assignment_role(db) == "paralegal"
+
+    def test_defaults_to_paralegal_when_document_absent(self):
+        db = MagicMock()
+        db.collection.return_value.document.return_value.get.return_value = self._snap(
+            exists=False
+        )
+        assert _get_assignment_role(db) == "paralegal"
+
+    def test_defaults_to_paralegal_on_firestore_error(self):
+        db = MagicMock()
+        db.collection.return_value.document.return_value.get.side_effect = Exception("timeout")
+        assert _get_assignment_role(db) == "paralegal"
+
+
+# ── _get_available_paralegals with custom role ─────────────────────────────
+
+class TestGetAvailableParalegalsRole:
+
+    def test_uses_configured_role_in_query(self):
+        """_get_available_paralegals should query the role passed in, not always 'paralegal'."""
+        db = MagicMock()
+        # Return no docs — we only care which role was queried
+        query = MagicMock()
+        query.where.return_value = query
+        query.stream.return_value = iter([])
+        db.collection.return_value.where.return_value = query
+
+        _get_available_paralegals(db, "admin_staff")
+
+        # First where() on the staff collection should have included "admin_staff"
+        where_calls = db.collection.return_value.where.call_args_list
+        role_values_queried = [c[0][2] for c in where_calls]
+        assert "admin_staff" in role_values_queried
+
+    def test_default_role_is_paralegal(self):
+        """Calling without a role argument should query for 'paralegal'."""
+        db = MagicMock()
+        query = MagicMock()
+        query.where.return_value = query
+        query.stream.return_value = iter([])
+        db.collection.return_value.where.return_value = query
+
+        _get_available_paralegals(db)
+
+        where_calls = db.collection.return_value.where.call_args_list
+        role_values_queried = [c[0][2] for c in where_calls]
+        assert "paralegal" in role_values_queried

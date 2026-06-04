@@ -2,17 +2,17 @@
 SimpleTort — Case Assignment Engine
 
 Supports two assignment modes configured in firmSettings:
-  - load_balancing  (default): assign to the active paralegal with the lowest activeCaseCount
-  - round_robin: rotate through active paralegals in stable createdAt order
+  - load_balancing  (default): assign to the active staff member with the lowest activeCaseCount
+  - round_robin: rotate through active staff in stable createdAt order
 
 Both modes:
-  - Only consider staff where role == "paralegal" AND isActive == True
-  - Respect maxCaseload: skip any paralegal at or above their cap (if set)
+  - Only consider staff where role == firmSettings/assignment_mode.assignToRole AND isActive == True
+  - Respect maxCaseload: skip any staff member at or above their cap (if set)
   - Perform the final write (case update + activeCaseCount increment + timeline) in a
     single Firestore transaction to prevent double-assignment under concurrent events
 
 firmSettings documents:
-  assignment_mode          → { value: "load_balancing" | "round_robin" }
+  assignment_mode          → { value: "load_balancing" | "round_robin", assignToRole: "paralegal" }
   assignment_rr_pointer    → { value: <int> }   (round-robin cursor)
 """
 
@@ -25,7 +25,6 @@ logger = logging.getLogger(__name__)
 
 ASSIGNMENT_MODE_DOC  = "assignment_mode"
 RR_POINTER_DOC       = "assignment_rr_pointer"
-PARALEGAL_ROLE       = "paralegal"
 
 # Local role normalisation — mirrors services/case-development/app/utils/roles.py
 # without creating a shared-package dependency in the Cloud Function.
@@ -37,6 +36,9 @@ _ROLE_DISPLAY_TO_CODE: dict[str, str] = {
     "Admin Staff":    "admin_staff",
 }
 
+# Inverse map: code format → display format (used for dual-role queries)
+_CODE_TO_ROLE_DISPLAY: dict[str, str] = {v: k for k, v in _ROLE_DISPLAY_TO_CODE.items()}
+
 
 def _normalize_role(role: str) -> str:
     """Convert display-format role to code-format; pass-through if already code."""
@@ -47,14 +49,15 @@ def _normalize_role(role: str) -> str:
 
 def assign_case(db: firestore.Client, case_id: str) -> str | None:
     """
-    Select a paralegal and atomically commit the assignment.
-    Returns the assigned paralegal's userId, or None if no one is available.
+    Select a staff member and atomically commit the assignment.
+    Returns the assigned user's userId, or None if no one is available.
     """
-    mode = _get_setting(db, ASSIGNMENT_MODE_DOC, default="load_balancing")
-    paralegals = _get_available_paralegals(db)
+    mode            = _get_setting(db, ASSIGNMENT_MODE_DOC, default="load_balancing")
+    assignment_role = _get_assignment_role(db)
+    paralegals      = _get_available_paralegals(db, assignment_role)
 
     if not paralegals:
-        logger.warning("No active paralegals found in staff collection")
+        logger.warning("No active '%s' found in staff collection", assignment_role)
         return None
 
     if mode == "round_robin":
@@ -63,7 +66,7 @@ def assign_case(db: firestore.Client, case_id: str) -> str | None:
         selected = _load_balance_pick(paralegals)
 
     if selected is None:
-        logger.warning("All paralegals are at maximum caseload")
+        logger.warning("All '%s' staff are at maximum caseload", assignment_role)
         return None
 
     _do_assign(db, case_id, selected, mode)
@@ -182,17 +185,24 @@ def _do_assign(
 
 # ── Firestore helpers ──────────────────────────────────────────────────────
 
-def _get_available_paralegals(db: firestore.Client) -> list[dict]:
-    """Query staff for active paralegals, returned as plain dicts.
+def _get_available_paralegals(db: firestore.Client, role: str = "paralegal") -> list[dict]:
+    """Query staff for active members with the given assignment role, returned as plain dicts.
 
-    Dual-queries both "paralegal" (code format) and "Paralegal" (display format)
+    Dual-queries both code format (e.g. "paralegal") and display format (e.g. "Paralegal")
     to handle the mixed role values present in the DB during migration.
     Deduplication by document ID prevents double-counting.
+
+    The role defaults to "paralegal" but is driven by firmSettings/assignment_mode.assignToRole
+    so any staff role (admin_staff, junior_partner, etc.) can be the assignment target.
     """
+    role_code    = _normalize_role(role)  # ensure code format regardless of input
+    role_display = _CODE_TO_ROLE_DISPLAY.get(role_code, role_code)
+
     seen: set[str] = set()
     results: list[dict] = []
 
-    for role_val in (PARALEGAL_ROLE, "Paralegal"):
+    # Query both code and display variants; set deduplicates when they are the same.
+    for role_val in {role_code, role_display}:
         for doc in (
             db.collection("staff")
             .where("role", "==", role_val)
@@ -218,6 +228,24 @@ def _get_setting(db: firestore.Client, doc_id: str, default: str) -> str:
     except Exception as exc:
         logger.warning("Could not read firmSettings/%s: %s; using default '%s'", doc_id, exc, default)
     return default
+
+
+def _get_assignment_role(db: firestore.Client) -> str:
+    """Read the assignment target role from firmSettings/assignment_mode.assignToRole.
+
+    Defaults to "paralegal" when the field is absent, the document has not been
+    seeded, or Firestore is unreachable — so assignment always has a safe fallback.
+    """
+    try:
+        snap = db.collection("firmSettings").document(ASSIGNMENT_MODE_DOC).get()
+        if snap.exists:
+            return (snap.to_dict() or {}).get("assignToRole", "paralegal")
+    except Exception as exc:
+        logger.warning(
+            "Could not read assignToRole from firmSettings/%s: %s; defaulting to 'paralegal'",
+            ASSIGNMENT_MODE_DOC, exc,
+        )
+    return "paralegal"
 
 
 def _under_cap(paralegal: dict) -> bool:
