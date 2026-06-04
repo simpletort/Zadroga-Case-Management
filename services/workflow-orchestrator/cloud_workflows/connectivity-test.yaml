@@ -30,7 +30,7 @@ main:
     - fetch_case:
         call: http.get
         args:
-          url: ${case_dev_url + "/api/v1/cases/" + case_id + "/status"}
+          url: ${case_dev_url + "/api/v1/dashboard/cases/" + case_id}
           auth:
             type: OIDC
         result: case_response
