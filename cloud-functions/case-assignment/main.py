@@ -62,7 +62,14 @@ def case_assignment(event: CloudEvent) -> None:
     Triggered by a Firestore document write event via Eventarc.
     event.data contains 'value', 'oldValue', and 'updateMask' in Firestore proto format.
     """
-    data = event.data or {}
+    # Eventarc may deliver the CloudEvent payload as raw bytes or a JSON string
+    # rather than a pre-parsed dict depending on the SDK version and trigger type.
+    # Decode to dict before processing.
+    data = event.data
+    if isinstance(data, (bytes, str)):
+        import json
+        data = json.loads(data)
+    data = data or {}
 
     # ── Extract case_id from the document resource name ───────────────────
     # Format: projects/{project}/databases/{db}/documents/cases/{caseId}
