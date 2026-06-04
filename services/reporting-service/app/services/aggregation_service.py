@@ -20,7 +20,8 @@ ALL_STATUSES = [
     "On Hold",
 ]
 
-ACTIVE_STATUSES = [
+# Fallback used when firmSettings/pipeline is absent or has no activeStatuses field.
+DEFAULT_ACTIVE_STATUSES = [
     "New Lead",
     "Pending Client Information",
     "Pending Paralegal Review",
@@ -30,6 +31,26 @@ ACTIVE_STATUSES = [
     "Awarded",
     "On Hold",
 ]
+
+
+def get_active_statuses(db=None) -> List[str]:
+    """
+    Load active case statuses from ``firmSettings/pipeline.activeStatuses[]``.
+
+    Falls back to ``DEFAULT_ACTIVE_STATUSES`` when the document is absent,
+    the field is missing, or Firestore is unreachable — so KPI queries always
+    return a result even if the config document has not been seeded yet.
+    """
+    try:
+        _db = db or get_firestore_client()
+        doc = _db.collection("firmSettings").document("pipeline").get()
+        if doc.exists:
+            statuses = (doc.to_dict() or {}).get("activeStatuses")
+            if statuses:
+                return statuses
+    except Exception as exc:
+        logger.warning("Failed to load activeStatuses from firmSettings/pipeline: %s", exc)
+    return DEFAULT_ACTIVE_STATUSES
 
 
 def get_cases_by_status() -> List[dict]:
@@ -97,7 +118,7 @@ def get_bottleneck_cases(threshold_days: int = 30) -> List[dict]:
     now = now_utc()
     bottlenecks = []
 
-    for status in ACTIVE_STATUSES:
+    for status in get_active_statuses(db):
         docs = (
             db.collection("cases")
             .where("status", "==", status)
@@ -129,7 +150,7 @@ def get_staff_case_counts() -> Dict[str, dict]:
         "overdue_tasks": 0,
     })
 
-    for status in ACTIVE_STATUSES:
+    for status in get_active_statuses(db):
         docs = db.collection("cases").where("status", "==", status).stream()
         for doc in docs:
             data = doc.to_dict()

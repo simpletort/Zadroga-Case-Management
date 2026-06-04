@@ -72,9 +72,13 @@ class TestAggregationService:
         assert counts["Pending Paralegal Review"] == 5
         assert counts["Settled"] == 2
 
+    @patch("app.services.aggregation_service.get_active_statuses")
     @patch("app.services.aggregation_service.get_firestore_client")
-    def test_bottleneck_excludes_recent_cases(self, mock_db):
+    def test_bottleneck_excludes_recent_cases(self, mock_db, mock_active_statuses):
         from app.services.aggregation_service import get_bottleneck_cases
+
+        # Pin active statuses so the test is independent of firmSettings
+        mock_active_statuses.return_value = ["Pending Paralegal Review"]
 
         now = datetime.now(timezone.utc)
 
@@ -92,16 +96,8 @@ class TestAggregationService:
             "lastStatusChangedAt": now - timedelta(days=45),
         }
 
-        call_count = {"n": 0}
-
-        def side_effect(*args, **kwargs):
-            call_count["n"] += 1
-            if call_count["n"] == 3:
-                return [recent_doc, old_doc]
-            return []
-
         mock_db.return_value.collection.return_value \
-            .where.return_value.stream.side_effect = side_effect
+            .where.return_value.stream.return_value = [recent_doc, old_doc]
 
         results = get_bottleneck_cases(threshold_days=30)
         case_ids = [r["caseId"] for r in results]
