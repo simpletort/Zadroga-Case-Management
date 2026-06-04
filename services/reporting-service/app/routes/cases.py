@@ -11,7 +11,7 @@ from app.models.report import (
 from app.services.aggregation_service import (
     get_cases_by_status,
     get_bottleneck_cases,
-    ACTIVE_STATUSES,
+    get_active_statuses,
 )
 from app.services.cache_service import get_cache, TTLCache
 from app.utils.auth import require_min_role
@@ -47,7 +47,7 @@ def cases_by_status(
     raw = get_cases_by_status()
     items = [CasesByStatusItem(**row) for row in raw]
     total_active = sum(
-        item.count for item in items if item.status in ACTIVE_STATUSES
+        item.count for item in items if item.status in get_active_statuses()
     )
 
     result = CasesByStatusResponse(
