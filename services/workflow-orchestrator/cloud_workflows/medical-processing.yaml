@@ -21,10 +21,10 @@ main:
           - document_ids: ${args.document_ids}
           - workflow_id: "medical-processing"
           - deploy_env: ${sys.get_env("DEPLOY_ENV")}
-          - evidence_url: ${"https://evidence-management-" + deploy_env + "-" + default(default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed"), "not-deployed")}
-          - case_dev_url: ${"https://case-development-" + deploy_env + "-" + default(default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed"), "not-deployed")}
-          - notification_url: ${"https://notification-" + deploy_env + "-" + default(default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed"), "not-deployed")}
-          - orchestrator_url: ${"https://workflow-orchestrator-" + deploy_env + "-" + default(default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed"), "not-deployed")}
+          - evidence_url: ${sys.get_env("EVIDENCE_MANAGEMENT_URL")}
+          - case_dev_url: ${sys.get_env("CASE_DEVELOPMENT_URL")}
+          - notification_url: ${sys.get_env("NOTIFICATION_URL")}
+          - orchestrator_url: ${sys.get_env("WORKFLOW_ORCHESTRATOR_URL")}
           - poll_attempts: 0
           - max_poll_attempts: 20
           - processing_job_id: ""

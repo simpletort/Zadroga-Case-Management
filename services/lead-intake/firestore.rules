@@ -25,7 +25,7 @@ service cloud.firestore {
 
     // Validate case ID format: ZAD-YYYY-MM-XXXX
     function isValidCaseId(caseId) {
-      return caseId.matches('^ZAD-[0-9]{4}-[0-9]{2}-[0-9]{4}$');
+      return caseId.matches('^[A-Z]+-[0-9]{4}-[0-9]{2}-[0-9]{4}$');
     }
 
 
@@ -116,6 +116,25 @@ service cloud.firestore {
     match /request_logs/{partnerId}/{document=**} {
       allow read: if isServiceAccount() || isAdmin();
       allow write: if isServiceAccount();
+      allow delete: if false;
+    }
+
+
+    // ── /screeningRules/{ruleId} ─────────────────────────────────────────────
+    // Admin-configurable VCF eligibility rules.
+    // Cloud Run service bypasses these via Admin SDK; rules guard Console/client access.
+    match /screeningRules/{ruleId} {
+      allow read:   if isServiceAccount() || isAdmin();
+      allow write:  if isServiceAccount() || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+
+    // ── /firmSettings/{docId} ────────────────────────────────────────────────
+    // Firm-wide config: case ID prefix, screening rule metadata, etc.
+    match /firmSettings/{docId} {
+      allow read:   if isServiceAccount() || isAdmin();
+      allow write:  if isServiceAccount() || isAdmin();
       allow delete: if false;
     }
 

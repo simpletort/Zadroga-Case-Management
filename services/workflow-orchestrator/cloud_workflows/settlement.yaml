@@ -21,11 +21,11 @@ main:
           - award_amount: ${args.award_amount}
           - workflow_id: "settlement"
           - deploy_env: ${sys.get_env("DEPLOY_ENV")}
-          - settlement_url: ${"https://settlement-financial-" + deploy_env + "-" + default(default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed"), "not-deployed")}
-          - case_dev_url: ${"https://case-development-" + deploy_env + "-" + default(default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed"), "not-deployed")}
-          - ext_sync_url: ${"https://external-sync-" + deploy_env + "-" + default(default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed"), "not-deployed")}
-          - orchestrator_url: ${"https://workflow-orchestrator-" + deploy_env + "-" + default(default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed"), "not-deployed")}
-          - notification_url: ${"https://notification-" + deploy_env + "-" + default(default(sys.get_env("CLOUD_RUN_SUFFIX"), "not-deployed"), "not-deployed")}
+          - settlement_url: ${sys.get_env("SETTLEMENT_FINANCIAL_URL")}
+          - case_dev_url: ${sys.get_env("CASE_DEVELOPMENT_URL")}
+          - ext_sync_url: ${sys.get_env("EXTERNAL_SYNC_URL")}
+          - orchestrator_url: ${sys.get_env("WORKFLOW_ORCHESTRATOR_URL")}
+          - notification_url: ${sys.get_env("NOTIFICATION_URL")}
 
     # Fetch configurable step parameters from Firestore via the orchestrator.
     - fetch_step_config:
