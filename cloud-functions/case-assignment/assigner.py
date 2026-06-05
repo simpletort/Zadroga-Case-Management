@@ -152,8 +152,9 @@ def _do_assign(
         current_count    = (staff_snap.to_dict() or {}).get("activeCaseCount", 0) or 0
 
         transaction.update(case_ref, {
-            "assignment.assignedParalegal": paralegal_id,
-            "assignment.assignmentDate":   assigned_at,
+            "assignment.assignedParalegal":     paralegal_id,
+            "assignment.assignedParalegalName": display_name,
+            "assignment.assignmentDate":        assigned_at,
         })
         transaction.update(staff_ref, {
             "activeCaseCount": current_count + 1,
