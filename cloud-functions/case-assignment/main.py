@@ -5,12 +5,18 @@ Trigger: Firestore Eventarc — google.cloud.firestore.document.v1.written
          on: projects/{PROJECT_ID}/databases/(default)/documents/cases/{caseId}
 
 Flow:
-  1. Extract caseId from the document resource name
-  2. Check if status changed TO "Pending Paralegal Review" (idempotency guard)
-  3. Skip if assignment.assignedParalegal already set
-  4. Call assigner.assign_case() → picks paralegal via round-robin or load-balancing
+  1. Extract caseId from the CloudEvent subject attribute
+     (Eventarc sets subject = "documents/cases/{caseId}" for Firestore events)
+  2. Read current case document directly from Firestore
+  3. Skip if status is not "Pending Paralegal Review"
+  4. Skip if assignment.assignedParalegal is already set
+  5. Call assigner.assign_case() → picks paralegal via round-robin or load-balancing
   5a. Success  → publishes Pub/Sub assignment notification
   5b. No paralegal available → writes timeline event flagging manual assignment required
+
+Reading from Firestore (rather than parsing the binary protobuf Eventarc payload)
+keeps the code simple and avoids a google-cloudevents dependency.  Double-assignment
+is prevented by the atomic transaction guard inside assigner._do_assign().
 
 Environment variables (set via --set-env-vars in cloudbuild.yaml):
   GCP_PROJECT_ID              — GCP project
@@ -60,40 +66,38 @@ def _get_db() -> firestore.Client:
 def case_assignment(event: CloudEvent) -> None:
     """
     Triggered by a Firestore document write event via Eventarc.
-    event.data contains 'value', 'oldValue', and 'updateMask' in Firestore proto format.
-    """
-    # Eventarc delivers Firestore CloudEvents as binary protobuf
-    # (google.events.cloud.firestore.v1.DocumentEventData), NOT JSON.
-    # Deserialise to a camelCase dict so the REST-API-style field helpers
-    # below (_str_field, mapValue, oldValue …) continue to work unchanged.
-    data = event.data
-    if isinstance(data, bytes):
-        from google.events.cloud.firestore_v1.types import DocumentEventData
-        from google.protobuf import json_format
-        doc_event = DocumentEventData.deserialize(data)
-        data = json_format.MessageToDict(doc_event._pb)
-    elif isinstance(data, str):
-        import json
-        data = json.loads(data)
-    data = data or {}
 
-    # ── Extract case_id from the document resource name ───────────────────
-    # Format: projects/{project}/databases/{db}/documents/cases/{caseId}
-    doc_name: str = (data.get("value") or {}).get("name", "")
-    if not doc_name:
-        # On document delete, value is absent — nothing to assign
-        logger.info("No document value in event; skipping")
+    Reads current case state directly from Firestore — avoids parsing the
+    binary protobuf payload (DocumentEventData) that Eventarc delivers.
+    """
+    # ── Extract case_id from the CloudEvent subject ────────────────────────
+    # Eventarc Firestore events set: subject = "documents/{collection}/{docId}"
+    # e.g.  "documents/cases/ZAD-2026-01-0001"
+    try:
+        subject: str = event["subject"] or ""
+    except (KeyError, TypeError, AttributeError):
+        subject = ""
+
+    if not subject.startswith("documents/cases/"):
+        logger.info("subject '%s' is not a cases document; skipping", subject)
         return
 
-    case_id = doc_name.rsplit("/", 1)[-1]
+    case_id = subject.rsplit("/", 1)[-1]
+    if not case_id:
+        logger.info("Could not parse caseId from subject '%s'; skipping", subject)
+        return
+
     logger.info("case_assignment triggered for caseId=%s", case_id)
 
-    # ── Read new and old status from Firestore proto ───────────────────────
-    new_fields = (data.get("value") or {}).get("fields", {})
-    old_fields = (data.get("oldValue") or {}).get("fields", {})
+    # ── Read current case state from Firestore ─────────────────────────────
+    db = _get_db()
+    case_snap = db.collection("cases").document(case_id).get()
+    if not case_snap.exists:
+        logger.info("Case document %s not found in Firestore; skipping", case_id)
+        return
 
-    new_status = _str_field(new_fields, "status")
-    old_status = _str_field(old_fields, "status")
+    case_data = case_snap.to_dict() or {}
+    new_status = case_data.get("status", "")
 
     # ── Idempotency guards ─────────────────────────────────────────────────
     if new_status != TARGET_STATUS:
@@ -103,16 +107,8 @@ def case_assignment(event: CloudEvent) -> None:
         )
         return
 
-    if old_status == TARGET_STATUS:
-        logger.info(
-            "Status unchanged at '%s'; skipping caseId=%s (already processed)",
-            TARGET_STATUS, case_id,
-        )
-        return
-
-    # Skip if already assigned (e.g. re-triggered after manual override)
-    assignment_map = new_fields.get("assignment", {}).get("mapValue", {}).get("fields", {})
-    existing_paralegal = _str_field(assignment_map, "assignedParalegal")
+    # Skip if already assigned (also re-checked atomically in _do_assign)
+    existing_paralegal = (case_data.get("assignment") or {}).get("assignedParalegal", "")
     if existing_paralegal:
         logger.info(
             "caseId=%s already assigned to %s; skipping auto-assignment",
@@ -121,7 +117,6 @@ def case_assignment(event: CloudEvent) -> None:
         return
 
     # ── Run assignment ─────────────────────────────────────────────────────
-    db = _get_db()
     paralegal_id = assign_case(db, case_id)
 
     if paralegal_id is None:
@@ -148,11 +143,6 @@ def case_assignment(event: CloudEvent) -> None:
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
-
-def _str_field(fields: dict, key: str) -> str:
-    """Extract a string value from a Firestore proto fields map."""
-    return fields.get(key, {}).get("stringValue", "")
-
 
 def _write_no_paralegal_timeline(db: firestore.Client, case_id: str) -> None:
     """Append a timeline event indicating no paralegal was available."""
