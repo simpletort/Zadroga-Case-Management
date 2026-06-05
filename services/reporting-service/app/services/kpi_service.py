@@ -1,5 +1,8 @@
+import logging
 from datetime import datetime, timezone
 from typing import Optional, Tuple
+
+from app.models.report import KPIMetric, KPIDashboardResponse
 from app.services.aggregation_service import (
     get_cases_by_status,
     get_cases_created_in_period,
@@ -9,6 +12,8 @@ from app.services.aggregation_service import (
 )
 from app.utils.firestore import get_firestore_client
 from app.utils.date_helpers import now_utc
+
+logger = logging.getLogger(__name__)
 
 
 def _load_firm_config(doc_id: str) -> dict:
@@ -25,10 +30,6 @@ def _load_firm_config(doc_id: str) -> dict:
     except Exception as exc:
         logger.warning("Failed to load firmSettings/%s: %s", doc_id, exc)
         return {}
-from app.models.report import KPIMetric, KPIDashboardResponse
-import logging
-
-logger = logging.getLogger(__name__)
 
 CACHE_DOC_ID = "kpi_dashboard"
 
