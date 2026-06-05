@@ -62,11 +62,17 @@ def case_assignment(event: CloudEvent) -> None:
     Triggered by a Firestore document write event via Eventarc.
     event.data contains 'value', 'oldValue', and 'updateMask' in Firestore proto format.
     """
-    # Eventarc may deliver the CloudEvent payload as raw bytes or a JSON string
-    # rather than a pre-parsed dict depending on the SDK version and trigger type.
-    # Decode to dict before processing.
+    # Eventarc delivers Firestore CloudEvents as binary protobuf
+    # (google.events.cloud.firestore.v1.DocumentEventData), NOT JSON.
+    # Deserialise to a camelCase dict so the REST-API-style field helpers
+    # below (_str_field, mapValue, oldValue …) continue to work unchanged.
     data = event.data
-    if isinstance(data, (bytes, str)):
+    if isinstance(data, bytes):
+        from google.events.cloud.firestore_v1.types import DocumentEventData
+        from google.protobuf import json_format
+        doc_event = DocumentEventData.deserialize(data)
+        data = json_format.MessageToDict(doc_event._pb)
+    elif isinstance(data, str):
         import json
         data = json.loads(data)
     data = data or {}
