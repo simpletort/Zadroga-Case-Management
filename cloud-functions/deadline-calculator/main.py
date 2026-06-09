@@ -45,6 +45,14 @@ from cloudevents.http import CloudEvent
 from dateutil.relativedelta import relativedelta
 from google.cloud import firestore, pubsub_v1
 
+# Protobuf deserialization for Eventarc delivery (application/protobuf only)
+try:
+    from google.events.cloud.firestore_v1.types import DocumentEventData as _FirestoreEventData
+    from google.protobuf.json_format import MessageToDict as _proto_to_dict
+    _HAS_PROTO = True
+except ImportError:  # pragma: no cover
+    _HAS_PROTO = False
+
 logging.basicConfig(
     stream=sys.stdout,
     level=logging.INFO,
@@ -213,6 +221,39 @@ def calculate_deadline(new_fields: dict, firm_config: dict) -> date | None:
     return rule_fn(base_date, firm_config)
 
 
+# ── Event data normalizer ──────────────────────────────────────────────────────
+
+def _parse_event_data(raw) -> dict:
+    """
+    Normalize CloudEvent data to the Firestore REST JSON structure
+    (with 'value'/'oldValue' keys and stringValue/mapValue field encoding).
+
+    Handles three delivery formats:
+      - dict  : structured JSON CloudEvent (local testing / JSON content type)
+      - bytes : protobuf binary from Eventarc (application/protobuf)
+      - DocumentEventData object : auto-deserialized by functions-framework
+    """
+    if isinstance(raw, dict):
+        return raw
+    if not _HAS_PROTO:
+        logger.error(
+            "Received non-dict event data but google-cloudevents is not installed; "
+            "install it to handle Eventarc protobuf payloads"
+        )
+        return {}
+    try:
+        if isinstance(raw, (bytes, bytearray)):
+            proto = _FirestoreEventData.deserialize(raw)
+        else:
+            proto = raw  # already deserialized by functions-framework
+        # MessageToDict converts proto field names to camelCase (oldValue, mapValue, etc.)
+        # which matches the Firestore REST JSON format our helpers expect.
+        return _proto_to_dict(proto._pb)
+    except Exception as exc:
+        logger.error("Failed to deserialize Firestore protobuf payload: %s", exc)
+        return {}
+
+
 # ── Main entry point ───────────────────────────────────────────────────────────
 
 @functions_framework.cloud_event
@@ -221,7 +262,7 @@ def calculate_filing_deadline(event: CloudEvent) -> None:
     Triggered by Firestore document write on cases/{caseId}.
     Calculates and stores the program filing deadline when the relevant date field is present.
     """
-    data = event.data or {}
+    data = _parse_event_data(event.data or {})
 
     doc_name: str = (data.get("value") or {}).get("name", "")
     if not doc_name:
