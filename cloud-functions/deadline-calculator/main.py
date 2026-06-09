@@ -45,12 +45,22 @@ from cloudevents.http import CloudEvent
 from dateutil.relativedelta import relativedelta
 from google.cloud import firestore, pubsub_v1
 
-# Protobuf deserialization for Eventarc delivery (application/protobuf only)
+# Protobuf deserialization for Eventarc delivery (application/protobuf only).
+# We define DocumentEventData locally using the Document type that ships with
+# google-cloud-firestore (which is already a required dependency), avoiding any
+# dependency on the unpublished google-cloudevents PyPI package.
 try:
-    from google.events.cloud.firestore_v1.types import DocumentEventData as _FirestoreEventData
+    import proto as _proto_module
+    from google.cloud.firestore_v1.types.document import Document as _FSDocument
     from google.protobuf.json_format import MessageToDict as _proto_to_dict
+
+    class _DocumentEventData(_proto_module.Message):
+        """Minimal local mirror of google.events.cloud.firestore.v1.DocumentEventData."""
+        value     = _proto_module.Field(_FSDocument, number=1)
+        old_value = _proto_module.Field(_FSDocument, number=2)
+
     _HAS_PROTO = True
-except ImportError:  # pragma: no cover
+except Exception:  # pragma: no cover
     _HAS_PROTO = False
 
 logging.basicConfig(
@@ -243,7 +253,7 @@ def _parse_event_data(raw) -> dict:
         return {}
     try:
         if isinstance(raw, (bytes, bytearray)):
-            proto = _FirestoreEventData.deserialize(raw)
+            proto = _DocumentEventData.deserialize(raw)
         else:
             proto = raw  # already deserialized by functions-framework
         # MessageToDict converts proto field names to camelCase (oldValue, mapValue, etc.)
