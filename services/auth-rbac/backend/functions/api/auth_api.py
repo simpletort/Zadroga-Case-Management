@@ -23,7 +23,7 @@ from auth.auth_service import (
     check_rate_limit, create_session, create_user,
     generate_portal_invite, request_password_reset,
 )
-from auth.rbac import get_role_permissions,require_permission, Permission
+from auth.rbac import get_role_permissions, require_permission
 from middleware.http import (
     CORS_OPTIONS, REGION, db, handle_options,
     json_err, json_ok, write_audit_event,CORS_HEADERS,
@@ -54,7 +54,7 @@ def register_fn(req: https_fn.Request) -> https_fn.Response:
             caller, auth_err = require_auth(req)
             if auth_err:
                 return auth_err
-            guard = require_permission(caller, Permission.MANAGE_USERS, req)
+            guard = require_permission(caller, "staff.manage", req)
             if guard:
                 return guard
 

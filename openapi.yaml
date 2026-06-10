@@ -3992,6 +3992,161 @@ paths:
         403:
           description: Insufficient role
 
+  # ============================================================
+  # AUTH-RBAC SERVICE
+  # Firebase Cloud Functions: https://us-central1-simpletort-zadroga-dev.cloudfunctions.net
+  # Min role required per endpoint is enforced by the function itself.
+  # ============================================================
+
+  # --- Permissions Registry ---
+
+  /api/v1/auth/permissions:
+    options:
+      operationId: corsPreflightAuthPermissions
+      security: []
+      x-google-backend:
+        address: https://us-central1-simpletort-zadroga-dev.cloudfunctions.net/list_permissions_fn
+        path_translation: CONSTANT_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: "List permissions from registry with optional ?search= and ?category= filters (min role: staff.manage)"
+      operationId: listPermissions
+      parameters:
+        - { name: search, in: query, type: string }
+        - { name: category, in: query, type: string }
+      x-google-backend:
+        address: https://us-central1-simpletort-zadroga-dev.cloudfunctions.net/list_permissions_fn
+        path_translation: CONSTANT_ADDRESS
+      responses:
+        200:
+          description: Filtered permissions list
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient role
+        404:
+          description: Registry not seeded
+    put:
+      summary: "Replace the entire permissions registry (min role: system.admin)"
+      operationId: updatePermissionsRegistry
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+              permissions:
+                type: array
+                items:
+                  type: object
+      x-google-backend:
+        address: https://us-central1-simpletort-zadroga-dev.cloudfunctions.net/update_permissions_registry_fn
+        path_translation: CONSTANT_ADDRESS
+      responses:
+        200:
+          description: Registry updated
+        400:
+          description: Invalid payload
+        403:
+          description: Insufficient role
+
+  /api/v1/auth/permissions/seed:
+    options:
+      operationId: corsPreflightAuthPermissionsSeed
+      security: []
+      x-google-backend:
+        address: https://us-central1-simpletort-zadroga-dev.cloudfunctions.net/seed_permissions_registry_fn
+        path_translation: CONSTANT_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    post:
+      summary: "Seed permissions registry from existing roles — merges new permission IDs, preserves existing metadata (min role: system.admin)"
+      operationId: seedPermissionsRegistry
+      x-google-backend:
+        address: https://us-central1-simpletort-zadroga-dev.cloudfunctions.net/seed_permissions_registry_fn
+        path_translation: CONSTANT_ADDRESS
+      responses:
+        200:
+          description: Registry seeded — returns total count and list of newly added IDs
+        403:
+          description: Insufficient role
+        404:
+          description: No permissions found in roles collection
+
+  # --- Role Management ---
+
+  /api/v1/auth/roles:
+    options:
+      operationId: corsPreflightAuthRoles
+      security: []
+      x-google-backend:
+        address: https://us-central1-simpletort-zadroga-dev.cloudfunctions.net/list_roles_fn
+        path_translation: CONSTANT_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: "List all roles with their permissions (min role: staff.manage)"
+      operationId: listRoles
+      x-google-backend:
+        address: https://us-central1-simpletort-zadroga-dev.cloudfunctions.net/list_roles_fn
+        path_translation: CONSTANT_ADDRESS
+      responses:
+        200:
+          description: Role list
+        403:
+          description: Insufficient role
+    post:
+      summary: "Create a new role with permissions validated against the registry (min role: system.admin)"
+      operationId: createRole
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required: [roleId, displayName, permissions]
+            properties:
+              roleId: { type: string }
+              displayName: { type: string }
+              description: { type: string }
+              permissions:
+                type: array
+                items: { type: string }
+      x-google-backend:
+        address: https://us-central1-simpletort-zadroga-dev.cloudfunctions.net/create_role_fn
+        path_translation: CONSTANT_ADDRESS
+      responses:
+        201:
+          description: Role created
+        400:
+          description: Missing fields or unknown permissions
+        403:
+          description: Insufficient role
+        409:
+          description: Role ID already exists
+    delete:
+      summary: "Hard-delete a role only if no users are assigned to it (min role: system.admin)"
+      operationId: deleteRole
+      parameters:
+        - { name: roleId, in: query, required: true, type: string }
+      x-google-backend:
+        address: https://us-central1-simpletort-zadroga-dev.cloudfunctions.net/delete_role_fn
+        path_translation: CONSTANT_ADDRESS
+      responses:
+        200:
+          description: Role deleted
+        403:
+          description: Insufficient role
+        404:
+          description: Role not found
+        409:
+          description: Role still assigned to one or more users
+
 securityDefinitions:
   firebase:
     authorizationUrl: ""

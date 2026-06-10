@@ -47,5 +47,12 @@ from api.auth_api import (
     create_invite_fn,
 )
 from api.audit     import get_audit_log_fn
-from api.roles     import sync_roles_fn
+from api.roles import (
+    list_permissions_fn,
+    update_permissions_registry_fn,
+    seed_permissions_registry_fn,
+    list_roles_fn,
+    create_role_fn,
+    delete_role_fn,
+)
 from auth.triggers import on_user_created

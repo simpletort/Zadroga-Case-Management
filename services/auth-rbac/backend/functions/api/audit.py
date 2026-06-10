@@ -13,7 +13,7 @@ from __future__ import annotations
 from firebase_admin import firestore as fs_admin
 from firebase_functions import https_fn
 from config import Config
-from auth.rbac import Permission, require_permission
+from auth.rbac import require_permission
 from middleware.http import REGION, json_ok, json_err, handle_options, db, serialise_doc, CORS_OPTIONS
 from middleware.jwt_middleware import require_auth
 
@@ -27,7 +27,7 @@ def get_audit_log_fn(req: https_fn.Request) -> https_fn.Response:
     user, err = require_auth(req)
     if err:
         return err
-    guard = require_permission(user, Permission.VIEW_AUDIT_LOG, req)
+    guard = require_permission(user, "auditLog.read", req)
     if guard:
         return guard
 

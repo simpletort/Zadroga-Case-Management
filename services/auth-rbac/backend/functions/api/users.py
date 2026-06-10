@@ -21,7 +21,7 @@ from __future__ import annotations
 from firebase_functions import https_fn
 from firebase_admin import auth, firestore as fs_admin
 from config import Config
-from auth.rbac import Permission, Role, require_permission, has_permission, log_role_change
+from auth.rbac import require_permission, has_permission, log_role_change
 from auth.auth_service import create_user as _create_user
 from middleware.http import REGION, json_ok, json_err, handle_options, db, serialise_doc, write_audit_event, CORS_OPTIONS
 
@@ -38,7 +38,7 @@ def create_user_fn(req: https_fn.Request) -> https_fn.Response:
     user, err = require_auth(req)
     if err:
         return err
-    guard = require_permission(user, Permission.MANAGE_USERS, req)
+    guard = require_permission(user, "staff.manage", req)
     if guard:
         return guard
 
@@ -49,9 +49,7 @@ def create_user_fn(req: https_fn.Request) -> https_fn.Response:
 
     requested_role = data["role"]
     caller_role    = user.get("role", "")
-    if requested_role != Role.CLIENT and caller_role not in (
-        Role.ADMIN_STAFF, Role.SENIOR_PARTNER
-    ):
+    if requested_role != "client" and caller_role not in ("admin_staff", "senior_partner"):
         return json_err("Only Admin or Senior Partner can assign staff roles.", 403)
 
     try:
@@ -79,7 +77,7 @@ def list_users_fn(req: https_fn.Request) -> https_fn.Response:
     user, err = require_auth(req)
     if err:
         return err
-    guard = require_permission(user, Permission.MANAGE_USERS, req)
+    guard = require_permission(user, "staff.manage", req)
     if guard:
         return guard
 
@@ -170,7 +168,7 @@ def get_user_fn(req: https_fn.Request) -> https_fn.Response:
 
     if not target_uid:
         return json_err("uid query param required", 400)
-    if target_uid != caller_uid and not has_permission(caller_role, Permission.MANAGE_USERS):
+    if target_uid != caller_uid and not has_permission(caller_role, "staff.manage"):
         return json_err("Forbidden.", 403)
 
     # staff docs use userId field
@@ -178,7 +176,7 @@ def get_user_fn(req: https_fn.Request) -> https_fn.Response:
     if not docs:
         return json_err("User not found.", 404)
 
-    strip_phi = not has_permission(caller_role, Permission.VIEW_PHI)
+    strip_phi = not has_permission(caller_role, "documents.verify")
     d = serialise_doc(docs[0].to_dict(), strip_phi=strip_phi)
 
     # Computed: activeCaseCount — open cases assigned to this user
@@ -228,7 +226,7 @@ def update_user_fn(req: https_fn.Request) -> https_fn.Response:
 
     if not target_uid:
         return json_err("uid required in body", 400)
-    if target_uid != caller_uid and not has_permission(caller_role, Permission.MANAGE_USERS):
+    if target_uid != caller_uid and not has_permission(caller_role, "staff.manage"):
         return json_err("Forbidden.", 403)
 
     # staff docs use roleId as doc ID — find by uid field
@@ -238,7 +236,7 @@ def update_user_fn(req: https_fn.Request) -> https_fn.Response:
 
     ref     = staff_docs[0].reference
     current = staff_docs[0].to_dict()
-    is_admin = has_permission(caller_role, Permission.MANAGE_USERS)
+    is_admin = has_permission(caller_role, "staff.manage")
     allowed  = {"displayName", "googleWorkspaceId"} | ({"role", "isActive"} if is_admin else set())
     updates  = {k: v for k, v in data.items() if k in allowed and k != "uid"}
 
@@ -246,7 +244,7 @@ def update_user_fn(req: https_fn.Request) -> https_fn.Response:
         return json_err("No updatable fields provided.", 400)
 
     if "role" in updates:
-        if caller_role not in (Role.ADMIN_STAFF, Role.SENIOR_PARTNER):
+        if caller_role not in ("admin_staff", "senior_partner"):
             return json_err("Only Admin or Senior Partner can change roles.", 403)
         old_role = current.get("role", "")
         new_role = updates["role"]
@@ -274,7 +272,7 @@ def delete_user_fn(req: https_fn.Request) -> https_fn.Response:
     user, err = require_auth(req)
     if err:
         return err
-    guard = require_permission(user, Permission.MANAGE_USERS, req)
+    guard = require_permission(user, "staff.manage", req)
     if guard:
         return guard
 
