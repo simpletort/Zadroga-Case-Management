@@ -10,6 +10,7 @@ class CaseSummary(BaseModel):
     status: str
     case_type: Optional[str] = None                # "WTC" | "VCF"
     vcf_deadline: Optional[datetime] = None
+    days_until_deadline: Optional[int] = None
     doc_completeness_pct: Optional[float] = None   # vcfQualScore proxy (0-100)
     qual_score: Optional[float] = None             # medicalQualScore (0-100)
     last_activity: Optional[datetime] = None       # updatedAt

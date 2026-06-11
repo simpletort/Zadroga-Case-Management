@@ -95,9 +95,13 @@ def get_dashboard(
         if hasattr(last_activity, "tzinfo") and last_activity is not None and last_activity.tzinfo is None:
             last_activity = last_activity.replace(tzinfo=timezone.utc)
 
-        vcf_details = data.get("vcfScreeningDetails") or {}
-        score_raw   = vcf_details.get("score")
-        qual_score  = float(score_raw) if score_raw is not None else None
+        vcf_details  = data.get("vcfScreeningDetails") or {}
+        score_raw    = vcf_details.get("score")
+        qual_score   = float(score_raw) if score_raw is not None else None
+
+        enrollment          = data.get("enrollment") or {}
+        vcf_deadline        = enrollment.get("filingDeadline")
+        days_until_deadline = enrollment.get("daysUntilDeadline")
 
         cases.append({
             "case_id":              doc.id,
@@ -105,7 +109,8 @@ def get_dashboard(
             "last_name":            data.get("lastName", ""),
             "status":               data.get("status", ""),
             "case_type":            None,
-            "vcf_deadline":         None,
+            "vcf_deadline":         vcf_deadline,
+            "days_until_deadline":  days_until_deadline,
             "doc_completeness_pct": None,
             "qual_score":           qual_score,
             "last_activity":        last_activity,
@@ -194,9 +199,13 @@ def get_case_detail(db: firestore.Client, case_id: str) -> dict | None:
     if hasattr(last_activity, "tzinfo") and last_activity is not None and last_activity.tzinfo is None:
         last_activity = last_activity.replace(tzinfo=timezone.utc)
 
-    vcf_details = data.get("vcfScreeningDetails") or {}
-    score_raw   = vcf_details.get("score")
-    qual_score  = float(score_raw) if score_raw is not None else None
+    vcf_details  = data.get("vcfScreeningDetails") or {}
+    score_raw    = vcf_details.get("score")
+    qual_score   = float(score_raw) if score_raw is not None else None
+
+    enrollment          = data.get("enrollment") or {}
+    vcf_deadline        = enrollment.get("filingDeadline")
+    days_until_deadline = enrollment.get("daysUntilDeadline")
 
     return {
         "case_id":              doc.id,
@@ -204,7 +213,8 @@ def get_case_detail(db: firestore.Client, case_id: str) -> dict | None:
         "last_name":            data.get("lastName", ""),
         "status":               data.get("status", ""),
         "case_type":            None,
-        "vcf_deadline":         None,
+        "vcf_deadline":         vcf_deadline,
+        "days_until_deadline":  days_until_deadline,
         "doc_completeness_pct": None,
         "qual_score":           qual_score,
         "last_activity":        last_activity,
