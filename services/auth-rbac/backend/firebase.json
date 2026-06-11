@@ -3,7 +3,7 @@
     {
       "source":   "functions",
       "codebase": "default",
-      "runtime":  "python312",
+      "runtime":  "python311",
       "invoker":  "public",
       "ignore":   ["venv", ".venv", "**/__pycache__", "**/*.pyc", "tests/**"]
     }
