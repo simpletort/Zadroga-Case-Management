@@ -100,11 +100,18 @@ def get_dashboard(
         qual_score   = float(score_raw) if score_raw is not None else None
 
         enrollment          = data.get("enrollment") or {}
-        vcf_deadline        = enrollment.get("filingDeadline")
+        vcf_deadline_raw    = enrollment.get("filingDeadline")
         days_until_deadline = enrollment.get("daysUntilDeadline")
 
-        if hasattr(vcf_deadline, "tzinfo") and vcf_deadline is not None and vcf_deadline.tzinfo is None:
-            vcf_deadline = vcf_deadline.replace(tzinfo=timezone.utc)
+        if isinstance(vcf_deadline_raw, str):
+            try:
+                vcf_deadline = datetime.fromisoformat(vcf_deadline_raw).replace(tzinfo=timezone.utc)
+            except ValueError:
+                vcf_deadline = None
+        elif hasattr(vcf_deadline_raw, "tzinfo") and vcf_deadline_raw is not None and vcf_deadline_raw.tzinfo is None:
+            vcf_deadline = vcf_deadline_raw.replace(tzinfo=timezone.utc)
+        else:
+            vcf_deadline = vcf_deadline_raw
 
         cases.append({
             "case_id":              doc.id,
@@ -207,11 +214,18 @@ def get_case_detail(db: firestore.Client, case_id: str) -> dict | None:
     qual_score   = float(score_raw) if score_raw is not None else None
 
     enrollment          = data.get("enrollment") or {}
-    vcf_deadline        = enrollment.get("filingDeadline")
+    vcf_deadline_raw    = enrollment.get("filingDeadline")
     days_until_deadline = enrollment.get("daysUntilDeadline")
 
-    if hasattr(vcf_deadline, "tzinfo") and vcf_deadline is not None and vcf_deadline.tzinfo is None:
-        vcf_deadline = vcf_deadline.replace(tzinfo=timezone.utc)
+    if isinstance(vcf_deadline_raw, str):
+        try:
+            vcf_deadline = datetime.fromisoformat(vcf_deadline_raw).replace(tzinfo=timezone.utc)
+        except ValueError:
+            vcf_deadline = None
+    elif hasattr(vcf_deadline_raw, "tzinfo") and vcf_deadline_raw is not None and vcf_deadline_raw.tzinfo is None:
+        vcf_deadline = vcf_deadline_raw.replace(tzinfo=timezone.utc)
+    else:
+        vcf_deadline = vcf_deadline_raw
 
     return {
         "case_id":              doc.id,
