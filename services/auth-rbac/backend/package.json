@@ -5,6 +5,7 @@
   "scripts": {
   },
   "devDependencies": {
+    "firebase-tools": "^13.0.0"
   },
   "jest": {
     "testEnvironment": "node",

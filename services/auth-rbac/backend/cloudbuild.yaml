@@ -15,7 +15,7 @@ steps:
       - "PYTHONPATH=/workspace/services/auth-rbac/backend/functions"
       - "APP_ENV=test"
 
-  # ── 2. Install Firebase tools ─────────────────────────────────────────────
+  # ── 2. Install Firebase CLI ────────────────────────────────────────────────
   # No Docker build/push — auth-rbac deploys as Firebase Cloud Functions.
   - name: "node:20-slim"
     dir: "services/auth-rbac/backend"
@@ -24,28 +24,35 @@ steps:
       - "-c"
       - |
         npm install --quiet
+        # Smoke-check: confirm firebase-tools is available
+        ./node_modules/.bin/firebase --version
 
-  # ── 3. Deploy Firebase Functions ─────────────────────────────────────────────
+  # ── 3. Deploy Firebase Functions ──────────────────────────────────────────
   - name: "node:20-slim"
     dir: "services/auth-rbac/backend"
     entrypoint: bash
     args:
       - "-c"
       - |
-        npx firebase-tools deploy --only functions \
-          --project=$_FIREBASE_PROJECT_ID \
+        ./node_modules/.bin/firebase deploy --only functions \
+          --project=$PROJECT_ID \
           --non-interactive
+    env:
+      # Cloud Build SA provides ADC automatically; no token needed.
+      - "GOOGLE_CLOUD_PROJECT=$PROJECT_ID"
 
-  # ── 4. Deploy Firestore rules and indexes ─────────────────────────────────────
+  # ── 4. Deploy Firestore rules and indexes ─────────────────────────────────
   - name: "node:20-slim"
     dir: "services/auth-rbac/backend"
     entrypoint: bash
     args:
       - "-c"
       - |
-        npx firebase-tools deploy --only firestore:rules,firestore:indexes \
-          --project=$_FIREBASE_PROJECT_ID \
+        ./node_modules/.bin/firebase deploy --only firestore:rules,firestore:indexes \
+          --project=$PROJECT_ID \
           --non-interactive
+    env:
+      - "GOOGLE_CLOUD_PROJECT=$PROJECT_ID"
 
 options:
   logging: CLOUD_LOGGING_ONLY
