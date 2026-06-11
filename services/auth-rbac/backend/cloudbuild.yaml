@@ -1,6 +1,6 @@
 steps:
   # ── 1. Test ─────────────────────────────────────────────────────────────────
-  - name: "python:3.12-slim"
+  - name: "python:3.11-slim"
     dir: "services/auth-rbac/backend/functions"
     entrypoint: bash
     args:
@@ -15,7 +15,20 @@ steps:
       - "PYTHONPATH=/workspace/services/auth-rbac/backend/functions"
       - "APP_ENV=test"
 
-  # ── 2. Install Firebase CLI ────────────────────────────────────────────────
+  # ── 2. Build venv for Firebase CLI ───────────────────────────────────────
+  # Firebase CLI requires a venv at functions/venv built with the runtime
+  # Python version (python311). This step creates it and installs deps so
+  # firebase deploy can analyse and package the source correctly.
+  - name: "python:3.11-slim"
+    dir: "services/auth-rbac/backend/functions"
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        python -m venv venv
+        venv/bin/pip install --quiet -r requirements.txt
+
+  # ── 3. Install Firebase CLI ────────────────────────────────────────────────
   # No Docker build/push — auth-rbac deploys as Firebase Cloud Functions.
   - name: "node:20-slim"
     dir: "services/auth-rbac/backend"
@@ -27,7 +40,7 @@ steps:
         # Smoke-check: confirm firebase-tools is available
         ./node_modules/.bin/firebase --version
 
-  # ── 3. Deploy Firebase Functions ──────────────────────────────────────────
+  # ── 4. Deploy Firebase Functions ──────────────────────────────────────────
   - name: "node:20-slim"
     dir: "services/auth-rbac/backend"
     entrypoint: bash
@@ -38,10 +51,9 @@ steps:
           --project=$PROJECT_ID \
           --non-interactive
     env:
-      # Cloud Build SA provides ADC automatically; no token needed.
       - "GOOGLE_CLOUD_PROJECT=$PROJECT_ID"
 
-  # ── 4. Deploy Firestore rules and indexes ─────────────────────────────────
+  # ── 5. Deploy Firestore rules and indexes ─────────────────────────────────
   - name: "node:20-slim"
     dir: "services/auth-rbac/backend"
     entrypoint: bash
