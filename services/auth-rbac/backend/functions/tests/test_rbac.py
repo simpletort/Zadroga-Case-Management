@@ -158,7 +158,7 @@ def _patch_firestore(roles=None):
 
 def _force_cache_reload():
     """Force-expire the RBAC in-memory cache so the next call re-reads Firestore."""
-    rbac_module._cache_loaded_at = 0.0
+    rbac_module._cache_loaded_at = float("-inf")  # guarantees stale regardless of process uptime
     rbac_module._roles_cache = {}
 
 
