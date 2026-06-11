@@ -103,6 +103,9 @@ def get_dashboard(
         vcf_deadline        = enrollment.get("filingDeadline")
         days_until_deadline = enrollment.get("daysUntilDeadline")
 
+        if hasattr(vcf_deadline, "tzinfo") and vcf_deadline is not None and vcf_deadline.tzinfo is None:
+            vcf_deadline = vcf_deadline.replace(tzinfo=timezone.utc)
+
         cases.append({
             "case_id":              doc.id,
             "first_name":           data.get("firstName", ""),
@@ -206,6 +209,9 @@ def get_case_detail(db: firestore.Client, case_id: str) -> dict | None:
     enrollment          = data.get("enrollment") or {}
     vcf_deadline        = enrollment.get("filingDeadline")
     days_until_deadline = enrollment.get("daysUntilDeadline")
+
+    if hasattr(vcf_deadline, "tzinfo") and vcf_deadline is not None and vcf_deadline.tzinfo is None:
+        vcf_deadline = vcf_deadline.replace(tzinfo=timezone.utc)
 
     return {
         "case_id":              doc.id,
