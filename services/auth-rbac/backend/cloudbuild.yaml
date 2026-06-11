@@ -43,7 +43,8 @@ steps:
         # ── deploy functions ─────────────────────────────────────────────────
         ./node_modules/.bin/firebase deploy --only functions \
           --project=$PROJECT_ID \
-          --non-interactive
+          --non-interactive \
+          --force
     env:
       - "GOOGLE_CLOUD_PROJECT=$PROJECT_ID"
 
