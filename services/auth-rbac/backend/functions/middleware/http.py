@@ -21,13 +21,23 @@ from firebase_admin import firestore as fs_admin
 from firebase_functions import https_fn
 from firebase_functions.options import CorsOptions
 import os
-ALLOWED_ORIGIN = os.environ.get(
-    "ALLOWED_ORIGIN", "https://simpletort-zadroga-dev.web.app"
-    
+
+# Comma-separated list of allowed origins.
+# Override via ALLOWED_ORIGINS env var on deployed functions.
+# Default includes the production Firebase app and local Vite dev server.
+ALLOWED_ORIGINS: list[str] = [
+    o.strip()
+    for o in os.environ.get(
+        "ALLOWED_ORIGINS",
+        "https://simpletort-zadroga-dev.web.app,http://localhost:5173",
+    ).split(",")
+    if o.strip()
+]
+
+CORS_OPTIONS = CorsOptions(
+    cors_origins=ALLOWED_ORIGINS,
+    cors_methods=["get", "post", "put", "delete", "options", "patch"],
 )
-
-
-CORS_OPTIONS = CorsOptions(cors_origins=ALLOWED_ORIGIN, cors_methods=["get", "post", "put", "delete", "options","patch"])
 
 logger = logging.getLogger(__name__)
 
@@ -37,13 +47,17 @@ logger = logging.getLogger(__name__)
 REGION: str = "us-central1"
 
 # ── CORS headers ──────────────────────────────────────────────────────────────
-# Was defined in middleware/jwt_middleware.py and imported by every API file.
-# Tighten Access-Control-Allow-Origin to your domain in production.
-CORS_HEADERS: dict[str, str] = {
-    "Access-Control-Allow-Origin":  ALLOWED_ORIGIN,
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+# Base headers (no origin — set dynamically per-request by cors_preflight).
+# CORS_HEADERS retains ALLOWED_ORIGINS[0] for any code that imports it directly.
+CORS_HEADERS_BASE: dict[str, str] = {
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
     "Access-Control-Allow-Headers": "Authorization, Content-Type",
     "Access-Control-Max-Age":       "3600",
+}
+# Backward-compatible alias (used by _json_response and external importers).
+CORS_HEADERS: dict[str, str] = {
+    **CORS_HEADERS_BASE,
+    "Access-Control-Allow-Origin": ALLOWED_ORIGINS[0],
 }
 
 # ── PHI field names ────────────────────────────────────────────────────────────
@@ -81,9 +95,11 @@ def _json_response(data: dict, status: int = 200) -> https_fn.Response:
     )
 
 
-def cors_preflight() -> https_fn.Response:
-    """Return a 204 CORS preflight response."""
-    return https_fn.Response("", 204, CORS_HEADERS)
+def cors_preflight(req: https_fn.Request | None = None) -> https_fn.Response:
+    """Return a 204 CORS preflight response, reflecting the request's origin if allowed."""
+    origin = req.headers.get("Origin", "") if req else ""
+    allowed = origin if origin in ALLOWED_ORIGINS else ALLOWED_ORIGINS[0]
+    return https_fn.Response("", 204, {**CORS_HEADERS_BASE, "Access-Control-Allow-Origin": allowed})
 
 
 def json_ok(data: dict, status: int = 200) -> https_fn.Response:
@@ -106,7 +122,7 @@ def handle_options(req: https_fn.Request) -> https_fn.Response | None:
         if early: return early
     """
     if req.method == "OPTIONS":
-        return cors_preflight()
+        return cors_preflight(req)
     return None
 
 
