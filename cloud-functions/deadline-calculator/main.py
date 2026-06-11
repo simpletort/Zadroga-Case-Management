@@ -45,23 +45,6 @@ from cloudevents.http import CloudEvent
 from dateutil.relativedelta import relativedelta
 from google.cloud import firestore, pubsub_v1
 
-# Protobuf deserialization for Eventarc delivery (application/protobuf only).
-# We define DocumentEventData locally using the Document type that ships with
-# google-cloud-firestore (which is already a required dependency), avoiding any
-# dependency on the unpublished google-cloudevents PyPI package.
-try:
-    import proto as _proto_module
-    from google.cloud.firestore_v1.types.document import Document as _FSDocument
-    from google.protobuf.json_format import MessageToDict as _proto_to_dict
-
-    class _DocumentEventData(_proto_module.Message):
-        """Minimal local mirror of google.events.cloud.firestore.v1.DocumentEventData."""
-        value     = _proto_module.Field(_FSDocument, number=1)
-        old_value = _proto_module.Field(_FSDocument, number=2)
-
-    _HAS_PROTO = True
-except Exception:  # pragma: no cover
-    _HAS_PROTO = False
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -231,37 +214,47 @@ def calculate_deadline(new_fields: dict, firm_config: dict) -> date | None:
     return rule_fn(base_date, firm_config)
 
 
-# ── Event data normalizer ──────────────────────────────────────────────────────
+# ── Plain-dict base-date extractor (Firestore SDK returns plain Python dicts) ──
 
-def _parse_event_data(raw) -> dict:
+def _extract_base_date(case_data: dict, rule_type: str) -> date | None:
     """
-    Normalize CloudEvent data to the Firestore REST JSON structure
-    (with 'value'/'oldValue' keys and stringValue/mapValue field encoding).
+    Extract the base date for the configured rule type from a plain Firestore
+    document dict (as returned by DocumentSnapshot.to_dict()).
 
-    Handles three delivery formats:
-      - dict  : structured JSON CloudEvent (local testing / JSON content type)
-      - bytes : protobuf binary from Eventarc (application/protobuf)
-      - DocumentEventData object : auto-deserialized by functions-framework
+    Rule → field mapping:
+      cert_date_offset      → medicalInfo.certificationDate  (ISO date string)
+      injury_date_offset    → medicalInfo.injuryDate         (ISO date string)
+      statute_of_limitations → createdAt                     (datetime or ISO string)
+
+    Returns None when the field is absent, the rule_type is unknown, or the
+    value cannot be parsed as a date.
     """
-    if isinstance(raw, dict):
-        return raw
-    if not _HAS_PROTO:
-        logger.error(
-            "Received non-dict event data but google-cloudevents is not installed; "
-            "install it to handle Eventarc protobuf payloads"
-        )
-        return {}
     try:
-        if isinstance(raw, (bytes, bytearray)):
-            proto = _DocumentEventData.deserialize(raw)
+        if rule_type == "cert_date_offset":
+            raw = (case_data.get("medicalInfo") or {}).get("certificationDate", "")
+        elif rule_type == "injury_date_offset":
+            raw = (case_data.get("medicalInfo") or {}).get("injuryDate", "")
+        elif rule_type == "statute_of_limitations":
+            created = case_data.get("createdAt")
+            if created is None:
+                return None
+            # Firestore returns datetime objects for timestamp fields
+            if isinstance(created, (datetime, date)):
+                return created.date() if isinstance(created, datetime) else created
+            raw = str(created)
         else:
-            proto = raw  # already deserialized by functions-framework
-        # MessageToDict converts proto field names to camelCase (oldValue, mapValue, etc.)
-        # which matches the Firestore REST JSON format our helpers expect.
-        return _proto_to_dict(proto._pb)
-    except Exception as exc:
-        logger.error("Failed to deserialize Firestore protobuf payload: %s", exc)
-        return {}
+            logger.warning("Unknown deadlineRuleType '%s' in _extract_base_date", rule_type)
+            return None
+
+        if not raw:
+            return None
+        return date.fromisoformat(str(raw)[:10])
+
+    except (ValueError, TypeError) as exc:
+        logger.warning(
+            "Invalid base date for rule '%s': %s — %s", rule_type, raw, exc
+        )
+        return None
 
 
 # ── Main entry point ───────────────────────────────────────────────────────────
@@ -270,55 +263,62 @@ def _parse_event_data(raw) -> dict:
 def calculate_filing_deadline(event: CloudEvent) -> None:
     """
     Triggered by Firestore document write on cases/{caseId}.
-    Calculates and stores the program filing deadline when the relevant date field is present.
-    """
-    data = _parse_event_data(event.data or {})
 
-    doc_name: str = (data.get("value") or {}).get("name", "")
-    if not doc_name:
-        logger.info("No document value in event; skipping (delete event)")
+    The CloudEvent subject attribute reliably contains the document path
+    (e.g. "documents/cases/ZAD-2026-01-7078") regardless of whether the
+    event payload is JSON or protobuf.  We use that to look up the case
+    directly from Firestore — avoiding all protobuf deserialization entirely.
+
+    Idempotency: if the calculated deadline equals the value already stored
+    in enrollment.filingDeadline we skip the write, which prevents an
+    infinite trigger loop (our own writes would otherwise re-fire the event).
+    """
+    # ── Extract case ID from CloudEvent subject ───────────────────────────
+    subject: str = event.get("subject") or ""
+    # subject format: "documents/cases/{caseId}"
+    case_id = subject.rsplit("/", 1)[-1] if "/" in subject else ""
+    if not case_id:
+        logger.info("Cannot determine caseId from subject='%s'; skipping", subject)
         return
 
-    case_id = doc_name.rsplit("/", 1)[-1]
     logger.info("calculate_filing_deadline triggered caseId=%s", case_id)
 
-    new_fields = (data.get("value") or {}).get("fields", {})
-    old_fields = (data.get("oldValue") or {}).get("fields", {})
+    # ── Read case document directly from Firestore ────────────────────────
+    db       = _get_db()
+    case_ref = db.collection("cases").document(case_id)
+    snap     = case_ref.get()
+    if not snap.exists:
+        logger.info("Case document not found caseId=%s (delete event?); skipping", case_id)
+        return
+    case_data: dict = snap.to_dict() or {}
 
     # ── Skip closed/terminal cases ────────────────────────────────────────
-    case_status = _str_field(new_fields, "status")
+    case_status = case_data.get("status", "")
     if case_status in _get_closed_statuses():
         logger.info("Skipping closed/final case caseId=%s status=%s", case_id, case_status)
         return
 
-    # ── Check triggering conditions ───────────────────────────────────────
-    new_medical = _map_field(new_fields, "medicalInfo")
-    old_medical = _map_field(old_fields, "medicalInfo")
-    new_cert    = _str_field(new_medical, "certificationDate")
-    old_cert    = _str_field(old_medical, "certificationDate")
-
-    new_enrollment  = _map_field(new_fields, "enrollment")
-    old_enrollment  = _map_field(old_fields, "enrollment")
-    new_cert_status = _str_field(new_enrollment, "certificationStatus")
-    old_cert_status = _str_field(old_enrollment, "certificationStatus")
-
-    cert_date_changed = new_cert != old_cert and bool(new_cert)
-    just_enrolled     = new_cert_status == "Enrolled" and old_cert_status != "Enrolled"
-    is_new_doc        = not old_fields
-
-    if not (cert_date_changed or just_enrolled or (is_new_doc and new_cert)):
-        logger.info("No relevant change for deadline calc caseId=%s; skipping", case_id)
-        return
-
     # ── Calculate deadline using configured strategy ───────────────────────
-    firm_config   = _get_firm_config()
-    deadline      = calculate_deadline(new_fields, firm_config)
+    firm_config    = _get_firm_config()
     rule_type_used = firm_config.get("deadlineRuleType", "cert_date_offset")
 
-    if deadline is None:
+    base_date = _extract_base_date(case_data, rule_type_used)
+    if base_date is None:
         logger.info(
             "Base date unavailable for caseId=%s (rule=%s); skipping",
             case_id, rule_type_used,
+        )
+        return
+
+    rule_fn  = DEADLINE_RULES.get(rule_type_used) or DEADLINE_RULES["cert_date_offset"]
+    deadline = rule_fn(base_date, firm_config)
+
+    # ── Idempotency check — prevents infinite write-back loop ─────────────
+    existing_deadline = (case_data.get("enrollment") or {}).get("filingDeadline")
+    if existing_deadline == deadline.isoformat():
+        logger.info(
+            "Deadline unchanged for caseId=%s (%s); skipping write",
+            case_id, deadline.isoformat(),
         )
         return
 
@@ -380,10 +380,7 @@ def calculate_filing_deadline(event: CloudEvent) -> None:
                 "daysRemaining":     days_remaining,
                 "deadlineStatus":    deadline_status,
                 "deadlineRuleType":  rule_type_used,
-                "trigger": (
-                    "certification_date_change" if cert_date_changed
-                    else "certification_enrolled"
-                ),
+                "trigger": "firestore_write",
             },
         })
     except Exception as exc:
