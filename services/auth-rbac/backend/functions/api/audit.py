@@ -18,7 +18,7 @@ from middleware.http import REGION, json_ok, json_err, handle_options, db, seria
 from middleware.jwt_middleware import require_auth
 
 
-@https_fn.on_request(region=REGION, cors=CORS_OPTIONS)
+@https_fn.on_request(region=REGION)
 def get_audit_log_fn(req: https_fn.Request) -> https_fn.Response:
     early = handle_options(req)
     if early:

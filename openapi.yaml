@@ -3996,6 +3996,9 @@ paths:
   # AUTH-RBAC SERVICE
   # Firebase Cloud Functions: https://us-central1-simpletort-zadroga-dev.cloudfunctions.net
   # Min role required per endpoint is enforced by the function itself.
+  # disable_auth: true on every backend — prevents the Gateway from replacing
+  # the caller's Firebase ID token with its own OIDC service-account token.
+  # Functions validate the Firebase ID token themselves via jwt_middleware.py.
   # ============================================================
 
   # --- Permissions Registry ---
@@ -4007,6 +4010,7 @@ paths:
       x-google-backend:
         address: https://us-central1-simpletort-zadroga-dev.cloudfunctions.net/list_permissions_fn
         path_translation: CONSTANT_ADDRESS
+        disable_auth: true
       responses:
         204:
           description: CORS preflight
@@ -4019,6 +4023,7 @@ paths:
       x-google-backend:
         address: https://us-central1-simpletort-zadroga-dev.cloudfunctions.net/list_permissions_fn
         path_translation: CONSTANT_ADDRESS
+        disable_auth: true
       responses:
         200:
           description: Filtered permissions list
@@ -4045,6 +4050,7 @@ paths:
       x-google-backend:
         address: https://us-central1-simpletort-zadroga-dev.cloudfunctions.net/update_permissions_registry_fn
         path_translation: CONSTANT_ADDRESS
+        disable_auth: true
       responses:
         200:
           description: Registry updated
@@ -4060,6 +4066,7 @@ paths:
       x-google-backend:
         address: https://us-central1-simpletort-zadroga-dev.cloudfunctions.net/seed_permissions_registry_fn
         path_translation: CONSTANT_ADDRESS
+        disable_auth: true
       responses:
         204:
           description: CORS preflight
@@ -4069,6 +4076,7 @@ paths:
       x-google-backend:
         address: https://us-central1-simpletort-zadroga-dev.cloudfunctions.net/seed_permissions_registry_fn
         path_translation: CONSTANT_ADDRESS
+        disable_auth: true
       responses:
         200:
           description: Registry seeded — returns total count and list of newly added IDs
@@ -4086,6 +4094,7 @@ paths:
       x-google-backend:
         address: https://us-central1-simpletort-zadroga-dev.cloudfunctions.net/list_roles_fn
         path_translation: CONSTANT_ADDRESS
+        disable_auth: true
       responses:
         204:
           description: CORS preflight
@@ -4095,6 +4104,7 @@ paths:
       x-google-backend:
         address: https://us-central1-simpletort-zadroga-dev.cloudfunctions.net/list_roles_fn
         path_translation: CONSTANT_ADDRESS
+        disable_auth: true
       responses:
         200:
           description: Role list
@@ -4120,6 +4130,7 @@ paths:
       x-google-backend:
         address: https://us-central1-simpletort-zadroga-dev.cloudfunctions.net/create_role_fn
         path_translation: CONSTANT_ADDRESS
+        disable_auth: true
       responses:
         201:
           description: Role created
@@ -4137,6 +4148,7 @@ paths:
       x-google-backend:
         address: https://us-central1-simpletort-zadroga-dev.cloudfunctions.net/delete_role_fn
         path_translation: CONSTANT_ADDRESS
+        disable_auth: true
       responses:
         200:
           description: Role deleted

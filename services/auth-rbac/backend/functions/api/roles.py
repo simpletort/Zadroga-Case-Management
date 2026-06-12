@@ -48,7 +48,7 @@ def _load_registry() -> list[dict] | None:
 
 # ── GET /list_permissions_fn ──────────────────────────────────────────────────
 
-@https_fn.on_request(region=REGION, cors=CORS_OPTIONS)
+@https_fn.on_request(region=REGION)
 def list_permissions_fn(req: https_fn.Request) -> https_fn.Response:
     """
     Returns all permissions from the Firestore registry.
@@ -90,7 +90,7 @@ def list_permissions_fn(req: https_fn.Request) -> https_fn.Response:
 
 # ── PUT /update_permissions_registry_fn ──────────────────────────────────────
 
-@https_fn.on_request(region=REGION, cors=CORS_OPTIONS)
+@https_fn.on_request(region=REGION)
 def update_permissions_registry_fn(req: https_fn.Request) -> https_fn.Response:
     """Replace the entire permissions registry document. system_admin only."""
     early = handle_options(req)
@@ -133,7 +133,7 @@ def update_permissions_registry_fn(req: https_fn.Request) -> https_fn.Response:
 
 # ── POST /seed_permissions_registry_fn ───────────────────────────────────────
 
-@https_fn.on_request(region=REGION, cors=CORS_OPTIONS)
+@https_fn.on_request(region=REGION)
 def seed_permissions_registry_fn(req: https_fn.Request) -> https_fn.Response:
     """
     Auto-populate the permissions registry from existing role documents.
@@ -206,7 +206,7 @@ def seed_permissions_registry_fn(req: https_fn.Request) -> https_fn.Response:
 
 # ── GET /list_roles_fn ────────────────────────────────────────────────────────
 
-@https_fn.on_request(region=REGION, cors=CORS_OPTIONS)
+@https_fn.on_request(region=REGION)
 def list_roles_fn(req: https_fn.Request) -> https_fn.Response:
     """Return all roles from the Firestore roles collection. Requires staff.manage."""
     early = handle_options(req)
@@ -225,7 +225,7 @@ def list_roles_fn(req: https_fn.Request) -> https_fn.Response:
 
 # ── POST /create_role_fn ──────────────────────────────────────────────────────
 
-@https_fn.on_request(region=REGION, cors=CORS_OPTIONS)
+@https_fn.on_request(region=REGION)
 def create_role_fn(req: https_fn.Request) -> https_fn.Response:
     """
     Create a new role in Firestore.
@@ -304,7 +304,7 @@ def create_role_fn(req: https_fn.Request) -> https_fn.Response:
 
 # ── DELETE /delete_role_fn ────────────────────────────────────────────────────
 
-@https_fn.on_request(region=REGION, cors=CORS_OPTIONS)
+@https_fn.on_request(region=REGION)
 def delete_role_fn(req: https_fn.Request) -> https_fn.Response:
     """
     Hard-delete a role from Firestore.

@@ -29,7 +29,7 @@ from middleware.jwt_middleware import require_auth
 
 
 # ── POST /createUser ──────────────────────────────────────────────────────────
-@https_fn.on_request(region=REGION, cors=CORS_OPTIONS)
+@https_fn.on_request(region=REGION)
 def create_user_fn(req: https_fn.Request) -> https_fn.Response:
     early = handle_options(req)
     if early:
@@ -68,7 +68,7 @@ def create_user_fn(req: https_fn.Request) -> https_fn.Response:
 
 
 # ── GET /listUsers ────────────────────────────────────────────────────────────
-@https_fn.on_request(region=REGION, cors=CORS_OPTIONS)
+@https_fn.on_request(region=REGION)
 def list_users_fn(req: https_fn.Request) -> https_fn.Response:
     early = handle_options(req)
     if early:
@@ -152,7 +152,7 @@ def list_users_fn(req: https_fn.Request) -> https_fn.Response:
 
 
 # ── GET /getUser?uid=xxx ──────────────────────────────────────────────────────
-@https_fn.on_request(region=REGION, cors=CORS_OPTIONS)
+@https_fn.on_request(region=REGION)
 def get_user_fn(req: https_fn.Request) -> https_fn.Response:
     early = handle_options(req)
     if early:
@@ -209,7 +209,7 @@ def get_user_fn(req: https_fn.Request) -> https_fn.Response:
 
 
 # ── PUT /updateUser ───────────────────────────────────────────────────────────
-@https_fn.on_request(region=REGION, cors=CORS_OPTIONS)
+@https_fn.on_request(region=REGION)
 def update_user_fn(req: https_fn.Request) -> https_fn.Response:
     early = handle_options(req)
     if early:
@@ -263,7 +263,7 @@ def update_user_fn(req: https_fn.Request) -> https_fn.Response:
 
 
 # ── DELETE /deleteUser?uid=xxx ────────────────────────────────────────────────
-@https_fn.on_request(region=REGION, cors=CORS_OPTIONS)
+@https_fn.on_request(region=REGION)
 def delete_user_fn(req: https_fn.Request) -> https_fn.Response:
     early = handle_options(req)
     if early:
