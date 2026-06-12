@@ -25,8 +25,8 @@ from auth.auth_service import (
 )
 from auth.rbac import get_role_permissions, require_permission
 from middleware.http import (
-    CORS_OPTIONS, REGION, db, handle_options,
-    json_err, json_ok, write_audit_event,CORS_HEADERS,
+    REGION, db, handle_options,
+    json_err, json_ok, write_audit_event,
 )
 from middleware.jwt_middleware import require_auth
 

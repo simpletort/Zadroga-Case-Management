@@ -14,7 +14,7 @@ from firebase_admin import firestore as fs_admin
 from firebase_functions import https_fn
 from config import Config
 from auth.rbac import require_permission
-from middleware.http import REGION, json_ok, json_err, handle_options, db, serialise_doc, CORS_OPTIONS
+from middleware.http import REGION, json_ok, json_err, handle_options, db, serialise_doc
 from middleware.jwt_middleware import require_auth
 
 

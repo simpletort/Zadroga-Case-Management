@@ -23,7 +23,7 @@ from firebase_admin import auth, firestore as fs_admin
 from config import Config
 from auth.rbac import require_permission, has_permission, log_role_change
 from auth.auth_service import create_user as _create_user
-from middleware.http import REGION, json_ok, json_err, handle_options, db, serialise_doc, write_audit_event, CORS_OPTIONS
+from middleware.http import REGION, json_ok, json_err, handle_options, db, serialise_doc, write_audit_event
 
 from middleware.jwt_middleware import require_auth
 

@@ -31,7 +31,6 @@ from middleware.http import (
     handle_options,
     db,
     write_audit_event,
-    CORS_OPTIONS,
 )
 from middleware.jwt_middleware import require_auth
 
