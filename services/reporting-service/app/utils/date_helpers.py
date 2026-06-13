@@ -49,7 +49,8 @@ def parse_dt(value) -> datetime | None:
     if isinstance(value, datetime):
         if value.tzinfo is None:
             return value.replace(tzinfo=timezone.utc)
-        return value
+        # Convert any non-UTC aware datetime to UTC
+        return value.astimezone(timezone.utc)
     if isinstance(value, str):
         try:
             return datetime.fromisoformat(value.replace("Z", "+00:00"))
