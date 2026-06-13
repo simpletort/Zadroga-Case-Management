@@ -46,9 +46,10 @@ app.add_middleware(
     allow_origins=[
         "https://lookerstudio.google.com",
         "https://staff.simpletort.com",
+        "https://simpletort.web.app",
     ],
     allow_credentials=True,
-    allow_methods=["GET"],
+    allow_methods=["GET", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
 
