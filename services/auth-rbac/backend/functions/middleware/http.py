@@ -88,10 +88,19 @@ def db() -> Any:
 # for backward compatibility.
 
 def _json_response(data: dict, status: int = 200) -> https_fn.Response:
+    # Reflect the request's Origin if it's in the allow-list, otherwise fall
+    # back to the primary origin.  Flask's request context is always present
+    # inside a firebase-functions handler (the SDK runs on Flask internally).
+    try:
+        from flask import request as _flask_req
+        origin = _flask_req.headers.get("Origin", "")
+    except RuntimeError:
+        origin = ""
+    allowed = origin if origin in ALLOWED_ORIGINS else ALLOWED_ORIGINS[0]
     return https_fn.Response(
         json.dumps(data),
         status=status,
-        headers={**CORS_HEADERS, "Content-Type": "application/json"},
+        headers={**CORS_HEADERS_BASE, "Access-Control-Allow-Origin": allowed, "Content-Type": "application/json"},
     )
 
 

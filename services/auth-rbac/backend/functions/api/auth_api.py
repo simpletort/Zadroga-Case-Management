@@ -25,15 +25,15 @@ from auth.auth_service import (
 )
 from auth.rbac import get_role_permissions, require_permission
 from middleware.http import (
-    CORS_OPTIONS, REGION, db, handle_options,
-    json_err, json_ok, write_audit_event,CORS_HEADERS,
+    REGION, db, handle_options,
+    json_err, json_ok, write_audit_event,
 )
 from middleware.jwt_middleware import require_auth
 
 logger = logging.getLogger(__name__)
 
 
-@https_fn.on_request(region=REGION, cors=CORS_OPTIONS)
+@https_fn.on_request(region=REGION)
 def register_fn(req: https_fn.Request) -> https_fn.Response:
     """
     POST /register — Create a new staff user account.
@@ -86,7 +86,7 @@ def register_fn(req: https_fn.Request) -> https_fn.Response:
         return json_err("Registration failed.", 500)
 
 
-@https_fn.on_request(region=REGION, cors=CORS_OPTIONS)
+@https_fn.on_request(region=REGION)
 def create_session_fn(req: https_fn.Request) -> https_fn.Response:
     """
     POST /createSession — Exchange a Firebase ID token for a session cookie.
@@ -135,7 +135,7 @@ def create_session_fn(req: https_fn.Request) -> https_fn.Response:
         return json_err("Session creation failed.", 500)
 
 
-@https_fn.on_request(region=REGION, cors=CORS_OPTIONS)
+@https_fn.on_request(region=REGION)
 def logout_fn(req: https_fn.Request) -> https_fn.Response:
     """POST /logout — Revoke all refresh tokens and clear session cookies."""
     if early := handle_options(req):
@@ -163,7 +163,7 @@ def logout_fn(req: https_fn.Request) -> https_fn.Response:
         return json_err("Logout failed.", 500)
 
 
-@https_fn.on_request(region=REGION, cors=CORS_OPTIONS)
+@https_fn.on_request(region=REGION)
 def password_reset_fn(req: https_fn.Request) -> https_fn.Response:
     """POST /passwordReset — Send a password reset email. Body: { email }"""
     if early := handle_options(req):
@@ -187,7 +187,7 @@ def password_reset_fn(req: https_fn.Request) -> https_fn.Response:
         return json_err("Password reset failed.", 500)
 
 
-@https_fn.on_request(region=REGION, cors=CORS_OPTIONS)
+@https_fn.on_request(region=REGION)
 def create_invite_fn(req: https_fn.Request) -> https_fn.Response:
     """
     POST /createInvite — Generate a portal invite link for a new user.
