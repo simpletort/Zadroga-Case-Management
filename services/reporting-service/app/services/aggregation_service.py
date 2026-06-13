@@ -6,6 +6,11 @@ from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 
+# Maps internal Firestore status values to display names used across the UI.
+STATUS_MAP = {
+    "Qualified": "Pending Paralegal Review",
+}
+
 ALL_STATUSES = [
     "New Lead",
     "Pending Client Info",
@@ -61,7 +66,7 @@ def get_cases_by_status() -> List[dict]:
 
     for doc in docs:
         data = doc.to_dict()
-        status = data.get("status", "Unknown")
+        status = STATUS_MAP.get(data.get("status", "Unknown"), data.get("status", "Unknown"))
         last_status_change = parse_dt(data.get("lastStatusChangedAt"))
         created_at = parse_dt(data.get("createdAt"))
 
@@ -135,8 +140,10 @@ def get_bottleneck_cases(threshold_days: int = 30) -> List[dict]:
                 continue
             days_stuck = (now - last_change).days
             if days_stuck >= threshold_days:
+                display_status = STATUS_MAP.get(data.get("status", ""), data.get("status", ""))
                 bottlenecks.append({
                     **data,
+                    "status": display_status,
                     "caseId": doc.id,
                     "days_stuck": days_stuck,
                 })
