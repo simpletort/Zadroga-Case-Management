@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 ALL_STATUSES = [
     "New Lead",
-    "Pending Client Information",
+    "Pending Client Info",
     "Pending Paralegal Review",
     "Pending Attorney Review",
     "Ready for Filing",
@@ -23,7 +23,7 @@ ALL_STATUSES = [
 # Fallback used when firmSettings/pipeline is absent or has no activeStatuses field.
 DEFAULT_ACTIVE_STATUSES = [
     "New Lead",
-    "Pending Client Information",
+    "Pending Client Info",
     "Pending Paralegal Review",
     "Pending Attorney Review",
     "Ready for Filing",
