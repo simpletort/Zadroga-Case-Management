@@ -65,10 +65,12 @@ def get_cases_by_status() -> List[dict]:
         last_status_change = parse_dt(data.get("lastStatusChangedAt"))
         created_at = parse_dt(data.get("createdAt"))
 
-        if last_status_change:
-            days_in_status = (now - last_status_change).days
-        elif created_at:
-            days_in_status = (now - created_at).days
+        ref = last_status_change or created_at
+        if ref is not None:
+            # Ensure both sides are naive UTC for subtraction safety
+            ref_naive = ref.replace(tzinfo=None) if ref.tzinfo else ref
+            now_naive = now.replace(tzinfo=None)
+            days_in_status = (now_naive - ref_naive).days
         else:
             days_in_status = 0
 
