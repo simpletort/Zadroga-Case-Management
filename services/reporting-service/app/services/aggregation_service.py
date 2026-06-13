@@ -1,5 +1,5 @@
 from app.utils.firestore import get_firestore_client
-from app.utils.date_helpers import now_utc, days_ago, to_firestore_timestamp
+from app.utils.date_helpers import now_utc, days_ago, to_firestore_timestamp, parse_dt
 from typing import List, Dict
 import logging
 from collections import defaultdict
@@ -62,13 +62,15 @@ def get_cases_by_status() -> List[dict]:
     for doc in docs:
         data = doc.to_dict()
         status = data.get("status", "Unknown")
-        last_status_change = data.get("lastStatusChangedAt")
+        last_status_change = parse_dt(data.get("lastStatusChangedAt"))
+        created_at = parse_dt(data.get("createdAt"))
 
         if last_status_change:
             days_in_status = (now - last_status_change).days
+        elif created_at:
+            days_in_status = (now - created_at).days
         else:
-            created_at = data.get("createdAt")
-            days_in_status = (now - created_at).days if created_at else 0
+            days_in_status = 0
 
         status_buckets[status].append(days_in_status)
 
