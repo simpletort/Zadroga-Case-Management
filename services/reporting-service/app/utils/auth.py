@@ -1,4 +1,4 @@
-from fastapi import HTTPException, Security, status
+from fastapi import HTTPException, Request, Security, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from firebase_admin import auth as firebase_auth
 import logging
@@ -26,9 +26,11 @@ ENDPOINT_MIN_ROLES = {
 
 
 def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Security(bearer_scheme),
 ) -> dict:
-    token = credentials.credentials
+    forwarded = request.headers.get("X-Forwarded-Authorization", "")
+    token = forwarded.replace("Bearer ", "") if forwarded else credentials.credentials
     try:
         return firebase_auth.verify_id_token(token)
     except firebase_auth.ExpiredIdTokenError:

@@ -1,14 +1,19 @@
 from app.utils.firestore import get_firestore_client
-from app.utils.date_helpers import now_utc, days_ago, to_firestore_timestamp
+from app.utils.date_helpers import now_utc, days_ago, to_firestore_timestamp, parse_dt
 from typing import List, Dict
 import logging
 from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 
+# Maps internal Firestore status values to display names used across the UI.
+STATUS_MAP = {
+    "Qualified": "Pending Paralegal Review",
+}
+
 ALL_STATUSES = [
     "New Lead",
-    "Pending Client Information",
+    "Pending Client Info",
     "Pending Paralegal Review",
     "Pending Attorney Review",
     "Ready for Filing",
@@ -23,7 +28,7 @@ ALL_STATUSES = [
 # Fallback used when firmSettings/pipeline is absent or has no activeStatuses field.
 DEFAULT_ACTIVE_STATUSES = [
     "New Lead",
-    "Pending Client Information",
+    "Pending Client Info",
     "Pending Paralegal Review",
     "Pending Attorney Review",
     "Ready for Filing",
@@ -61,14 +66,18 @@ def get_cases_by_status() -> List[dict]:
 
     for doc in docs:
         data = doc.to_dict()
-        status = data.get("status", "Unknown")
-        last_status_change = data.get("lastStatusChangedAt")
+        status = STATUS_MAP.get(data.get("status", "Unknown"), data.get("status", "Unknown"))
+        last_status_change = parse_dt(data.get("lastStatusChangedAt"))
+        created_at = parse_dt(data.get("createdAt"))
 
-        if last_status_change:
-            days_in_status = (now - last_status_change).days
+        ref = last_status_change or created_at
+        if ref is not None:
+            # Ensure both sides are naive UTC for subtraction safety
+            ref_naive = ref.replace(tzinfo=None) if ref.tzinfo else ref
+            now_naive = now.replace(tzinfo=None)
+            days_in_status = (now_naive - ref_naive).days
         else:
-            created_at = data.get("createdAt")
-            days_in_status = (now - created_at).days if created_at else 0
+            days_in_status = 0
 
         status_buckets[status].append(days_in_status)
 
@@ -131,8 +140,10 @@ def get_bottleneck_cases(threshold_days: int = 30) -> List[dict]:
                 continue
             days_stuck = (now - last_change).days
             if days_stuck >= threshold_days:
+                display_status = STATUS_MAP.get(data.get("status", ""), data.get("status", ""))
                 bottlenecks.append({
                     **data,
+                    "status": display_status,
                     "caseId": doc.id,
                     "days_stuck": days_stuck,
                 })
