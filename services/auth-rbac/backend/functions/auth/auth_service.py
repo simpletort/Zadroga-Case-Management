@@ -223,22 +223,14 @@ def create_user(
     )
     auth.set_custom_user_claims(user_record.uid, {"role": role, "active": True})
 
-    # Role key → human-readable label (matches simpletort-dev staff schema)
-    _ROLE_LABELS = {
-        "client":         "Client",
-        "admin_staff":    "Admin Staff",
-        "paralegal":      "Paralegal",
-        "junior_partner": "Junior Partner",
-        "senior_partner": "Senior Partner",
-        "system_admin":   "System Admin",
-    }
     # Firestore staff — document ID = userId (Firebase Auth UID)
+    from auth.rbac import get_role_display_name
     db().collection("staff").document(user_record.uid).set({
         "userId":            user_record.uid,
         "email":             email,
         "displayName":       display_name,
         "role":              role,
-        "roleLabel":         _ROLE_LABELS.get(role, role),
+        "roleLabel":         get_role_display_name(role),
         "isActive":          True,
         "googleWorkspaceId": "",
         "lastLoginAt":       None,

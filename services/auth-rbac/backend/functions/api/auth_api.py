@@ -23,7 +23,7 @@ from auth.auth_service import (
     check_rate_limit, create_session, create_user,
     generate_portal_invite, request_password_reset,
 )
-from auth.rbac import get_role_permissions, require_permission
+from auth.rbac import get_role_permissions, require_permission, require_any
 from middleware.http import (
     REGION, db, handle_options,
     json_err, json_ok, write_audit_event,
@@ -54,7 +54,7 @@ def register_fn(req: https_fn.Request) -> https_fn.Response:
             caller, auth_err = require_auth(req)
             if auth_err:
                 return auth_err
-            guard = require_permission(caller, "staff.manage", req)
+            guard = require_any(caller, "staff.manage", "system.admin", request=req)
             if guard:
                 return guard
 
@@ -108,7 +108,7 @@ def create_session_fn(req: https_fn.Request) -> https_fn.Response:
 
         decoded  = auth.verify_id_token(id_token)
         uid      = decoded["uid"]
-        role     = decoded.get("role", "admin_staff")
+        role     = decoded.get("role") or "client"
 
         result = create_session(uid=uid, id_token=id_token)
         write_audit_event("session_created", uid=uid, role=role)
@@ -201,9 +201,9 @@ def create_invite_fn(req: https_fn.Request) -> https_fn.Response:
     if err:
         return err
 
-    role = user.get("role", "")
-    if role not in ("senior_partner", "system_admin"):
-        return json_err("senior_partner or system_admin role required.", 403)
+    guard = require_any(user, "staff.invite", "system.admin", request=req)
+    if guard:
+        return guard
 
     try:
         body  = req.get_json(silent=True) or {}

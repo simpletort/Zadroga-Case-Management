@@ -4140,6 +4140,38 @@ paths:
           description: Insufficient role
         409:
           description: Role ID already exists
+    put:
+      summary: "Update an existing role's displayName, description, or permissions (min role: system.admin)"
+      operationId: updateRole
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required: [roleId]
+            properties:
+              roleId: { type: string }
+              displayName: { type: string }
+              description: { type: string }
+              permissions:
+                type: array
+                items: { type: string }
+      x-google-backend:
+        address: https://us-central1-simpletort-zadroga-dev.cloudfunctions.net/update_role_fn
+        path_translation: CONSTANT_ADDRESS
+        disable_auth: true
+      responses:
+        200:
+          description: Role updated
+        400:
+          description: No updatable fields provided or unknown permissions
+        403:
+          description: Insufficient role
+        404:
+          description: Role not found
+        503:
+          description: Permissions registry not seeded
     delete:
       summary: "Hard-delete a role only if no users are assigned to it (min role: system.admin)"
       operationId: deleteRole
