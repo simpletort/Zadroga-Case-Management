@@ -53,6 +53,7 @@ from api.roles import (
     seed_permissions_registry_fn,
     list_roles_fn,
     create_role_fn,
+    update_role_fn,
     delete_role_fn,
 )
 from auth.triggers import on_user_created

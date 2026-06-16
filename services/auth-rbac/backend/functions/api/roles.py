@@ -20,6 +20,7 @@ from __future__ import annotations
 from firebase_functions import https_fn
 from auth.rbac import (
     require_permission,
+    require_any,
     get_all_roles,
     get_all_permissions,
     refresh_rbac_cache,
@@ -62,7 +63,7 @@ def list_permissions_fn(req: https_fn.Request) -> https_fn.Response:
     user, err = require_auth(req)
     if err:
         return err
-    guard = require_permission(user, "staff.manage", req)
+    guard = require_any(user, "staff.manage", "system.admin", request=req)
     if guard:
         return guard
 
@@ -207,7 +208,7 @@ def seed_permissions_registry_fn(req: https_fn.Request) -> https_fn.Response:
 
 @https_fn.on_request(region=REGION)
 def list_roles_fn(req: https_fn.Request) -> https_fn.Response:
-    """Return all roles from the Firestore roles collection. Requires staff.manage."""
+    """Return all roles from the Firestore roles collection. Requires staff.manage or system.admin."""
     early = handle_options(req)
     if early:
         return early
@@ -215,7 +216,7 @@ def list_roles_fn(req: https_fn.Request) -> https_fn.Response:
     user, err = require_auth(req)
     if err:
         return err
-    guard = require_permission(user, "staff.manage", req)
+    guard = require_any(user, "staff.manage", "system.admin", request=req)
     if guard:
         return guard
 
@@ -299,6 +300,80 @@ def create_role_fn(req: https_fn.Request) -> https_fn.Response:
         "displayName": display_name,
         "permissions": sorted(set(permissions)),
     }, 201)
+
+
+# ── PUT /update_role_fn ───────────────────────────────────────────────────────
+
+@https_fn.on_request(region=REGION)
+def update_role_fn(req: https_fn.Request) -> https_fn.Response:
+    """
+    Update an existing role's displayName, description, and/or permissions.
+    Body: { roleId, displayName?, description?, permissions?: [...] }
+    All permission IDs in the array must exist in the registry.
+    system_admin only.
+    """
+    early = handle_options(req)
+    if early:
+        return early
+
+    if req.method != "PUT":
+        return json_err("Method not allowed.", 405)
+
+    user, err = require_auth(req)
+    if err:
+        return err
+    guard = require_permission(user, "system.admin", req)
+    if guard:
+        return guard
+
+    data    = req.get_json(silent=True) or {}
+    role_id = str(data.get("roleId", "")).strip()
+    if not role_id:
+        return json_err("roleId is required.", 400)
+
+    role_doc = db().collection("roles").document(role_id).get()
+    if not role_doc.exists:
+        return json_err(f"Role '{role_id}' not found.", 404)
+
+    updates: dict = {}
+    if "displayName" in data:
+        updates["displayName"] = str(data["displayName"]).strip()
+    if "description" in data:
+        updates["description"] = str(data["description"]).strip()
+    if "permissions" in data:
+        permissions = data["permissions"]
+        if not isinstance(permissions, list):
+            return json_err("'permissions' must be an array.", 400)
+
+        registry = _load_registry()
+        if registry is None:
+            return json_err("Permissions registry has not been seeded — cannot validate permissions.", 503)
+
+        registry_ids = {p["id"] for p in registry if p.get("id")}
+        unknown = [p for p in permissions if p not in registry_ids]
+        if unknown:
+            return json_err(f"Unknown permission(s) not in registry: {unknown}", 400)
+
+        updates["permissions"] = sorted(set(permissions))
+
+    if not updates:
+        return json_err("No updatable fields provided (displayName, description, permissions).", 400)
+
+    db().collection("roles").document(role_id).update(updates)
+    refresh_rbac_cache()
+
+    write_audit_event(
+        "role_updated",
+        uid=user.get("uid", "unknown"),
+        role_id=role_id,
+        updated_fields=list(updates.keys()),
+    )
+
+    return json_ok({
+        "updated":        True,
+        "roleId":         role_id,
+        "updated_fields": list(updates.keys()),
+    })
 
 
 # ── DELETE /delete_role_fn ────────────────────────────────────────────────────

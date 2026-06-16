@@ -61,7 +61,7 @@ logger = logging.getLogger(__name__)
 _CACHE_TTL_SECONDS: int = getattr(Config, "RBAC_CACHE_TTL", 300)
 
 _cache_lock = threading.Lock()
-_cache_loaded_at: float = 0.0  # monotonic timestamp of last successful load
+_cache_loaded_at: float = float("-inf")  # ensures cache is always stale on cold start
 
 # Full role metadata keyed by role ID:
 #   { "admin_staff": { "roleId": "admin_staff", "displayName": "…",
@@ -195,7 +195,7 @@ def refresh_rbac_cache() -> None:
     """
     global _cache_loaded_at
     with _cache_lock:
-        _cache_loaded_at = 0.0  # mark stale
+        _cache_loaded_at = float("-inf")  # mark stale
     _ensure_cache_fresh()
     logger.info("RBAC cache force-refreshed by explicit call.")
 
@@ -245,6 +245,21 @@ def get_all_role_ids() -> List[str]:
          "senior_partner", "system_admin"]
     """
     return [r["roleId"] for r in get_all_roles()]
+
+
+def get_role_display_name(role_id: str) -> str:
+    """
+    Return the Firestore displayName for *role_id*, falling back to the
+    roleId itself if the role is not found in the cache.
+
+    Use this instead of hardcoded role-label dicts so the display name
+    always reflects what's in Firestore without a code change.
+
+    Example:
+        get_role_display_name("senior_partner")  →  "Senior Partner"
+        get_role_display_name("unknown_role")    →  "unknown_role"
+    """
+    return _role_record(role_id).get("displayName", role_id)
 
 
 def get_all_permissions() -> List[str]:

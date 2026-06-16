@@ -136,6 +136,24 @@ def handle_options(req: https_fn.Request) -> https_fn.Response | None:
 
 
 # ── Firestore document serialization ─────────────────────────────────────────
+def _serialise_value(v: Any) -> Any:
+    """
+    Recursively make a Firestore value JSON-safe.
+
+    - Any object with .isoformat() (DatetimeWithNanoseconds, datetime, date)
+      is converted to an ISO-8601 string.
+    - Nested dicts and lists are walked recursively.
+    - All other values are returned unchanged.
+    """
+    if hasattr(v, "isoformat"):
+        return v.isoformat()
+    if isinstance(v, dict):
+        return {k: _serialise_value(vv) for k, vv in v.items()}
+    if isinstance(v, list):
+        return [_serialise_value(item) for item in v]
+    return v
+
+
 def serialise_doc(
     doc_dict: dict,
     *,
@@ -145,15 +163,19 @@ def serialise_doc(
     """
     Prepare a Firestore document dict for JSON serialization.
 
-    Previously duplicated as inline loops in:
-      - api/users.py  list_users_fn  (created_at, updated_at, deleted_at)
-      - api/users.py  get_user_fn    (created_at, updated_at)
-      - api/audit.py  get_audit_log_fn (timestamp)
+    Converts ALL Firestore timestamp values (DatetimeWithNanoseconds, datetime)
+    anywhere in the document tree to ISO-8601 strings — including nested dicts
+    and lists, and regardless of field name. This replaces the previous
+    field-name whitelist (TIMESTAMP_FIELDS) which silently missed any field
+    not on the list (e.g. `updatedAt`, custom audit fields).
 
     Args:
         doc_dict:               Raw dict from doc.to_dict().
-        strip_phi:              If True, remove all PHI_FIELDS keys.
-        extra_timestamp_fields: Additional timestamp key names beyond TIMESTAMP_FIELDS.
+        strip_phi:              If True, remove all PHI_FIELDS keys before
+                                serialising.
+        extra_timestamp_fields: Kept for backward compatibility — ignored,
+                                since all timestamps are now converted by
+                                value inspection rather than field name.
 
     Returns:
         A new dict safe for json.dumps().
@@ -164,12 +186,7 @@ def serialise_doc(
         for field in PHI_FIELDS:
             d.pop(field, None)
 
-    all_ts_fields = TIMESTAMP_FIELDS + extra_timestamp_fields
-    for key in all_ts_fields:
-        if key in d and hasattr(d[key], "isoformat"):
-            d[key] = d[key].isoformat()
-
-    return d
+    return {k: _serialise_value(v) for k, v in d.items()}
 
 
 # ── Audit log writer ─────────────────────────────────────────────────────────

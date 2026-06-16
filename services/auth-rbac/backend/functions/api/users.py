@@ -18,14 +18,17 @@ Changes from original:
 
 from __future__ import annotations
 
+import logging
 from firebase_functions import https_fn
 from firebase_admin import auth, firestore as fs_admin
 from config import Config
-from auth.rbac import require_permission, has_permission, log_role_change
+from auth.rbac import require_permission, require_any, has_permission, log_role_change
 from auth.auth_service import create_user as _create_user
 from middleware.http import REGION, json_ok, json_err, handle_options, db, serialise_doc, write_audit_event
 
 from middleware.jwt_middleware import require_auth
+
+logger = logging.getLogger(__name__)
 
 
 # ── POST /createUser ──────────────────────────────────────────────────────────
@@ -38,7 +41,7 @@ def create_user_fn(req: https_fn.Request) -> https_fn.Response:
     user, err = require_auth(req)
     if err:
         return err
-    guard = require_permission(user, "staff.manage", req)
+    guard = require_any(user, "staff.manage", "system.admin", request=req)
     if guard:
         return guard
 
@@ -49,8 +52,6 @@ def create_user_fn(req: https_fn.Request) -> https_fn.Response:
 
     requested_role = data["role"]
     caller_role    = user.get("role", "")
-    if requested_role != "client" and caller_role not in ("admin_staff", "senior_partner"):
-        return json_err("Only Admin or Senior Partner can assign staff roles.", 403)
 
     try:
         new_user = _create_user(
@@ -77,78 +78,84 @@ def list_users_fn(req: https_fn.Request) -> https_fn.Response:
     user, err = require_auth(req)
     if err:
         return err
-    guard = require_permission(user, "staff.manage", req)
+    guard = require_any(user, "staff.manage", "system.admin", request=req)
     if guard:
         return guard
 
-    col           = db().collection("staff")
-    role_filter   = req.args.get("role")
-    status_filter = req.args.get("status")
-    search        = (req.args.get("search") or "").strip().lower()
-    page_size     = min(int(req.args.get("page_size", 20)), 100)
-    cursor_id     = req.args.get("cursor")
+    try:
+        col           = db().collection("staff")
+        role_filter   = req.args.get("role")
+        status_filter = req.args.get("status")
+        search        = (req.args.get("search") or "").strip().lower()
+        page_size     = min(int(req.args.get("page_size", 20)), 100)
+        cursor_id     = req.args.get("cursor")
 
-    query = col
-    if role_filter:
-        query = query.where("role", "==", role_filter)
-    if status_filter:
-        query = query.where("isActive", "==", (status_filter == "active"))
+        query = col
+        if role_filter:
+            query = query.where("role", "==", role_filter)
+        if status_filter:
+            query = query.where("isActive", "==", (status_filter == "active"))
 
-    query = query.order_by("createdAt", direction=fs_admin.Query.DESCENDING)
+        query = query.order_by("createdAt", direction=fs_admin.Query.DESCENDING)
 
-    if cursor_id:
-        cursor_doc = col.document(cursor_id).get()
-        if cursor_doc.exists:
-            query = query.start_after(cursor_doc)
+        if cursor_id:
+            cursor_doc = col.document(cursor_id).get()
+            if cursor_doc.exists:
+                query = query.start_after(cursor_doc)
 
-    query    = query.limit(page_size + 1)
-    docs     = list(query.stream())
-    has_more = len(docs) > page_size
-    docs     = docs[:page_size]
+        query    = query.limit(page_size + 1)
+        docs     = list(query.stream())
+        has_more = len(docs) > page_size
+        docs     = docs[:page_size]
 
-    # Fetch maxCaseload once from firmSettings for all users
-    firm_doc = db().collection("firmSettings").document("default").get()
-    default_max_caseload = (firm_doc.to_dict() or {}).get("defaultMaxCaseload", 20) if firm_doc.exists else 20
+        # Fetch maxCaseload once from firmSettings for all users
+        firm_doc = db().collection("firmSettings").document("default").get()
+        default_max_caseload = (firm_doc.to_dict() or {}).get("defaultMaxCaseload", 20) if firm_doc.exists else 20
 
-    users = []
-    for doc in docs:
-        d = serialise_doc(doc.to_dict(), strip_phi=True)
-        if search:
-            name  = (d.get("displayName") or "").lower()
-            email = (d.get("email") or "").lower()
-            if search not in name and search not in email:
-                continue
-        # Computed: activeCaseCount per user
-        # Computed: activeCaseCount per user
-        uid = d.get("userId", "")
-        active_statuses = [
-            "Pending Paralegal Review",
-            "Pending Attorney Review",
-            "Approved for Filing",
-            "VCF - Submitted",
-        ]
-        paralegal_cases = (
-            db().collection("cases")
-            .where("assignment.assignedParalegal", "==", uid)
-            .where("status", "in", active_statuses)
-            .stream()
-        )
-        attorney_cases = (
-            db().collection("cases")
-            .where("assignment.assignedAttorney", "==", uid)
-            .where("status", "in", active_statuses)
-            .stream()
-        )
-        d["activeCaseCount"] = sum(1 for _ in paralegal_cases) + sum(1 for _ in attorney_cases)
-        d["maxCaseload"]     = default_max_caseload
-        users.append(d)
+        users = []
+        for doc in docs:
+            d = serialise_doc(doc.to_dict(), strip_phi=True)
+            if search:
+                name  = (d.get("displayName") or "").lower()
+                email = (d.get("email") or "").lower()
+                if search not in name and search not in email:
+                    continue
+            uid = d.get("userId", "")
+            active_statuses = [
+                "Pending Paralegal Review",
+                "Pending Attorney Review",
+                "Approved for Filing",
+                "VCF - Submitted",
+            ]
+            try:
+                paralegal_cases = (
+                    db().collection("cases")
+                    .where("assignment.assignedParalegal", "==", uid)
+                    .where("status", "in", active_statuses)
+                    .stream()
+                )
+                attorney_cases = (
+                    db().collection("cases")
+                    .where("assignment.assignedAttorney", "==", uid)
+                    .where("status", "in", active_statuses)
+                    .stream()
+                )
+                d["activeCaseCount"] = sum(1 for _ in paralegal_cases) + sum(1 for _ in attorney_cases)
+            except Exception as exc:
+                logger.warning("activeCaseCount query failed for uid=%s: %s", uid, exc)
+                d["activeCaseCount"] = 0
+            d["maxCaseload"] = default_max_caseload
+            users.append(d)
 
-    return json_ok({
-        "users":       users,
-        "page_size":   page_size,
-        "has_more":    has_more,
-        "next_cursor": docs[-1].id if has_more and docs else None,
-    })
+        return json_ok({
+            "users":       users,
+            "page_size":   page_size,
+            "has_more":    has_more,
+            "next_cursor": docs[-1].id if has_more and docs else None,
+        })
+    except Exception as exc:
+        logger.error("list_users_fn error: %s", exc)
+        return json_err(f"Failed to list users: {exc}", 500)
 
 
 # ── GET /getUser?uid=xxx ──────────────────────────────────────────────────────
@@ -244,8 +251,8 @@ def update_user_fn(req: https_fn.Request) -> https_fn.Response:
         return json_err("No updatable fields provided.", 400)
 
     if "role" in updates:
-        if caller_role not in ("admin_staff", "senior_partner"):
-            return json_err("Only Admin or Senior Partner can change roles.", 403)
+        if not has_permission(caller_role, "staff.manage"):
+            return json_err("Insufficient permissions to change roles.", 403)
         old_role = current.get("role", "")
         new_role = updates["role"]
         if old_role != new_role:
@@ -272,7 +279,7 @@ def delete_user_fn(req: https_fn.Request) -> https_fn.Response:
     user, err = require_auth(req)
     if err:
         return err
-    guard = require_permission(user, "staff.manage", req)
+    guard = require_any(user, "staff.manage", "system.admin", request=req)
     if guard:
         return guard
 
