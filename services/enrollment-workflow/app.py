@@ -68,9 +68,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# In production, allow_origins was an empty list — Starlette's CORSMiddleware
+# rejects every preflight with 400 "Disallowed CORS origin" when no origin can
+# match. That broke /api/v1/dashboard/deadlines for the Pipeline Analytics
+# dashboard (and any other prod frontend). Explicitly allow the known prod
+# origins instead of leaving the list empty.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if settings.is_development else [],
+    allow_origins=["*"] if settings.is_development else [
+        "https://simpletort.web.app",
+        "https://staff.simpletort.com",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
