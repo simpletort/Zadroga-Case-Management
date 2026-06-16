@@ -70,14 +70,9 @@ ROUTE_PERMISSIONS: list[tuple[str, str, str]] = [
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    try:
-        from app.utils.firestore import get_firestore_client
-        get_firestore_client()
-        logger.info("Auth-RBAC-CR service started — Firestore client initialised")
-    except Exception as exc:
-        # Log but do not crash — service must bind to port so Cloud Run health checks pass.
-        # Firestore errors will surface on first request instead.
-        logger.error("Firestore client init failed at startup: %s", exc)
+    from app.utils.firestore import get_firestore_client
+    get_firestore_client()
+    logger.info("Auth-RBAC-CR service started — Firestore client initialised")
     yield
     logger.info("Auth-RBAC-CR service shutting down")
 

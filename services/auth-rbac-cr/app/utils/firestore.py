@@ -21,8 +21,7 @@ def get_firestore_client() -> firestore.Client:
             cred = credentials.ApplicationDefault()
             firebase_admin.initialize_app(cred, {"projectId": settings.gcp_project_id})
             logger.info("Firebase initialized with Application Default Credentials")
-        except Exception as adc_exc:
-            logger.warning("ADC init failed (%s) — falling back to service account key", adc_exc)
+        except Exception:
             cred = credentials.Certificate(settings.firebase_service_account_key_path)
             firebase_admin.initialize_app(cred)
             logger.info("Firebase initialized with service account key")
