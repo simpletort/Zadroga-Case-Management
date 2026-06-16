@@ -1899,7 +1899,7 @@ async def download_statement(
     from google.cloud import storage as gcs
 
     settings   = get_settings()
-    gcs_object = f"settlements/{case_id}/{statement_id}.pdf"
+    gcs_object = f"{case_id}/settlements/{statement_id}.pdf"
 
     def _download() -> bytes:
         client = gcs.Client()
