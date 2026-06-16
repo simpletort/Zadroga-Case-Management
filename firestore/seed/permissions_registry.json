@@ -58,7 +58,20 @@
       { "id": "storage.upload.write",         "displayName": "Register Uploads",           "category": "storage", "description": "Register new file uploads" },
       { "id": "storage.upload.read",          "displayName": "Read Upload Status",         "category": "storage", "description": "Poll virus-scan and upload status" },
       { "id": "storage.documents.read",       "displayName": "Read Stored Documents",      "category": "storage", "description": "Read documents from permanent GCS storage" },
-      { "id": "storage.documents.write",      "displayName": "Write Stored Documents",     "category": "storage", "description": "Write documents to permanent GCS storage" }
+      { "id": "storage.documents.write",      "displayName": "Write Stored Documents",     "category": "storage", "description": "Write documents to permanent GCS storage" },
+      { "id": "storage.read",                 "displayName": "Read Storage",               "category": "storage", "description": "Read files from storage" },
+      { "id": "storage.delete",               "displayName": "Delete Storage Files",       "category": "storage", "description": "Delete files from storage" },
+
+      { "id": "feeConfig.read",               "displayName": "Read Fee Config",            "category": "feeConfig",       "description": "View fee configuration settings" },
+      { "id": "feeConfig.write",              "displayName": "Write Fee Config",           "category": "feeConfig",       "description": "Update fee configuration settings" },
+
+      { "id": "notifications.read",           "displayName": "Read Notifications",         "category": "notifications",   "description": "View notifications" },
+      { "id": "notifications.send",           "displayName": "Send Notifications",         "category": "notifications",   "description": "Send notifications to users" },
+
+      { "id": "settlement.read",              "displayName": "Read Settlements",           "category": "settlement",      "description": "View settlement records" },
+      { "id": "settlement.write",             "displayName": "Write Settlements",          "category": "settlement",      "description": "Create and edit settlement records" },
+      { "id": "settlement.approve",           "displayName": "Approve Settlements",        "category": "settlement",      "description": "Approve settlement disbursements" },
+      { "id": "settlement.delete",            "displayName": "Delete Settlements",         "category": "settlement",      "description": "Delete settlement records" }
     ]
   },
   "_comment": "Apply with: firebase firestore:import or a one-time admin script. Collection: permissions_registry, Document ID: default"

@@ -17,7 +17,10 @@ Read endpoints require staff.manage.
 
 from __future__ import annotations
 
+import logging
 from firebase_functions import https_fn
+
+logger = logging.getLogger(__name__)
 from auth.rbac import (
     require_permission,
     require_any,
@@ -328,11 +331,17 @@ def update_role_fn(req: https_fn.Request) -> https_fn.Response:
 
     data    = req.get_json(silent=True) or {}
     role_id = str(data.get("roleId", "")).strip()
+
+    logger.info("update_role_fn: method=%s role_id=%r body_keys=%s",
+                req.method, role_id, list(data.keys()))
+
     if not role_id:
+        logger.warning("update_role_fn: missing roleId")
         return json_err("roleId is required.", 400)
 
     role_doc = db().collection("roles").document(role_id).get()
     if not role_doc.exists:
+        logger.warning("update_role_fn: role not found: %s", role_id)
         return json_err(f"Role '{role_id}' not found.", 404)
 
     updates: dict = {}
@@ -343,20 +352,24 @@ def update_role_fn(req: https_fn.Request) -> https_fn.Response:
     if "permissions" in data:
         permissions = data["permissions"]
         if not isinstance(permissions, list):
+            logger.warning("update_role_fn: permissions is not a list: %r", type(permissions))
             return json_err("'permissions' must be an array.", 400)
 
         registry = _load_registry()
         if registry is None:
+            logger.error("update_role_fn: permissions registry not seeded")
             return json_err("Permissions registry has not been seeded — cannot validate permissions.", 503)
 
         registry_ids = {p["id"] for p in registry if p.get("id")}
         unknown = [p for p in permissions if p not in registry_ids]
         if unknown:
+            logger.warning("update_role_fn: unknown permissions: %s", unknown)
             return json_err(f"Unknown permission(s) not in registry: {unknown}", 400)
 
         updates["permissions"] = sorted(set(permissions))
 
     if not updates:
+        logger.warning("update_role_fn: no updatable fields in body: %s", list(data.keys()))
         return json_err("No updatable fields provided (displayName, description, permissions).", 400)
 
     db().collection("roles").document(role_id).update(updates)

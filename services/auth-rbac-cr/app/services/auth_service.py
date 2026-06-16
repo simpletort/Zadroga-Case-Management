@@ -1,20 +1,8 @@
 """
-auth/auth_service.py — Authentication business logic
-=====================================================
+app/services/auth_service.py — Authentication business logic
+============================================================
 Password validation, rate limiting, user creation, session management,
 portal invites, password reset, and email dispatch.
-
-Changes from original:
-  F-01 — send_verification_email() implemented (was a TODO comment).
-          Provider selected via EMAIL_PROVIDER env var (sendgrid / mailgun).
-          Graceful fallback to a warning log in local/emulator environments.
-  F-02 — refresh_session() now exists and is called by jwt_middleware on every
-          authenticated session-cookie request (idle-based 30-min timeout).
-  F-03 — check_rate_limit() rewritten to use datetime.now(UTC) exclusively.
-          Previously mixed SERVER_TIMESTAMP writes with time.time() reads,
-          causing window drift on Cloud Function cold starts.
-  Refactor — db() shortcut from middleware/http.py replaces fs_admin.client()
-             throughout (18 call sites → 1 import).
 """
 
 from __future__ import annotations
@@ -26,10 +14,8 @@ import secrets
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from config import Config
-from firebase_admin import auth, firestore as fs_admin
 
-from middleware.http import db
+from firebase_admin import auth, firestore as _fs_admin
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +32,11 @@ PASSWORD_POLICY = {
 SESSION_TIMEOUT_MINUTES  = 30
 MAX_AUTH_ATTEMPTS        = 5
 AUTH_ATTEMPT_WINDOW_SECS = 900   # 15 minutes
+
+
+def _get_db():
+    from app.utils.firestore import get_firestore_client
+    return get_firestore_client()
 
 
 # ── Password validation ───────────────────────────────────────────────────────
@@ -78,15 +69,7 @@ def _rl_key(identifier: str) -> str:
 
 
 def check_rate_limit(identifier: str) -> None:
-    """
-    Enforce a sliding-window rate limit for the given identifier.
-
-    F-03 fix: all timestamps now use datetime.now(UTC) consistently.
-    The original code wrote SERVER_TIMESTAMP but read back with time.time(),
-    causing comparison failures on Cloud Function cold starts where the two
-    clocks could diverge.
-    """
-    ref = db().collection("_rate_limits").document(_rl_key(identifier))
+    ref = _get_db().collection("_rate_limits").document(_rl_key(identifier))
     doc = ref.get()
     now = datetime.now(timezone.utc)
 
@@ -95,7 +78,6 @@ def check_rate_limit(identifier: str) -> None:
         window_start = d.get("window_start")
         attempts     = d.get("attempts", 0)
 
-        # Normalise Firestore Timestamp → timezone-aware datetime if needed
         if hasattr(window_start, "ToDatetime"):
             window_start = window_start.ToDatetime(tzinfo=timezone.utc)
         elif window_start is not None and getattr(window_start, "tzinfo", None) is None:
@@ -108,32 +90,21 @@ def check_rate_limit(identifier: str) -> None:
                 )
                 raise PermissionError(f"Too many attempts. Retry after {retry_after}s.")
         else:
-            # Window expired — reset with a clean Python datetime (not SERVER_TIMESTAMP)
             ref.set({"window_start": now, "attempts": 1, "last_attempt": now})
             return
 
-    # First attempt in window — merge-increment; use Python datetime for window_start
     ref.set(
-        {"window_start": now, "attempts": fs_admin.Increment(1), "last_attempt": now},
+        {"window_start": now, "attempts": _fs_admin.Increment(1), "last_attempt": now},
         merge=True,
     )
 
 
 def reset_rate_limit(identifier: str) -> None:
-    db().collection("_rate_limits").document(_rl_key(identifier)).delete()
+    _get_db().collection("_rate_limits").document(_rl_key(identifier)).delete()
 
 
 # ── Email dispatch ────────────────────────────────────────────────────────────
-# F-01 fix: previously a TODO comment — the verification link was generated but
-# never actually sent.  Provider is chosen via EMAIL_PROVIDER env var.
-
 def send_verification_email(email: str, verification_link: str) -> None:
-    """
-    Dispatch a verification email.
-    Set EMAIL_PROVIDER=sendgrid or EMAIL_PROVIDER=mailgun plus the
-    matching credentials in environment variables.
-    Falls back to a warning log in local / emulator mode.
-    """
     provider = os.environ.get("EMAIL_PROVIDER", "").lower()
     if provider == "sendgrid":
         _send_via_sendgrid(email, verification_link)
@@ -155,14 +126,12 @@ def _email_html(link: str) -> str:
 
 
 def _send_via_sendgrid(email: str, link: str) -> None:
-    """Requires SENDGRID_API_KEY and SENDGRID_FROM_EMAIL env vars."""
     try:
         import sendgrid
         from sendgrid.helpers.mail import Mail, To, From, Subject, HtmlContent
-
         sg  = sendgrid.SendGridAPIClient(api_key=os.environ["SENDGRID_API_KEY"])
         msg = Mail(
-            from_email=From(os.environ.get("SENDGRID_FROM_EMAIL", "noreply@yourdomain.com")),
+            from_email=From(os.environ.get("SENDGRID_FROM_EMAIL", "noreply@simpletort.com")),
             to_emails=To(email),
             subject=Subject("Verify your Legal Portal account"),
             html_content=HtmlContent(_email_html(link)),
@@ -176,10 +145,8 @@ def _send_via_sendgrid(email: str, link: str) -> None:
 
 
 def _send_via_mailgun(email: str, link: str) -> None:
-    """Requires MAILGUN_API_KEY and MAILGUN_DOMAIN env vars."""
     try:
         import requests as http_requests
-
         resp = http_requests.post(
             f"https://api.mailgun.net/v3/{os.environ['MAILGUN_DOMAIN']}/messages",
             auth=("api", os.environ["MAILGUN_API_KEY"]),
@@ -214,7 +181,6 @@ def create_user(
     if portal_token:
         _consume_portal_token(portal_token, email)
 
-    # Create Firebase Auth user
     user_record = auth.create_user(
         email=email,
         password=password,
@@ -223,11 +189,8 @@ def create_user(
     )
     auth.set_custom_user_claims(user_record.uid, {"role": role, "active": True})
 
-    # Firestore staff — document ID = userId (Firebase Auth UID).
-    # Every other service (case-development, enrollment-workflow, etc.) does
-    # direct doc ID lookups via the UID — changing this would break them all.
-    from auth.rbac import get_role_display_name
-    db().collection("staff").document(user_record.uid).set({
+    from app.services.rbac_service import get_role_display_name
+    _get_db().collection("staff").document(user_record.uid).set({
         "userId":            user_record.uid,
         "email":             email,
         "displayName":       display_name,
@@ -236,29 +199,24 @@ def create_user(
         "isActive":          True,
         "googleWorkspaceId": "",
         "lastLoginAt":       None,
-        "createdAt":         fs_admin.SERVER_TIMESTAMP,
+        "createdAt":         _fs_admin.SERVER_TIMESTAMP,
     })
 
-    # F-01: generate AND send the verification email
-    # verification_link = auth.generate_email_verification_link(email)
-    # send_verification_email(email, verification_link)
-
     return {
-        "uid":               user_record.uid,
-        "email":             email,
-        "display_name":      display_name,
-        "role":              role,
-    #     "verification_link": verification_link,
+        "uid":          user_record.uid,
+        "email":        email,
+        "display_name": display_name,
+        "role":         role,
     }
 
 
 # ── Portal invites ────────────────────────────────────────────────────────────
 def generate_portal_invite(email: str, created_by_uid: str) -> str:
     token = secrets.token_urlsafe(32)
-    db().collection("_portal_invites").document(token).set({
+    _get_db().collection("_portal_invites").document(token).set({
         "email":      email,
         "created_by": created_by_uid,
-        "created_at": fs_admin.SERVER_TIMESTAMP,
+        "created_at": _fs_admin.SERVER_TIMESTAMP,
         "expires_at": datetime.now(timezone.utc) + timedelta(days=7),
         "used":       False,
     })
@@ -266,7 +224,7 @@ def generate_portal_invite(email: str, created_by_uid: str) -> str:
 
 
 def _consume_portal_token(token: str, email: str) -> None:
-    ref = db().collection("_portal_invites").document(token)
+    ref = _get_db().collection("_portal_invites").document(token)
     doc = ref.get()
     if not doc.exists:
         raise ValueError("Invalid portal invite token.")
@@ -278,7 +236,7 @@ def _consume_portal_token(token: str, email: str) -> None:
     expires_at = d.get("expires_at")
     if expires_at and expires_at < datetime.now(timezone.utc):
         raise ValueError("Portal invite token expired.")
-    ref.update({"used": True, "used_at": fs_admin.SERVER_TIMESTAMP})
+    ref.update({"used": True, "used_at": _fs_admin.SERVER_TIMESTAMP})
 
 
 # ── Password reset ────────────────────────────────────────────────────────────
@@ -288,7 +246,7 @@ def request_password_reset(email: str, ip: str = "unknown") -> str:
         auth.get_user_by_email(email)
         return auth.generate_password_reset_link(email)
     except auth.UserNotFoundError:
-        return ""   # silent — don't reveal whether email exists
+        return ""
 
 
 # ── Session management ────────────────────────────────────────────────────────
@@ -297,18 +255,17 @@ def create_session(uid: str, id_token: str) -> dict:
     session_cookie = auth.create_session_cookie(id_token, expires_in=expires_in)
     session_id     = secrets.token_urlsafe(16)
 
-    db().collection("_sessions").document(session_id).set({
+    _get_db().collection("_sessions").document(session_id).set({
         "uid":           uid,
-        "created_at":    fs_admin.SERVER_TIMESTAMP,
-        "last_activity": fs_admin.SERVER_TIMESTAMP,
+        "created_at":    _fs_admin.SERVER_TIMESTAMP,
+        "last_activity": _fs_admin.SERVER_TIMESTAMP,
         "expires_at":    datetime.now(timezone.utc) + expires_in,
         "active":        True,
     })
 
-    # Update lastLoginAt on the staff profile
-    staff_docs = list(db().collection("staff").where("userId", "==", uid).stream())
+    staff_docs = list(_get_db().collection("staff").where("userId", "==", uid).stream())
     if staff_docs:
-        staff_docs[0].reference.update({"lastLoginAt": fs_admin.SERVER_TIMESTAMP})
+        staff_docs[0].reference.update({"lastLoginAt": _fs_admin.SERVER_TIMESTAMP})
 
     return {
         "session_cookie":     session_cookie,
@@ -318,12 +275,8 @@ def create_session(uid: str, id_token: str) -> dict:
 
 
 def refresh_session(session_id: str) -> None:
-    """
-    F-02: Slide the session expiry window forward on every active request.
-    Called by jwt_middleware.require_auth() on every successful session-cookie auth.
-    """
-    db().collection("_sessions").document(session_id).update({
-        "last_activity": fs_admin.SERVER_TIMESTAMP,
+    _get_db().collection("_sessions").document(session_id).update({
+        "last_activity": _fs_admin.SERVER_TIMESTAMP,
         "expires_at":    datetime.now(timezone.utc) + timedelta(minutes=SESSION_TIMEOUT_MINUTES),
     })
 
@@ -331,12 +284,12 @@ def refresh_session(session_id: str) -> None:
 def revoke_session(uid: str) -> None:
     auth.revoke_refresh_tokens(uid)
     sessions = (
-        db().collection("_sessions")
+        _get_db().collection("_sessions")
             .where("uid",    "==", uid)
             .where("active", "==", True)
             .stream()
     )
-    batch = db().batch()
+    batch = _get_db().batch()
     for s in sessions:
         batch.update(s.reference, {"active": False})
     batch.commit()

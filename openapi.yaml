@@ -3999,203 +3999,438 @@ paths:
           description: Insufficient role
 
   # ============================================================
-  # AUTH-RBAC SERVICE
-  # Firebase Cloud Functions: https://us-central1-simpletort-zadroga-dev.cloudfunctions.net
-  # Min role required per endpoint is enforced by the function itself.
-  # disable_auth: true on every backend — prevents the Gateway from replacing
-  # the caller's Firebase ID token with its own OIDC service-account token.
-  # Functions validate the Firebase ID token themselves via jwt_middleware.py.
+  # AUTH-RBAC-CR SERVICE
+  # Cloud Run: https://auth-rbac-cr-292736139819.us-central1.run.app
+  # Public endpoints (register, session, password-reset) have security: []
+  # because callers have no Firebase token yet.
   # ============================================================
 
-  # --- Permissions Registry ---
+  # --- Auth ---
 
-  /api/v1/auth/permissions:
+  /api/v1/auth/register:
     options:
-      operationId: corsPreflightAuthPermissions
+      operationId: corsPreflightAuthRegister
       security: []
       x-google-backend:
-        address: https://us-central1-simpletort-zadroga-dev.cloudfunctions.net/list_permissions_fn
-        path_translation: CONSTANT_ADDRESS
-        disable_auth: true
+        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    post:
+      summary: Create a new user account (public for client self-registration via invite; requires staff.manage for staff)
+      operationId: authRegister
+      security: []
+      x-google-backend:
+        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        201:
+          description: User created
+        400:
+          description: Validation error
+        409:
+          description: Email already registered
+
+  /api/v1/auth/session:
+    options:
+      operationId: corsPreflightAuthSession
+      security: []
+      x-google-backend:
+        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    post:
+      summary: Exchange a Firebase ID token for a session cookie
+      operationId: authCreateSession
+      security: []
+      x-google-backend:
+        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Session created; sets session and session_id cookies
+        401:
+          description: Invalid ID token
+
+  /api/v1/auth/logout:
+    options:
+      operationId: corsPreflightAuthLogout
+      security: []
+      x-google-backend:
+        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    post:
+      summary: Revoke all refresh tokens and clear session cookies
+      operationId: authLogout
+      x-google-backend:
+        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Logged out
+        401:
+          description: Unauthorized
+
+  /api/v1/auth/password-reset:
+    options:
+      operationId: corsPreflightAuthPasswordReset
+      security: []
+      x-google-backend:
+        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    post:
+      summary: Send a password reset email (always returns 200 to prevent email enumeration)
+      operationId: authPasswordReset
+      security: []
+      x-google-backend:
+        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Reset email dispatched if address is registered
+        429:
+          description: Rate limit exceeded
+
+  /api/v1/auth/invite:
+    options:
+      operationId: corsPreflightAuthInvite
+      security: []
+      x-google-backend:
+        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    post:
+      summary: Generate a 7-day portal invite link (requires staff.invite or system.admin)
+      operationId: authCreateInvite
+      x-google-backend:
+        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Invite link generated
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient permissions
+
+  # --- Users ---
+
+  /api/v1/users:
+    options:
+      operationId: corsPreflightUsers
+      security: []
+      x-google-backend:
+        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
           description: CORS preflight
     get:
-      summary: "List permissions from registry with optional ?search= and ?category= filters (min role: staff.manage)"
+      summary: List staff users with pagination and filters (requires staff.manage)
+      operationId: listUsers
+      parameters:
+        - { name: role, in: query, type: string }
+        - { name: status, in: query, type: string }
+        - { name: search, in: query, type: string }
+        - { name: page_size, in: query, type: integer }
+        - { name: cursor, in: query, type: string }
+      x-google-backend:
+        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: User list
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient permissions
+    post:
+      summary: Create a staff or client user (requires staff.manage)
+      operationId: createUser
+      x-google-backend:
+        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        201:
+          description: User created
+        400:
+          description: Validation error
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient permissions
+
+  /api/v1/users/{uid}:
+    options:
+      operationId: corsPreflightUserById
+      security: []
+      parameters:
+        - { name: uid, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Get a single user profile (own uid allowed; others require staff.manage)
+      operationId: getUser
+      parameters:
+        - { name: uid, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: User profile
+        401:
+          description: Unauthorized
+        403:
+          description: Forbidden
+        404:
+          description: User not found
+    put:
+      summary: Update user profile or role (staff.manage required to update others or change role)
+      operationId: updateUser
+      parameters:
+        - { name: uid, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Updated
+        400:
+          description: No updatable fields
+        401:
+          description: Unauthorized
+        403:
+          description: Forbidden
+        404:
+          description: User not found
+    delete:
+      summary: Hard-delete a user from Firestore and Firebase Auth (requires staff.manage)
+      operationId: deleteUser
+      parameters:
+        - { name: uid, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Deleted
+        401:
+          description: Unauthorized
+        403:
+          description: Forbidden
+        404:
+          description: User not found
+
+  # --- Roles ---
+
+  /api/v1/roles:
+    options:
+      operationId: corsPreflightRoles
+      security: []
+      x-google-backend:
+        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: List all roles from Firestore (requires staff.manage)
+      operationId: listRoles
+      x-google-backend:
+        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Role list
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient permissions
+    post:
+      summary: Create a new role; all permission IDs must exist in the registry (system.admin only)
+      operationId: createRole
+      x-google-backend:
+        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        201:
+          description: Role created
+        400:
+          description: Validation error or unknown permissions
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient permissions
+        409:
+          description: Role already exists
+
+  /api/v1/roles/{roleId}:
+    options:
+      operationId: corsPreflightRoleById
+      security: []
+      parameters:
+        - { name: roleId, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    put:
+      summary: Update a role's displayName, description, or permissions (system.admin only)
+      operationId: updateRole
+      parameters:
+        - { name: roleId, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Updated
+        400:
+          description: Validation error
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient permissions
+        404:
+          description: Role not found
+    delete:
+      summary: Delete a role; blocked if any staff user is still assigned to it (system.admin only)
+      operationId: deleteRole
+      parameters:
+        - { name: roleId, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Deleted
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient permissions
+        404:
+          description: Role not found
+        409:
+          description: Role in use — users still assigned
+
+  # --- Permissions ---
+
+  /api/v1/permissions:
+    options:
+      operationId: corsPreflightPermissions
+      security: []
+      x-google-backend:
+        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: List all permissions from the registry with optional search and category filter (requires staff.manage)
       operationId: listPermissions
       parameters:
         - { name: search, in: query, type: string }
         - { name: category, in: query, type: string }
       x-google-backend:
-        address: https://us-central1-simpletort-zadroga-dev.cloudfunctions.net/list_permissions_fn
-        path_translation: CONSTANT_ADDRESS
-        disable_auth: true
+        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
-          description: Filtered permissions list
+          description: Permission list
         401:
           description: Unauthorized
         403:
-          description: Insufficient role
+          description: Insufficient permissions
         404:
           description: Registry not seeded
     put:
-      summary: "Replace the entire permissions registry (min role: system.admin)"
+      summary: Replace the entire permissions registry document (system.admin only)
       operationId: updatePermissionsRegistry
-      parameters:
-        - name: body
-          in: body
-          required: true
-          schema:
-            type: object
-            properties:
-              permissions:
-                type: array
-                items:
-                  type: object
       x-google-backend:
-        address: https://us-central1-simpletort-zadroga-dev.cloudfunctions.net/update_permissions_registry_fn
-        path_translation: CONSTANT_ADDRESS
-        disable_auth: true
+        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
-          description: Registry updated
+          description: Registry replaced
         400:
           description: Invalid payload
+        401:
+          description: Unauthorized
         403:
-          description: Insufficient role
+          description: Insufficient permissions
 
-  /api/v1/auth/permissions/seed:
+  /api/v1/permissions/seed:
     options:
-      operationId: corsPreflightAuthPermissionsSeed
+      operationId: corsPreflightPermissionsSeed
       security: []
       x-google-backend:
-        address: https://us-central1-simpletort-zadroga-dev.cloudfunctions.net/seed_permissions_registry_fn
-        path_translation: CONSTANT_ADDRESS
-        disable_auth: true
+        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
           description: CORS preflight
     post:
-      summary: "Seed permissions registry from existing roles — merges new permission IDs, preserves existing metadata (min role: system.admin)"
+      summary: Auto-populate the registry from all role documents; preserves existing metadata (system.admin only)
       operationId: seedPermissionsRegistry
       x-google-backend:
-        address: https://us-central1-simpletort-zadroga-dev.cloudfunctions.net/seed_permissions_registry_fn
-        path_translation: CONSTANT_ADDRESS
-        disable_auth: true
+        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
-          description: Registry seeded — returns total count and list of newly added IDs
+          description: Registry seeded
+        401:
+          description: Unauthorized
         403:
-          description: Insufficient role
+          description: Insufficient permissions
         404:
           description: No permissions found in roles collection
 
-  # --- Role Management ---
+  # --- Audit ---
 
-  /api/v1/auth/roles:
+  /api/v1/audit-log:
     options:
-      operationId: corsPreflightAuthRoles
+      operationId: corsPreflightAuditLog
       security: []
       x-google-backend:
-        address: https://us-central1-simpletort-zadroga-dev.cloudfunctions.net/list_roles_fn
-        path_translation: CONSTANT_ADDRESS
-        disable_auth: true
+        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
           description: CORS preflight
     get:
-      summary: "List all roles with their permissions (min role: staff.manage)"
-      operationId: listRoles
+      summary: Read the immutable audit log (requires auditLog.read — senior_partner and above)
+      operationId: getAuditLog
+      parameters:
+        - { name: uid, in: query, type: string }
+        - { name: limit, in: query, type: integer }
       x-google-backend:
-        address: https://us-central1-simpletort-zadroga-dev.cloudfunctions.net/list_roles_fn
-        path_translation: CONSTANT_ADDRESS
-        disable_auth: true
+        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
-          description: Role list
+          description: Audit log entries
+        401:
+          description: Unauthorized
         403:
-          description: Insufficient role
-    post:
-      summary: "Create a new role with permissions validated against the registry (min role: system.admin)"
-      operationId: createRole
-      parameters:
-        - name: body
-          in: body
-          required: true
-          schema:
-            type: object
-            required: [roleId, displayName, permissions]
-            properties:
-              roleId: { type: string }
-              displayName: { type: string }
-              description: { type: string }
-              permissions:
-                type: array
-                items: { type: string }
-      x-google-backend:
-        address: https://us-central1-simpletort-zadroga-dev.cloudfunctions.net/create_role_fn
-        path_translation: CONSTANT_ADDRESS
-        disable_auth: true
-      responses:
-        201:
-          description: Role created
-        400:
-          description: Missing fields or unknown permissions
-        403:
-          description: Insufficient role
-        409:
-          description: Role ID already exists
-    put:
-      summary: "Update an existing role's displayName, description, or permissions (min role: system.admin)"
-      operationId: updateRole
-      parameters:
-        - name: body
-          in: body
-          required: true
-          schema:
-            type: object
-            required: [roleId]
-            properties:
-              roleId: { type: string }
-              displayName: { type: string }
-              description: { type: string }
-              permissions:
-                type: array
-                items: { type: string }
-      x-google-backend:
-        address: https://us-central1-simpletort-zadroga-dev.cloudfunctions.net/update_role_fn
-        path_translation: CONSTANT_ADDRESS
-        disable_auth: true
-      responses:
-        200:
-          description: Role updated
-        400:
-          description: No updatable fields provided or unknown permissions
-        403:
-          description: Insufficient role
-        404:
-          description: Role not found
-        503:
-          description: Permissions registry not seeded
-    delete:
-      summary: "Hard-delete a role only if no users are assigned to it (min role: system.admin)"
-      operationId: deleteRole
-      parameters:
-        - { name: roleId, in: query, required: true, type: string }
-      x-google-backend:
-        address: https://us-central1-simpletort-zadroga-dev.cloudfunctions.net/delete_role_fn
-        path_translation: CONSTANT_ADDRESS
-        disable_auth: true
-      responses:
-        200:
-          description: Role deleted
-        403:
-          description: Insufficient role
-        404:
-          description: Role not found
-        409:
-          description: Role still assigned to one or more users
+          description: Insufficient permissions
 
 securityDefinitions:
   firebase:

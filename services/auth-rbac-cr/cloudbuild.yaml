@@ -1,0 +1,50 @@
+steps:
+  - name: "python:3.11-slim"
+    dir: "services/auth-rbac-cr"
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        pip install ../../shared
+        pip install -r requirements.txt
+        pytest tests/ -v --tb=short
+
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      - build
+      - "-t"
+      - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+      - "-t"
+      - "$_REPO/$_SERVICE_NAME:latest"
+      - "-f"
+      - "services/auth-rbac-cr/Dockerfile"
+      - "."
+
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"]
+
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "$_REPO/$_SERVICE_NAME:latest"]
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - "$_SERVICE_NAME-$_ENV"
+      - "--image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+      - "--region=$_REGION"
+      - "--platform=managed"
+      - "--no-allow-unauthenticated"
+      - "--memory=512Mi"
+      - "--cpu=1"
+      - "--max-instances=10"
+      - "--min-instances=0"
+      - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,ENV=$_ENV,FIRESTORE_DATABASE_ID=$_FIRESTORE_DATABASE_ID,TRUSTED_SERVICE_ACCOUNTS=$_TRUSTED_SERVICE_ACCOUNTS,EMAIL_PROVIDER=$_EMAIL_PROVIDER"
+
+images:
+  - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+  - "$_REPO/$_SERVICE_NAME:latest"
+
+options:
+  logging: CLOUD_LOGGING_ONLY

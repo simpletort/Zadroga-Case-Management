@@ -256,15 +256,20 @@ def update_user_fn(req: https_fn.Request) -> https_fn.Response:
         old_role = current.get("role", "")
         new_role = updates["role"]
         if old_role != new_role:
-            auth.set_custom_user_claims(target_uid, {"role": new_role, "active": True})
+            try:
+                auth.set_custom_user_claims(target_uid, {"role": new_role, "active": True})
+            except Exception as exc:
+                logger.warning("set_custom_user_claims failed for uid=%s: %s", target_uid, exc)
             log_role_change(caller_uid, target_uid, old_role, new_role)
 
     if "isActive" in updates:
-        auth.update_user(target_uid, disabled=not updates["isActive"])
+        try:
+            auth.update_user(target_uid, disabled=not updates["isActive"])
+        except Exception as exc:
+            logger.warning("auth.update_user failed for uid=%s: %s", target_uid, exc)
 
     updates['updatedAt'] = fs_admin.SERVER_TIMESTAMP
     ref.update(updates)
-
 
     return json_ok({"success": True, "updated_fields": list(updates.keys())})
 
@@ -287,26 +292,22 @@ def delete_user_fn(req: https_fn.Request) -> https_fn.Response:
     if not target_uid:
         return json_err("uid query param required", 400)
 
-    # staff docs use roleId as doc ID — find by uid field
     staff_docs = list(db().collection("staff").where("userId", "==", target_uid).stream())
     if not staff_docs:
         return json_err("User not found.", 404)
 
-    staff_docs[0].reference.update({
-        "status":     "deleted",
-        "deleted_at": fs_admin.SERVER_TIMESTAMP,
-        "deleted_by": user.get("uid"),
-    })
+    # Hard-delete: remove the Firestore document and disable the Auth account
+    staff_docs[0].reference.delete()
+
     try:
-        auth.update_user(target_uid, disabled=True)
-        auth.revoke_refresh_tokens(target_uid)
-    except Exception:
-        pass
+        auth.delete_user(target_uid)
+    except Exception as exc:
+        logger.warning("Firebase Auth delete failed for uid=%s: %s", target_uid, exc)
 
     write_audit_event(
-        "user_soft_deleted",
+        "user_deleted",
         target_uid=target_uid,
         performed_by=user.get("uid"),
     )
 
-    return json_ok({"success": True, "message": f"User {target_uid} soft-deleted."})
+    return json_ok({"success": True, "message": f"User {target_uid} deleted."})
