@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Any
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -21,6 +23,30 @@ class Settings(BaseSettings):
     rbac_cache_ttl: int = 300
 
     model_config = {"env_file": ".env", "case_sensitive": False}
+
+    @field_validator("trusted_service_accounts", mode="before")
+    @classmethod
+    def _parse_string_list(cls, v: Any) -> Any:
+        """
+        Allow the env var to be either a JSON array or a comma-separated
+        string.  An empty string (e.g. from an unset Cloud Build substitution)
+        is treated as an empty list rather than raising a ValidationError.
+        """
+        if isinstance(v, str):
+            v = v.strip()
+            if not v:
+                return []
+            # Try JSON first ("[]", "[\"a\",\"b\"]")
+            import json
+            try:
+                parsed = json.loads(v)
+                if isinstance(parsed, list):
+                    return parsed
+            except json.JSONDecodeError:
+                pass
+            # Fall back to comma-separated
+            return [item.strip() for item in v.split(",") if item.strip()]
+        return v
 
 
 @lru_cache()
