@@ -174,17 +174,20 @@ async def deadline_summary(
     db = get_db()
     today = date.today()
 
-    # query = db.collection("cases").where("enrollment.vcfFilingDeadline", ">", None)
+    # query = db.collection("cases").where("enrollment.filingDeadline", ">", None)
+    # Field name fixed: cases store the VCF filing deadline under
+    # enrollment.filingDeadline, not enrollment.vcfFilingDeadline — the old
+    # field name matched zero documents, so this endpoint always returned [].
     query = (db.collection("cases")
-         .order_by("enrollment.vcfFilingDeadline")
-         .start_after({"enrollment.vcfFilingDeadline": None}))
-   
+         .order_by("enrollment.filingDeadline")
+         .start_after({"enrollment.filingDeadline": None}))
+
     results: list[DeadlineSummaryItem] = []
 
     async for doc in query.stream():
         data = doc.to_dict() or {}
         enrollment = data.get("enrollment", {})
-        deadline_str = enrollment.get("vcfFilingDeadline")
+        deadline_str = enrollment.get("filingDeadline")
         case_paralegal = data.get("assignment", {}).get("assignedParalegal")
 
         if paralegal_id and case_paralegal != paralegal_id:
