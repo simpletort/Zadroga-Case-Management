@@ -70,6 +70,11 @@ def case_funnel(
 
     raw = get_cases_by_status()
     status_counts: Dict[str, int] = {row["status"]: row["count"] for row in raw}
+    avg_days_map: Dict[str, float] = {
+        row["status"]: row["avg_days_in_status"]
+        for row in raw
+        if row.get("avg_days_in_status") is not None
+    }
 
     stages = []
     for i, stage in enumerate(FUNNEL_STAGES):
@@ -85,6 +90,7 @@ def case_funnel(
             stage=stage,
             count=count,
             conversion_rate=conversion_rate,
+            avg_days_to_next=avg_days_map.get(stage),
         ))
 
     result = FunnelResponse(generated_at=now_utc(), stages=stages)
