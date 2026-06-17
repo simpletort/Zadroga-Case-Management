@@ -4043,7 +4043,7 @@ paths:
 
   # ============================================================
   # AUTH-RBAC-CR SERVICE
-  # Cloud Run: https://auth-rbac-cr-292736139819.us-central1.run.app
+  # Cloud Run: https://auth-rbac-dev-292736139819.us-central1.run.app
   # Public endpoints (register, session, password-reset) have security: []
   # because callers have no Firebase token yet.
   # ============================================================
@@ -4055,7 +4055,7 @@ paths:
       operationId: corsPreflightAuthRegister
       security: []
       x-google-backend:
-        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        address: https://auth-rbac-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4065,7 +4065,7 @@ paths:
       operationId: authRegister
       security: []
       x-google-backend:
-        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        address: https://auth-rbac-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         201:
@@ -4080,7 +4080,7 @@ paths:
       operationId: corsPreflightAuthSession
       security: []
       x-google-backend:
-        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        address: https://auth-rbac-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4090,7 +4090,7 @@ paths:
       operationId: authCreateSession
       security: []
       x-google-backend:
-        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        address: https://auth-rbac-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4103,7 +4103,7 @@ paths:
       operationId: corsPreflightAuthLogout
       security: []
       x-google-backend:
-        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        address: https://auth-rbac-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4112,7 +4112,7 @@ paths:
       summary: Revoke all refresh tokens and clear session cookies
       operationId: authLogout
       x-google-backend:
-        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        address: https://auth-rbac-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4125,7 +4125,7 @@ paths:
       operationId: corsPreflightAuthPasswordReset
       security: []
       x-google-backend:
-        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        address: https://auth-rbac-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4135,7 +4135,7 @@ paths:
       operationId: authPasswordReset
       security: []
       x-google-backend:
-        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        address: https://auth-rbac-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4148,7 +4148,7 @@ paths:
       operationId: corsPreflightAuthInvite
       security: []
       x-google-backend:
-        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        address: https://auth-rbac-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4157,7 +4157,7 @@ paths:
       summary: Generate a 7-day portal invite link (requires staff.invite or system.admin)
       operationId: authCreateInvite
       x-google-backend:
-        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        address: https://auth-rbac-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4174,7 +4174,7 @@ paths:
       operationId: corsPreflightUsers
       security: []
       x-google-backend:
-        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        address: https://auth-rbac-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4189,7 +4189,7 @@ paths:
         - { name: page_size, in: query, type: integer }
         - { name: cursor, in: query, type: string }
       x-google-backend:
-        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        address: https://auth-rbac-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4202,7 +4202,7 @@ paths:
       summary: Create a staff or client user (requires staff.manage)
       operationId: createUser
       x-google-backend:
-        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        address: https://auth-rbac-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         201:
@@ -4221,7 +4221,7 @@ paths:
       parameters:
         - { name: uid, in: path, required: true, type: string }
       x-google-backend:
-        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        address: https://auth-rbac-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4232,7 +4232,7 @@ paths:
       parameters:
         - { name: uid, in: path, required: true, type: string }
       x-google-backend:
-        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        address: https://auth-rbac-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4249,7 +4249,7 @@ paths:
       parameters:
         - { name: uid, in: path, required: true, type: string }
       x-google-backend:
-        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        address: https://auth-rbac-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4268,7 +4268,7 @@ paths:
       parameters:
         - { name: uid, in: path, required: true, type: string }
       x-google-backend:
-        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        address: https://auth-rbac-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4287,7 +4287,7 @@ paths:
       operationId: corsPreflightRoles
       security: []
       x-google-backend:
-        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        address: https://auth-rbac-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4296,7 +4296,7 @@ paths:
       summary: List all roles from Firestore (requires staff.manage)
       operationId: listRoles
       x-google-backend:
-        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        address: https://auth-rbac-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4309,7 +4309,7 @@ paths:
       summary: Create a new role; all permission IDs must exist in the registry (system.admin only)
       operationId: createRole
       x-google-backend:
-        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        address: https://auth-rbac-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         201:
@@ -4330,7 +4330,7 @@ paths:
       parameters:
         - { name: roleId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        address: https://auth-rbac-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4341,7 +4341,7 @@ paths:
       parameters:
         - { name: roleId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        address: https://auth-rbac-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4360,7 +4360,7 @@ paths:
       parameters:
         - { name: roleId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        address: https://auth-rbac-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4381,7 +4381,7 @@ paths:
       operationId: corsPreflightPermissions
       security: []
       x-google-backend:
-        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        address: https://auth-rbac-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4393,7 +4393,7 @@ paths:
         - { name: search, in: query, type: string }
         - { name: category, in: query, type: string }
       x-google-backend:
-        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        address: https://auth-rbac-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4408,7 +4408,7 @@ paths:
       summary: Replace the entire permissions registry document (system.admin only)
       operationId: updatePermissionsRegistry
       x-google-backend:
-        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        address: https://auth-rbac-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4425,7 +4425,7 @@ paths:
       operationId: corsPreflightPermissionsSeed
       security: []
       x-google-backend:
-        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        address: https://auth-rbac-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4434,7 +4434,7 @@ paths:
       summary: Auto-populate the registry from all role documents; preserves existing metadata (system.admin only)
       operationId: seedPermissionsRegistry
       x-google-backend:
-        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        address: https://auth-rbac-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4453,7 +4453,7 @@ paths:
       operationId: corsPreflightAuditLog
       security: []
       x-google-backend:
-        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        address: https://auth-rbac-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4465,7 +4465,7 @@ paths:
         - { name: uid, in: query, type: string }
         - { name: limit, in: query, type: integer }
       x-google-backend:
-        address: https://auth-rbac-cr-292736139819.us-central1.run.app
+        address: https://auth-rbac-dev-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:

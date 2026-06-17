@@ -70,14 +70,9 @@ ROUTE_PERMISSIONS: list[tuple[str, str, str]] = [
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    try:
-        from app.utils.firestore import get_firestore_client
-        get_firestore_client()
-        logger.info("Auth-RBAC-CR service started — Firestore client initialised")
-    except Exception as exc:
-        # Log but do not crash — service must bind to port so Cloud Run health checks pass.
-        # Firestore errors will surface on first request instead.
-        logger.error("Firestore client init failed at startup: %s", exc)
+    from app.utils.firestore import get_firestore_client
+    get_firestore_client()
+    logger.info("Auth-RBAC-CR service started — Firestore client initialised")
     yield
     logger.info("Auth-RBAC-CR service shutting down")
 
@@ -91,9 +86,15 @@ app = FastAPI(
 )
 
 # Middleware stack — added in innermost-first order; last added = outermost.
+# https://simpletort.web.app is only in get_cors_origins()'s dev list, not
+# prod — appended here (scoped to this service only) so the frontend's
+# auth/user/role/permission/audit-log calls stop failing CORS in production
+# without touching the shared origin list that case-development, notification,
+# lead-intake, task-management, settlement-financial, and storage-gateway
+# also depend on. See commit a4a236a for the same fix on settlement-financial.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=get_cors_origins(settings.environment),
+    allow_origins=get_cors_origins(settings.environment) + ["https://simpletort.web.app"],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "x-apigateway-api-userinfo"],
