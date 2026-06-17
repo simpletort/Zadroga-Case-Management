@@ -25,6 +25,8 @@ from app.models.storage import UrlAction
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+MAX_SIGNED_URL_EXPIRY_MINUTES = 15
+
 
 def _fetch_metadata_email() -> str:
     """Fetch the default service account email from the GCE metadata server."""
@@ -72,19 +74,31 @@ def generate_signed_url(
     content_type: Optional[str] = None,
     expiry_minutes: Optional[int] = None,
     inline: bool = False,
-) -> tuple[str, datetime.datetime]:
+) -> tuple[str, datetime.datetime, bool]:
     """
     Generate a v4 signed URL for the given blob path.
 
+    TTL is capped at MAX_SIGNED_URL_EXPIRY_MINUTES regardless of the caller-supplied value.
+
     Returns:
-        (signed_url, expires_at)
+        (signed_url, expires_at, ttl_was_capped)
+        ttl_was_capped is True when the requested TTL exceeded the cap.
     """
+    requested_minutes = expiry_minutes
     if expiry_minutes is None:
         expiry_minutes = (
             settings.signed_url_write_expiry_minutes
             if action == UrlAction.write
             else settings.signed_url_read_expiry_minutes
         )
+
+    ttl_was_capped = expiry_minutes > MAX_SIGNED_URL_EXPIRY_MINUTES
+    if ttl_was_capped:
+        logger.warning(
+            "Signed URL TTL capped: requested=%dmin cap=%dmin path=%s",
+            expiry_minutes, MAX_SIGNED_URL_EXPIRY_MINUTES, blob_path,
+        )
+        expiry_minutes = MAX_SIGNED_URL_EXPIRY_MINUTES
 
     expiration = datetime.timedelta(minutes=expiry_minutes)
     http_method = "PUT" if action == UrlAction.write else "GET"
@@ -107,10 +121,10 @@ def generate_signed_url(
     expires_at = datetime.datetime.utcnow() + expiration
 
     logger.info(
-        "Signed URL generated: action=%s path=%s expiry=%dmin",
-        action.value, blob_path, expiry_minutes,
+        "Signed URL generated: action=%s path=%s expiry=%dmin capped=%s",
+        action.value, blob_path, expiry_minutes, ttl_was_capped,
     )
-    return signed_url, expires_at
+    return signed_url, expires_at, ttl_was_capped
 
 
 def update_lifecycle_rules(

@@ -21,7 +21,6 @@ from shared.middlewares import (
     ErrorHandlerMiddleware,
     FileValidationMiddleware,
     LoggingMiddleware,
-    SignedUrlExpiryMiddleware,
     get_cors_origins,
 )
 
@@ -85,7 +84,6 @@ app = FastAPI(
 
 # Middleware stack — added in innermost-first order; last added = outermost.
 app.add_middleware(FileValidationMiddleware)
-app.add_middleware(SignedUrlExpiryMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_cors_origins(settings.environment),
