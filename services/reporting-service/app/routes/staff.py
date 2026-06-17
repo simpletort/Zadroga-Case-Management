@@ -48,6 +48,9 @@ def staff_performance(
             role=profile.get("role", "unknown"),
             active_cases=counts["active_cases"],
             cases_completed_period=counts["cases_completed_period"],
+            cases_handled_ytd=counts.get("cases_handled_ytd", 0),
+            avg_days_to_close=counts.get("avg_days_to_close"),
+            performance_rating=counts.get("performance_rating"),
             overdue_tasks=overdue_counts.get(user_id, 0),
         ))
 

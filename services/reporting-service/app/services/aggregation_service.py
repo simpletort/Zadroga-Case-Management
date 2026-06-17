@@ -246,14 +246,26 @@ def get_bottleneck_cases(threshold_days: int = 30) -> List[dict]:
     return bottlenecks
 
 
+def _performance_rating(avg_days: float) -> float:
+    """Linear scale: <=30 days → 5.0, >=180 days → 1.0."""
+    if avg_days <= 30:
+        return 5.0
+    if avg_days >= 180:
+        return 1.0
+    return round(5.0 - (avg_days - 30) * (4.0 / 150), 1)
+
+
 def get_staff_case_counts() -> Dict[str, dict]:
     db = get_firestore_client()
-    cutoff = to_firestore_timestamp(days_ago(30))
+    now = now_utc()
+    cutoff_30d = to_firestore_timestamp(days_ago(30))
+    ytd_start = to_firestore_timestamp(now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0))
 
     result: Dict[str, dict] = defaultdict(lambda: {
         "active_cases": 0,
         "cases_completed_period": 0,
-        "overdue_tasks": 0,
+        "cases_handled_ytd": 0,
+        "days_to_close_list": [],
         "display_name": None,
     })
 
@@ -271,13 +283,13 @@ def get_staff_case_counts() -> Dict[str, dict]:
                         or assignment.get("assignedAttorneyName")
                     )
 
-    settled_docs = (
+    # Last-30-day settled cases (cases_completed_period)
+    for doc in (
         db.collection("cases")
         .where("status", "==", "Settled")
-        .where("settledAt", ">=", cutoff)
+        .where("settledAt", ">=", cutoff_30d)
         .stream()
-    )
-    for doc in settled_docs:
+    ):
         data = doc.to_dict()
         assignment = data.get("assignment", {})
         uid = assignment.get("assignedParalegal") or assignment.get("assignedAttorney")
@@ -288,6 +300,42 @@ def get_staff_case_counts() -> Dict[str, dict]:
                     assignment.get("assignedParalegalName")
                     or assignment.get("assignedAttorneyName")
                 )
+
+    # YTD settled cases — also compute avg_days_to_close
+    for doc in (
+        db.collection("cases")
+        .where("status", "==", "Settled")
+        .where("settledAt", ">=", ytd_start)
+        .stream()
+    ):
+        data = doc.to_dict()
+        assignment = data.get("assignment", {})
+        uid = assignment.get("assignedParalegal") or assignment.get("assignedAttorney")
+        if not uid:
+            continue
+        result[uid]["cases_handled_ytd"] += 1
+        if not result[uid]["display_name"]:
+            result[uid]["display_name"] = (
+                assignment.get("assignedParalegalName")
+                or assignment.get("assignedAttorneyName")
+            )
+        settled_at = parse_dt(data.get("settledAt"))
+        created_at = parse_dt(data.get("createdAt"))
+        if settled_at and created_at:
+            s = settled_at.replace(tzinfo=None) if settled_at.tzinfo else settled_at
+            c = created_at.replace(tzinfo=None) if created_at.tzinfo else created_at
+            result[uid]["days_to_close_list"].append((s - c).days)
+
+    # Resolve avg_days_to_close and performance_rating
+    for uid, data in result.items():
+        days_list = data.pop("days_to_close_list", [])
+        if days_list:
+            avg = round(sum(days_list) / len(days_list), 1)
+            data["avg_days_to_close"] = avg
+            data["performance_rating"] = _performance_rating(avg)
+        else:
+            data["avg_days_to_close"] = None
+            data["performance_rating"] = None
 
     return result
 

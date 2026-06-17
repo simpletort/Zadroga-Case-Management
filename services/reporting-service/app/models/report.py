@@ -61,7 +61,10 @@ class StaffPerformanceItem(BaseModel):
     role: str
     active_cases: int
     cases_completed_period: int
+    cases_handled_ytd: int = 0
+    avg_days_to_close: Optional[float] = None
     avg_days_to_review: Optional[float] = None
+    performance_rating: Optional[float] = None
     overdue_tasks: int
 
 
