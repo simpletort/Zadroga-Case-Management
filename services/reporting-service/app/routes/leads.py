@@ -12,7 +12,7 @@ router = APIRouter(prefix="/reports", tags=["Leads"])
 
 DISQUALIFIED_STATUSES = {"Does Not Qualify", "Withdrawn"}
 ACTIVE_OR_SETTLED = {
-    "Pending Client Information",
+    "Pending Client Info",
     "Pending Paralegal Review",
     "Pending Attorney Review",
     "Ready for Filing",

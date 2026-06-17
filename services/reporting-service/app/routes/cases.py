@@ -25,7 +25,7 @@ router = APIRouter(prefix="/reports", tags=["Cases"])
 
 FUNNEL_STAGES = [
     "New Lead",
-    "Pending Client Information",
+    "Pending Client Info",
     "Pending Paralegal Review",
     "Pending Attorney Review",
     "Ready for Filing",
