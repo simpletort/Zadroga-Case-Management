@@ -50,7 +50,7 @@ app.add_middleware(
     ],
     allow_credentials=True,
     allow_methods=["GET", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["Authorization", "Content-Type", "x-apigateway-api-userinfo"],
 )
 
 
