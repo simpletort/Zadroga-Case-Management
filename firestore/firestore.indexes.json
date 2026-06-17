@@ -90,6 +90,10 @@
         { "fieldPath": "dueAt",      "order": "ASCENDING" }
     ]},
     { "collectionGroup": "tasks", "queryScope": "COLLECTION_GROUP", "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "dueAt",  "order": "ASCENDING" }
+    ]},
+    { "collectionGroup": "tasks", "queryScope": "COLLECTION_GROUP", "fields": [
         { "fieldPath": "assignedTo", "order": "ASCENDING" },
         { "fieldPath": "status",     "order": "ASCENDING" },
         { "fieldPath": "dueAt",      "order": "ASCENDING" }
