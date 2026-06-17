@@ -63,6 +63,9 @@ class AuditAction(str, Enum):
     create_folder = "create_folder"        # POST /cases/{caseId}/folders
     move_item = "move_item"               # POST /cases/{caseId}/move
 
+    # ── Security policy ───────────────────────────────────────────────────────
+    signed_url_ttl_override = "signed_url_ttl_override"  # caller TTL capped to MAX_SIGNED_URL_EXPIRY_MINUTES
+
 
 def get_client_ip(request: Request) -> str:
     """

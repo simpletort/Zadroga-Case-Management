@@ -12,7 +12,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query, Request, status
 
 from app.models.storage import SignedUrlResponse, UrlAction
-from app.services.gcs_service import generate_signed_url
+from app.services.gcs_service import MAX_SIGNED_URL_EXPIRY_MINUTES, generate_signed_url
 from app.utils.audit import AuditAction, log_audit_event
 from app.utils.gcs_client import get_gcs_client
 from app.config import get_settings
@@ -35,6 +35,7 @@ def get_signed_url(
     action: UrlAction = Query(UrlAction.read, description="'read' for download, 'write' for upload"),
     content_type: Optional[str] = Query(None, description="MIME type — required for write action"),
     inline: bool = Query(False, description="Return Content-Disposition: inline so browsers display the file rather than downloading it"),
+    expiry_minutes: Optional[int] = Query(None, description=f"Requested TTL in minutes. Capped at {MAX_SIGNED_URL_EXPIRY_MINUTES} min regardless of value supplied."),
 ):
     if action == UrlAction.write and not content_type:
         raise HTTPException(
@@ -51,13 +52,31 @@ def get_signed_url(
     blob_path = "{}/{}/{}".format(case_id, folder_path, file_name) if folder_path else "{}/{}".format(case_id, file_name)
 
     gcs_client = get_gcs_client()
-    signed_url, expires_at = generate_signed_url(
+    signed_url, expires_at, ttl_was_capped = generate_signed_url(
         gcs_client=gcs_client,
         blob_path=blob_path,
         action=action,
         content_type=content_type,
+        expiry_minutes=expiry_minutes,
         inline=inline,
     )
+
+    if ttl_was_capped:
+        log_audit_event(
+            action=AuditAction.signed_url_ttl_override,
+            request=request,
+            case_id=case_id,
+            resource=blob_path,
+            metadata={
+                "requested_expiry_minutes": expiry_minutes or (
+                    settings.signed_url_write_expiry_minutes
+                    if action == UrlAction.write
+                    else settings.signed_url_read_expiry_minutes
+                ),
+                "capped_expiry_minutes": MAX_SIGNED_URL_EXPIRY_MINUTES,
+                "url_action": action.value,
+            },
+        )
 
     audit_action = AuditAction.signed_url_read if action == UrlAction.read else AuditAction.signed_url_write
     log_audit_event(
