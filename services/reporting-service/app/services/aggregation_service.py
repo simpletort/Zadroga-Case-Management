@@ -122,43 +122,6 @@ def get_leads_in_period(days: int) -> List[dict]:
     return get_cases_created_in_period(days)
 
 
-def get_total_awards_secured() -> float:
-    """
-    Sum ``gross_award`` across all Awarded/Settled cases.
-
-    Each case's award amount lives in a Firestore subcollection written by
-    settlement-financial (``cases/{caseId}/settlement/{calculation_id}``),
-    not on the case document itself. That subcollection also holds sibling
-    docs (``inputs``, ``disbursements``, ``expenses``, ``liens``, ``loans``,
-    ``statement_*``) that are NOT calculation records — to avoid double
-    counting, only the doc whose ID equals its own ``calculation_id`` field
-    is treated as the canonical calculation result.
-
-    Returns 0.0 (rather than raising) for any case/doc that is missing or
-    malformed, so one bad record doesn't blank out the whole KPI.
-    """
-    db = get_firestore_client()
-    total = 0.0
-
-    for award_status in ("Awarded", "Settled"):
-        cases = db.collection("cases").where("status", "==", award_status).stream()
-        for case in cases:
-            settlement_docs = case.reference.collection("settlement").stream()
-            for doc in settlement_docs:
-                data = doc.to_dict() or {}
-                if data.get("calculation_id") != doc.id:
-                    continue  # not the canonical calculation record
-                try:
-                    total += float(data.get("gross_award", 0))
-                except (TypeError, ValueError):
-                    logger.warning(
-                        "Non-numeric gross_award on case %s settlement doc %s",
-                        case.id, doc.id,
-                    )
-
-    return round(total, 2)
-
-
 def get_bottleneck_cases(threshold_days: int = 30) -> List[dict]:
     db = get_firestore_client()
     now = now_utc()

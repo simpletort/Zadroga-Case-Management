@@ -2755,6 +2755,49 @@ paths:
         401:
           description: Unauthorized
 
+  # --- Case Inputs ---
+
+  /api/v1/settlement/cases/{case_id}/inputs:
+    options:
+      operationId: corsPreflightSettlementInputs
+      security: []
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Get stored gross award and attorney fee % for a case
+      operationId: getSettlementCaseInputs
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Case inputs
+        401:
+          description: Unauthorized
+        404:
+          description: No inputs found
+    put:
+      summary: Save gross award and attorney fee % for a case
+      operationId: upsertSettlementCaseInputs
+      parameters:
+        - { name: case_id, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://settlement-financial-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Case inputs saved
+        401:
+          description: Unauthorized
+
   # --- Expenses ---
 
   /api/v1/settlement/cases/{case_id}/expenses:

@@ -9,7 +9,6 @@ from app.services.aggregation_service import (
     get_cases_settled_in_period,
     get_leads_in_period,
     get_active_statuses,
-    get_total_awards_secured,
 )
 from app.utils.firestore import get_firestore_client
 from app.utils.date_helpers import now_utc
@@ -118,11 +117,6 @@ def compute_kpi_dashboard(period_days: int = 30) -> KPIDashboardResponse:
             unit="cases",
             trend=settled_trend,
             trend_direction=settled_dir,
-        ),
-        KPIMetric(
-            label="Awards Secured",
-            value=get_total_awards_secured(),
-            unit="usd",
         ),
         KPIMetric(
             label="Qualification Rate",
