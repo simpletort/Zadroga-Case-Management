@@ -1,8 +1,10 @@
 from app.utils.firestore import get_firestore_client
-from app.utils.date_helpers import now_utc, days_ago, to_firestore_timestamp, parse_dt
+from app.utils.date_helpers import now_utc, days_ago, to_firestore_timestamp, parse_dt, start_of_month, months_ago
+from app.models.report import MonthlyRevenueItem
 from typing import List, Dict
 import logging
 from collections import defaultdict
+from dateutil.relativedelta import relativedelta
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +122,99 @@ def get_cases_settled_in_period(days: int) -> List[dict]:
 
 def get_leads_in_period(days: int) -> List[dict]:
     return get_cases_created_in_period(days)
+
+
+def get_monthly_revenue(num_months: int = 12) -> List[MonthlyRevenueItem]:
+    """
+    Return per-calendar-month filings, awards, and gross award totals
+    for the last ``num_months`` months (most recent last).
+
+    ``filings``         — cases whose ``createdAt`` falls in that month.
+    ``awards``          — cases whose ``status`` is Awarded or Settled AND
+                          whose ``updatedAt`` falls in that month (proxy for
+                          when the award was recorded; replace with a dedicated
+                          ``awardedAt`` field if one is added to case docs).
+    ``gross_award_total`` — sum of ``gross_award`` from the canonical settlement
+                          subcollection doc (doc.id == data["calculation_id"])
+                          for each awarded case in that month.
+
+    ⚠️  AMBER zone — review this function before merging.  The aggregation
+    makes N+1 Firestore reads (one subcollection read per awarded case in the
+    window).  For small case volumes this is acceptable; revisit with a
+    denormalised field on the case doc if query latency becomes a problem.
+    """
+    db = get_firestore_client()
+    now = now_utc()
+
+    # Build ordered list of (month_start, month_end, label) for the window.
+    # month_start is inclusive, month_end is exclusive (== next month start).
+    buckets = []
+    for i in range(num_months - 1, -1, -1):
+        month_start = start_of_month(now - relativedelta(months=i))
+        month_end   = month_start + relativedelta(months=1)
+        label       = month_start.strftime("%b %Y")   # e.g. "Jul 2025"
+        buckets.append((month_start, month_end, label))
+
+    window_start = to_firestore_timestamp(buckets[0][0])
+    window_end   = to_firestore_timestamp(buckets[-1][1])
+
+    # --- filings: cases created within the window ---
+    filing_counts: Dict[str, int] = defaultdict(int)
+    for doc in (
+        db.collection("cases")
+        .where("createdAt", ">=", window_start)
+        .where("createdAt", "<",  window_end)
+        .stream()
+    ):
+        data = doc.to_dict() or {}
+        dt = parse_dt(data.get("createdAt"))
+        if dt:
+            label = start_of_month(dt).strftime("%b %Y")
+            filing_counts[label] += 1
+
+    # --- awards: Awarded/Settled cases whose updatedAt is in the window ---
+    # Also collect gross_award_total per month from settlement subcollections.
+    award_counts:  Dict[str, int]   = defaultdict(int)
+    award_totals:  Dict[str, float] = defaultdict(float)
+
+    for award_status in ("Awarded", "Settled"):
+        for doc in (
+            db.collection("cases")
+            .where("status",    "==", award_status)
+            .where("updatedAt", ">=", window_start)
+            .where("updatedAt", "<",  window_end)
+            .stream()
+        ):
+            data  = doc.to_dict() or {}
+            dt    = parse_dt(data.get("updatedAt"))
+            if not dt:
+                continue
+            label = start_of_month(dt).strftime("%b %Y")
+            award_counts[label] += 1
+
+            # Look up canonical settlement calculation doc for this case
+            for sdoc in doc.reference.collection("settlement").stream():
+                sdata = sdoc.to_dict() or {}
+                if sdata.get("calculation_id") != sdoc.id:
+                    continue   # skip sibling docs (inputs, expenses, liens …)
+                try:
+                    award_totals[label] += float(sdata.get("gross_award", 0))
+                except (TypeError, ValueError):
+                    logger.warning(
+                        "Non-numeric gross_award on case %s settlement doc %s",
+                        doc.id, sdoc.id,
+                    )
+                break  # only one canonical doc per case
+
+    return [
+        MonthlyRevenueItem(
+            month=label,
+            filings=filing_counts.get(label, 0),
+            awards=award_counts.get(label, 0),
+            gross_award_total=round(award_totals.get(label, 0.0), 2),
+        )
+        for _, _, label in buckets
+    ]
 
 
 def get_bottleneck_cases(threshold_days: int = 30) -> List[dict]:

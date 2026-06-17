@@ -2496,6 +2496,31 @@ paths:
         401:
           description: Unauthorized
 
+  /reports/monthly-revenue:
+    options:
+      operationId: corsPreflightReportsMonthlyRevenue
+      security: []
+      x-google-backend:
+        address: https://reporting-kpi-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Monthly filings, awards, and gross award totals (rolling window)
+      operationId: getReportsMonthlyRevenue
+      parameters:
+        - { name: months, in: query, type: integer }
+      x-google-backend:
+        address: https://reporting-kpi-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+        jwt_audience: https://reporting-kpi-292736139819.us-central1.run.app
+      responses:
+        200:
+          description: Monthly revenue breakdown
+        401:
+          description: Unauthorized
+
   /reports/cases-by-status:
     options:
       operationId: corsPreflightReportsCasesByStatus

@@ -81,3 +81,15 @@ class LeadConversionResponse(BaseModel):
     conversion_rate: float
     avg_days_lead_to_active: Optional[float] = None
     disqualified: int
+
+
+class MonthlyRevenueItem(BaseModel):
+    month: str                  # e.g. "Jul 2025"
+    filings: int                # cases created in that calendar month
+    awards: int                 # cases moved to Awarded/Settled in that month
+    gross_award_total: float    # sum of gross_award from canonical settlement docs
+
+
+class MonthlyRevenueResponse(BaseModel):
+    generated_at: datetime
+    months: list[MonthlyRevenueItem]
