@@ -2567,6 +2567,31 @@ paths:
         401:
           description: Unauthorized
 
+  /reports/staff-performance:
+    options:
+      operationId: corsPreflightReportsStaffPerformance
+      security: []
+      x-google-backend:
+        address: https://reporting-kpi-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Staff case counts, completed cases, and overdue tasks
+      operationId: getReportsStaffPerformance
+      parameters:
+        - { name: period_days, in: query, type: integer }
+      x-google-backend:
+        address: https://reporting-kpi-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+        jwt_audience: https://reporting-kpi-292736139819.us-central1.run.app
+      responses:
+        200:
+          description: Staff performance metrics
+        401:
+          description: Unauthorized
+
   /reports/bottlenecks:
     options:
       operationId: corsPreflightReportsBottlenecks
