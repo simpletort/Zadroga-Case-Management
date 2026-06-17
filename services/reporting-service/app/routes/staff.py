@@ -37,9 +37,14 @@ def staff_performance(
     staff_items = []
     for user_id, counts in case_counts.items():
         profile = profiles.get(user_id, {})
+        display_name = (
+            profile.get("displayName")
+            or counts.get("display_name")
+            or user_id
+        )
         staff_items.append(StaffPerformanceItem(
             user_id=user_id,
-            display_name=profile.get("displayName", user_id),
+            display_name=display_name,
             role=profile.get("role", "unknown"),
             active_cases=counts["active_cases"],
             cases_completed_period=counts["cases_completed_period"],

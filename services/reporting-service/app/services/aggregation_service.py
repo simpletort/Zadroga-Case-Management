@@ -254,6 +254,7 @@ def get_staff_case_counts() -> Dict[str, dict]:
         "active_cases": 0,
         "cases_completed_period": 0,
         "overdue_tasks": 0,
+        "display_name": None,
     })
 
     for status in get_active_statuses(db):
@@ -264,6 +265,11 @@ def get_staff_case_counts() -> Dict[str, dict]:
             uid = assignment.get("assignedParalegal") or assignment.get("assignedAttorney")
             if uid:
                 result[uid]["active_cases"] += 1
+                if not result[uid]["display_name"]:
+                    result[uid]["display_name"] = (
+                        assignment.get("assignedParalegalName")
+                        or assignment.get("assignedAttorneyName")
+                    )
 
     settled_docs = (
         db.collection("cases")
@@ -277,6 +283,11 @@ def get_staff_case_counts() -> Dict[str, dict]:
         uid = assignment.get("assignedParalegal") or assignment.get("assignedAttorney")
         if uid:
             result[uid]["cases_completed_period"] += 1
+            if not result[uid]["display_name"]:
+                result[uid]["display_name"] = (
+                    assignment.get("assignedParalegalName")
+                    or assignment.get("assignedAttorneyName")
+                )
 
     return result
 
