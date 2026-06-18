@@ -2617,6 +2617,29 @@ paths:
         401:
           description: Unauthorized
 
+  /reports/expense-summary:
+    options:
+      operationId: corsPreflightReportsExpenseSummary
+      security: []
+      x-google-backend:
+        address: https://reporting-kpi-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Expense breakdown by category (all-time, case-level expenses)
+      operationId: getReportsExpenseSummary
+      x-google-backend:
+        address: https://reporting-kpi-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+        jwt_audience: https://reporting-kpi-292736139819.us-central1.run.app
+      responses:
+        200:
+          description: Expense summary by category
+        401:
+          description: Unauthorized
+
   /reports/lead-conversion:
     options:
       operationId: corsPreflightReportsLeadConversion

@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import get_settings
-from app.routes import dashboard, cases, staff, leads
+from app.routes import dashboard, cases, staff, leads, expenses
 
 settings = get_settings()
 
@@ -72,3 +72,4 @@ app.include_router(dashboard.router)
 app.include_router(cases.router)
 app.include_router(staff.router)
 app.include_router(leads.router)
+app.include_router(expenses.router)

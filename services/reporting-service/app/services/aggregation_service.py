@@ -222,6 +222,41 @@ def get_monthly_revenue(num_months: int = 12) -> List[MonthlyRevenueItem]:
     ]
 
 
+def get_expense_summary() -> dict:
+    """
+    Aggregate all case-level expenses from cases/{caseId}/settlement/expenses items[].
+    Returns total_expenses and per-category breakdown with percentages.
+    """
+    db = get_firestore_client()
+    category_totals: Dict[str, float] = defaultdict(float)
+
+    try:
+        for case_doc in db.collection("cases").stream():
+            exp_ref = case_doc.reference.collection("settlement").document("expenses")
+            exp_doc = exp_ref.get()
+            if not exp_doc.exists:
+                continue
+            for item in (exp_doc.to_dict() or {}).get("items", []):
+                category = item.get("category") or "Other"
+                try:
+                    category_totals[category] += float(item.get("amount", 0))
+                except (TypeError, ValueError):
+                    logger.warning("Non-numeric amount in settlement/expenses for case %s", case_doc.id)
+    except Exception as exc:
+        logger.warning("get_expense_summary failed: %s", exc)
+
+    total = round(sum(category_totals.values()), 2)
+    categories = [
+        {
+            "category": cat,
+            "total_amount": round(amt, 2),
+            "percentage": round((amt / total * 100), 1) if total else 0.0,
+        }
+        for cat, amt in sorted(category_totals.items(), key=lambda x: x[1], reverse=True)
+    ]
+    return {"categories": categories, "total_expenses": total}
+
+
 def get_ytd_expenses() -> float:
     """
     Sum case expenses for the current calendar year.

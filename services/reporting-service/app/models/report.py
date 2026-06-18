@@ -74,6 +74,18 @@ class StaffPerformanceResponse(BaseModel):
     staff: list[StaffPerformanceItem]
 
 
+class ExpenseCategoryItem(BaseModel):
+    category: str
+    total_amount: float
+    percentage: float
+
+
+class ExpenseSummaryResponse(BaseModel):
+    generated_at: datetime
+    categories: list[ExpenseCategoryItem]
+    total_expenses: float
+
+
 class LeadConversionResponse(BaseModel):
     generated_at: datetime
     period_days: int
