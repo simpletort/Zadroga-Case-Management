@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends
 from app.models.report import LeadConversionResponse
-from app.services.aggregation_service import get_leads_in_period
+from app.services.aggregation_service import get_leads_ytd
 from app.services.cache_service import get_cache, TTLCache
 from app.utils.auth import require_min_role
 from app.utils.date_helpers import now_utc
@@ -25,16 +25,14 @@ ACTIVE_OR_SETTLED = {
 
 @router.get("/lead-conversion", response_model=LeadConversionResponse)
 def lead_conversion(
-    period_days: int = Query(default=30, ge=7, le=365),
     _user: dict = Depends(require_min_role("lead_conversion")),
     cache: TTLCache = Depends(get_cache),
 ):
-    cache_key = "lead_conversion_{}".format(period_days)
-    cached = cache.get(cache_key)
+    cached = cache.get("lead_conversion_ytd")
     if cached:
         return cached
 
-    leads = get_leads_in_period(period_days)
+    leads = get_leads_ytd()
     total = len(leads)
 
     disqualified = sum(1 for c in leads if c.get("status") in DISQUALIFIED_STATUSES)
@@ -58,7 +56,7 @@ def lead_conversion(
 
     result = LeadConversionResponse(
         generated_at=now_utc(),
-        period_days=period_days,
+        period_days=365,
         total_leads=total,
         qualified=qualified,
         converted_to_active=converted,
@@ -67,5 +65,5 @@ def lead_conversion(
         avg_days_lead_to_active=avg_days,
         disqualified=disqualified,
     )
-    cache.set(cache_key, result)
+    cache.set("lead_conversion_ytd", result)
     return result
