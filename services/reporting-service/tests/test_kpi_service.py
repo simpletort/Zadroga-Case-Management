@@ -108,7 +108,7 @@ class TestAggregationService:
 
 class TestLeadConversionRoute:
 
-    @patch("app.routes.leads.get_leads_ytd")
+    @patch("app.routes.leads.get_all_cases")
     def test_qualification_rate_calculation(self, mock_leads):
         from fastapi.testclient import TestClient
         from main import app

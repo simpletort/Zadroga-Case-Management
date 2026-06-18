@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 from app.models.report import LeadConversionResponse
-from app.services.aggregation_service import get_leads_ytd
+from app.services.aggregation_service import get_all_cases
 from app.services.cache_service import get_cache, TTLCache
 from app.utils.auth import require_min_role
 from app.utils.date_helpers import now_utc
@@ -32,7 +32,7 @@ def lead_conversion(
     if cached:
         return cached
 
-    leads = get_leads_ytd()
+    leads = get_all_cases()
     total = len(leads)
 
     disqualified = sum(1 for c in leads if c.get("status") in DISQUALIFIED_STATUSES)

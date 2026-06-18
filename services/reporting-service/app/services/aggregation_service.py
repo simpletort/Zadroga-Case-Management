@@ -124,14 +124,9 @@ def get_leads_in_period(days: int) -> List[dict]:
     return get_cases_created_in_period(days)
 
 
-def get_leads_ytd() -> List[dict]:
+def get_all_cases() -> List[dict]:
     db = get_firestore_client()
-    now = now_utc()
-    ytd_start = to_firestore_timestamp(
-        now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-    )
-    docs = db.collection("cases").where("createdAt", ">=", ytd_start).stream()
-    return [doc.to_dict() for doc in docs]
+    return [doc.to_dict() for doc in db.collection("cases").stream()]
 
 
 def get_monthly_revenue(num_months: int = 12) -> List[MonthlyRevenueItem]:
