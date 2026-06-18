@@ -74,6 +74,28 @@ class StaffPerformanceResponse(BaseModel):
     staff: list[StaffPerformanceItem]
 
 
+class MonthlyLeadVolumeItem(BaseModel):
+    month: str
+    leads: int
+    converted: int
+
+
+class FunnelStageItem(BaseModel):
+    stage: str
+    count: int
+    drop_off_pct: Optional[float] = None
+
+
+class LeadConversionAnalyticsResponse(BaseModel):
+    generated_at: datetime
+    total_leads: int
+    converted: int
+    conversion_rate: float
+    best_channel: Optional[str]
+    monthly_volume: list[MonthlyLeadVolumeItem]
+    funnel: list[FunnelStageItem]
+
+
 class ExpenseCategoryItem(BaseModel):
     category: str
     total_amount: float

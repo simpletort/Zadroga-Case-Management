@@ -2640,6 +2640,29 @@ paths:
         401:
           description: Unauthorized
 
+  /reports/lead-conversion-analytics:
+    options:
+      operationId: corsPreflightReportsLeadConversionAnalytics
+      security: []
+      x-google-backend:
+        address: https://reporting-kpi-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: Lead conversion analytics — KPIs, monthly volume, funnel drop-off
+      operationId: getReportsLeadConversionAnalytics
+      x-google-backend:
+        address: https://reporting-kpi-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+        jwt_audience: https://reporting-kpi-292736139819.us-central1.run.app
+      responses:
+        200:
+          description: Lead conversion analytics
+        401:
+          description: Unauthorized
+
   /reports/lead-conversion:
     options:
       operationId: corsPreflightReportsLeadConversion

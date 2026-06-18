@@ -222,6 +222,93 @@ def get_monthly_revenue(num_months: int = 12) -> List[MonthlyRevenueItem]:
     ]
 
 
+CONVERTED_STATUSES = {
+    "Pending Paralegal Review", "Pending Attorney Review",
+    "Ready for Filing", "VCF - Submitted", "Awarded", "Settled", "On Hold",
+}
+CASE_CREATED_STATUSES = {
+    "Pending Paralegal Review", "Pending Attorney Review",
+    "Ready for Filing", "VCF - Submitted", "Awarded", "Settled", "On Hold",
+}
+VCF_ELIGIBLE_STATUSES = {"VCF - Submitted", "Awarded", "Settled"}
+DISQUALIFIED = {"Does Not Qualify", "Withdrawn"}
+
+FUNNEL_STAGE_DEFS = [
+    ("Initial Contact",  lambda s: True),
+    ("Qualified Lead",   lambda s: s not in DISQUALIFIED),
+    ("Case Created",     lambda s: s in CASE_CREATED_STATUSES),
+    ("VCF Eligible",     lambda s: s in VCF_ELIGIBLE_STATUSES),
+]
+
+
+def get_lead_conversion_analytics() -> dict:
+    db = get_firestore_client()
+    cases = [doc.to_dict() for doc in db.collection("cases").stream()]
+    total = len(cases)
+
+    # --- KPIs ---
+    converted = sum(1 for c in cases if c.get("status") in CONVERTED_STATUSES)
+    conversion_rate = round(converted / total * 100, 1) if total else 0.0
+
+    # --- Best channel ---
+    channel_leads: Dict[str, int] = defaultdict(int)
+    channel_converted: Dict[str, int] = defaultdict(int)
+    for c in cases:
+        src = c.get("marketingSource") or "Unknown"
+        channel_leads[src] += 1
+        if c.get("status") in CONVERTED_STATUSES:
+            channel_converted[src] += 1
+
+    best_channel = None
+    best_rate = -1.0
+    for src, leads in channel_leads.items():
+        rate = channel_converted[src] / leads if leads else 0
+        if rate > best_rate:
+            best_rate = rate
+            best_channel = src
+
+    # --- Monthly volume (all-time, grouped by createdAt month) ---
+    monthly_leads: Dict[str, int] = defaultdict(int)
+    monthly_converted: Dict[str, int] = defaultdict(int)
+    for c in cases:
+        dt = parse_dt(c.get("createdAt"))
+        if not dt:
+            continue
+        label = start_of_month(dt).strftime("%b %Y")
+        monthly_leads[label] += 1
+        if c.get("status") in CONVERTED_STATUSES:
+            monthly_converted[label] += 1
+
+    from datetime import datetime as _dt
+    sorted_months = sorted(monthly_leads.keys(),
+                           key=lambda m: _dt.strptime(m, "%b %Y"))
+    monthly_volume = [
+        {"month": m, "leads": monthly_leads[m], "converted": monthly_converted.get(m, 0)}
+        for m in sorted_months
+    ]
+
+    # --- Funnel ---
+    statuses = [c.get("status", "") for c in cases]
+    funnel = []
+    prev_count = None
+    for stage_name, predicate in FUNNEL_STAGE_DEFS:
+        count = sum(1 for s in statuses if predicate(s))
+        drop_off = None
+        if prev_count is not None and prev_count > 0:
+            drop_off = round((1 - count / prev_count) * 100, 1)
+        funnel.append({"stage": stage_name, "count": count, "drop_off_pct": drop_off})
+        prev_count = count
+
+    return {
+        "total_leads": total,
+        "converted": converted,
+        "conversion_rate": conversion_rate,
+        "best_channel": best_channel,
+        "monthly_volume": monthly_volume,
+        "funnel": funnel,
+    }
+
+
 def get_expense_summary() -> dict:
     """
     Aggregate all case-level expenses from cases/{caseId}/settlement/expenses items[].

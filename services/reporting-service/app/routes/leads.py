@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
-from app.models.report import LeadConversionResponse
-from app.services.aggregation_service import get_all_cases
+from app.models.report import LeadConversionResponse, LeadConversionAnalyticsResponse, MonthlyLeadVolumeItem, FunnelStageItem
+from app.services.aggregation_service import get_all_cases, get_lead_conversion_analytics
 from app.services.cache_service import get_cache, TTLCache
 from app.utils.auth import require_min_role
 from app.utils.date_helpers import now_utc
@@ -66,4 +66,27 @@ def lead_conversion(
         disqualified=disqualified,
     )
     cache.set("lead_conversion_ytd", result)
+    return result
+
+
+@router.get("/lead-conversion-analytics", response_model=LeadConversionAnalyticsResponse)
+def lead_conversion_analytics(
+    _user: dict = Depends(require_min_role("lead_conversion")),
+    cache: TTLCache = Depends(get_cache),
+):
+    cached = cache.get("lead_conversion_analytics")
+    if cached:
+        return cached
+
+    data = get_lead_conversion_analytics()
+    result = LeadConversionAnalyticsResponse(
+        generated_at=now_utc(),
+        total_leads=data["total_leads"],
+        converted=data["converted"],
+        conversion_rate=data["conversion_rate"],
+        best_channel=data["best_channel"],
+        monthly_volume=[MonthlyLeadVolumeItem(**m) for m in data["monthly_volume"]],
+        funnel=[FunnelStageItem(**f) for f in data["funnel"]],
+    )
+    cache.set("lead_conversion_analytics", result)
     return result
