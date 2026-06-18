@@ -230,6 +230,7 @@ class TestSignedUrlAudit:
             mock_gs.return_value = (
                 "https://storage.googleapis.com/signed?token=abc",
                 datetime.datetime(2024, 1, 15, 13, 0, 0),
+                False,
             )
             params = {
                 "case_id": "ZAD-2024-01-0001",
