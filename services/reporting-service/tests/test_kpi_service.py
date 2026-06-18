@@ -108,11 +108,10 @@ class TestAggregationService:
 
 class TestLeadConversionRoute:
 
-    @patch("app.routes.leads.get_leads_in_period")
+    @patch("app.routes.leads.get_leads_ytd")
     def test_qualification_rate_calculation(self, mock_leads):
         from fastapi.testclient import TestClient
         from main import app
-        from app.utils.auth import require_min_role
 
         now = datetime.now(timezone.utc)
 
@@ -125,13 +124,12 @@ class TestLeadConversionRoute:
             {"status": "Does Not Qualify",         "createdAt": now},
         ]
 
-        # Override the base auth dependency — all role checks call this
         from app.utils.auth import get_current_user
         app.dependency_overrides[get_current_user] = \
             lambda: {"uid": "test", "role": "junior_partner"}
 
         client = TestClient(app)
-        response = client.get("/reports/lead-conversion?period_days=30")
+        response = client.get("/reports/lead-conversion")
 
         assert response.status_code == 200
         data = response.json()
