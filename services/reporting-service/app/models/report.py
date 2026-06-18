@@ -86,6 +86,13 @@ class FunnelStageItem(BaseModel):
     drop_off_pct: Optional[float] = None
 
 
+class CampaignItem(BaseModel):
+    campaign: str
+    total_leads: int
+    converted: int
+    conversion_rate: float
+
+
 class LeadConversionAnalyticsResponse(BaseModel):
     generated_at: datetime
     total_leads: int
@@ -94,6 +101,7 @@ class LeadConversionAnalyticsResponse(BaseModel):
     best_channel: Optional[str]
     monthly_volume: list[MonthlyLeadVolumeItem]
     funnel: list[FunnelStageItem]
+    campaigns: list[CampaignItem] = []
 
 
 class ExpenseCategoryItem(BaseModel):

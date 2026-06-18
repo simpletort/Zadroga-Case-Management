@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from app.models.report import LeadConversionResponse, LeadConversionAnalyticsResponse, MonthlyLeadVolumeItem, FunnelStageItem
+from app.models.report import LeadConversionResponse, LeadConversionAnalyticsResponse, MonthlyLeadVolumeItem, FunnelStageItem, CampaignItem
 from app.services.aggregation_service import get_all_cases, get_lead_conversion_analytics
 from app.services.cache_service import get_cache, TTLCache
 from app.utils.auth import require_min_role
@@ -87,6 +87,7 @@ def lead_conversion_analytics(
         best_channel=data["best_channel"],
         monthly_volume=[MonthlyLeadVolumeItem(**m) for m in data["monthly_volume"]],
         funnel=[FunnelStageItem(**f) for f in data["funnel"]],
+        campaigns=[CampaignItem(**c) for c in data["campaigns"]],
     )
     cache.set("lead_conversion_analytics", result)
     return result

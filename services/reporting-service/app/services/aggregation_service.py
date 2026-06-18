@@ -273,6 +273,20 @@ def get_lead_conversion_analytics() -> dict:
             best_rate = rate
             best_channel = src
 
+    campaigns = sorted(
+        [
+            {
+                "campaign": src,
+                "total_leads": leads,
+                "converted": channel_converted[src],
+                "conversion_rate": round(channel_converted[src] / leads * 100, 1) if leads else 0.0,
+            }
+            for src, leads in channel_leads.items()
+        ],
+        key=lambda x: x["total_leads"],
+        reverse=True,
+    )
+
     # --- Monthly volume (all-time, grouped by createdAt month) ---
     monthly_leads: Dict[str, int] = defaultdict(int)
     monthly_converted: Dict[str, int] = defaultdict(int)
@@ -314,6 +328,7 @@ def get_lead_conversion_analytics() -> dict:
         "best_channel": best_channel,
         "monthly_volume": monthly_volume,
         "funnel": funnel,
+        "campaigns": campaigns,
     }
 
 
