@@ -227,19 +227,24 @@ CONVERTED_STATUSES = {
     "Qualified", "Pending Paralegal Review", "Pending Attorney Review",
     "Ready for Filing", "VCF - Submitted", "Awarded", "Settled", "On Hold",
 }
+# Stages where a lead has moved past initial intake into the active pipeline
 CASE_CREATED_STATUSES = {
     "Pending Client Info",
     "Qualified", "Pending Paralegal Review", "Pending Attorney Review",
     "Ready for Filing", "VCF - Submitted", "Awarded", "Settled", "On Hold",
 }
 VCF_ELIGIBLE_STATUSES = {"VCF - Submitted", "Awarded", "Settled"}
-DISQUALIFIED = {"Does Not Qualify", "Withdrawn"}
+DISQUALIFIED = {"Does Not Qualify", "Withdrawn", "Disqualified"}
+
 
 FUNNEL_STAGE_DEFS = [
-    ("Initial Contact",  lambda s: True),
-    ("Qualified Lead",   lambda s: s not in DISQUALIFIED),
-    ("Case Created",     lambda s: s in CASE_CREATED_STATUSES),
-    ("VCF Eligible",     lambda s: s in VCF_ELIGIBLE_STATUSES),
+    ("Initial Contact", lambda c: True),
+    # Matches Lead Management "Qualified" count — Firestore stores "Qualified" (displayed as "Pending Paralegal Review")
+    ("Qualified Lead",  lambda c: c.get("status") == "Qualified"),
+    # Cases that have progressed past New Lead into the active pipeline
+    ("Case Created",    lambda c: c.get("status") in CASE_CREATED_STATUSES),
+    # Matches Lead Management "VCF Eligible" count — vcfEligibility field set by VCF screener
+    ("VCF Eligible",    lambda c: c.get("vcfEligibility") == "eligible"),
 ]
 
 
@@ -290,11 +295,10 @@ def get_lead_conversion_analytics() -> dict:
     ]
 
     # --- Funnel ---
-    statuses = [c.get("status", "") for c in cases]
     funnel = []
     prev_count = None
     for stage_name, predicate in FUNNEL_STAGE_DEFS:
-        count = sum(1 for s in statuses if predicate(s))
+        count = sum(1 for c in cases if predicate(c))
         drop_off = None
         if prev_count is not None and prev_count > 0:
             drop_off = round((1 - count / prev_count) * 100, 1)
