@@ -223,10 +223,12 @@ def get_monthly_revenue(num_months: int = 12) -> List[MonthlyRevenueItem]:
 
 
 CONVERTED_STATUSES = {
+    "Pending Client Info",
     "Pending Paralegal Review", "Pending Attorney Review",
     "Ready for Filing", "VCF - Submitted", "Awarded", "Settled", "On Hold",
 }
 CASE_CREATED_STATUSES = {
+    "Pending Client Info",
     "Pending Paralegal Review", "Pending Attorney Review",
     "Ready for Filing", "VCF - Submitted", "Awarded", "Settled", "On Hold",
 }
