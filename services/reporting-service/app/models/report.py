@@ -96,3 +96,5 @@ class MonthlyRevenueItem(BaseModel):
 class MonthlyRevenueResponse(BaseModel):
     generated_at: datetime
     months: list[MonthlyRevenueItem]
+    ytd_expenses: float = 0.0
+    net_margin: Optional[float] = None

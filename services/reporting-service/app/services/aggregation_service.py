@@ -217,6 +217,34 @@ def get_monthly_revenue(num_months: int = 12) -> List[MonthlyRevenueItem]:
     ]
 
 
+def get_ytd_expenses() -> float:
+    """
+    Sum all case expense amounts where ``date`` falls in the current calendar year.
+    Uses a collection-group query across all cases/{caseId}/expenses subcollections.
+    """
+    db = get_firestore_client()
+    now = now_utc()
+    ytd_start = to_firestore_timestamp(
+        now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+    )
+    total = 0.0
+    try:
+        docs = (
+            db.collection_group("expenses")
+            .where("date", ">=", ytd_start)
+            .stream()
+        )
+        for doc in docs:
+            data = doc.to_dict() or {}
+            try:
+                total += float(data.get("amount", 0))
+            except (TypeError, ValueError):
+                logger.warning("Non-numeric amount on expense doc %s", doc.id)
+    except Exception as exc:
+        logger.warning("get_ytd_expenses failed: %s", exc)
+    return round(total, 2)
+
+
 def get_bottleneck_cases(threshold_days: int = 30) -> List[dict]:
     db = get_firestore_client()
     now = now_utc()

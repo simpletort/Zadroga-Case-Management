@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 from app.models.report import KPIDashboardResponse, MonthlyRevenueResponse
 from app.services.kpi_service import compute_kpi_dashboard
-from app.services.aggregation_service import get_monthly_revenue
+from app.services.aggregation_service import get_monthly_revenue, get_ytd_expenses
 from app.services.cache_service import get_cache, TTLCache
 from app.utils.auth import require_min_role
 from app.utils.date_helpers import now_utc
@@ -39,9 +39,14 @@ def get_monthly_revenue_endpoint(
     if cached:
         return cached
 
+    monthly = get_monthly_revenue(num_months=months)
+    ytd_gross = sum(m.gross_award_total for m in monthly)
+    ytd_exp = get_ytd_expenses()
     result = MonthlyRevenueResponse(
         generated_at=now_utc(),
-        months=get_monthly_revenue(num_months=months),
+        months=monthly,
+        ytd_expenses=ytd_exp,
+        net_margin=round(ytd_gross - ytd_exp, 2) if ytd_gross or ytd_exp else None,
     )
     cache.set(cache_key, result)
     return result
