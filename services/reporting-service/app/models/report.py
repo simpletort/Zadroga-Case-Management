@@ -82,7 +82,7 @@ class MonthlyLeadVolumeItem(BaseModel):
 
 class FunnelStageItem(BaseModel):
     stage: str
-    count: int
+    count: Optional[int] = None
     drop_off_pct: Optional[float] = None
 
 

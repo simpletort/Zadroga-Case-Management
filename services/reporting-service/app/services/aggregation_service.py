@@ -238,13 +238,12 @@ DISQUALIFIED = {"Does Not Qualify", "Withdrawn", "Disqualified"}
 
 
 FUNNEL_STAGE_DEFS = [
-    ("Initial Contact", lambda c: True),
-    # Matches Lead Management "Qualified" count — Firestore stores "Qualified" (displayed as "Pending Paralegal Review")
-    ("Qualified Lead",  lambda c: c.get("status") == "Qualified"),
-    # Cases that have progressed past New Lead into the active pipeline
-    ("Case Created",    lambda c: c.get("status") in CASE_CREATED_STATUSES),
-    # Matches Lead Management "VCF Eligible" count — vcfEligibility field set by VCF screener
-    ("VCF Eligible",    lambda c: c.get("vcfEligibility") == "eligible"),
+    ("Initial Contact",   lambda c: True),
+    # Matches Lead Management "Qualified" count — Firestore stores "Qualified"
+    ("Qualified Lead",    lambda c: c.get("status") == "Qualified"),
+    # No tracking data available for these stages yet
+    ("Intake Form Sent",  None),
+    ("Form Submitted",    None),
 ]
 
 
@@ -298,6 +297,9 @@ def get_lead_conversion_analytics() -> dict:
     funnel = []
     prev_count = None
     for stage_name, predicate in FUNNEL_STAGE_DEFS:
+        if predicate is None:
+            funnel.append({"stage": stage_name, "count": None, "drop_off_pct": None})
+            continue
         count = sum(1 for c in cases if predicate(c))
         drop_off = None
         if prev_count is not None and prev_count > 0:
