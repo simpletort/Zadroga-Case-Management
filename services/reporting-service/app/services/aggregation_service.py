@@ -219,29 +219,45 @@ def get_monthly_revenue(num_months: int = 12) -> List[MonthlyRevenueItem]:
 
 def get_ytd_expenses() -> float:
     """
-    Sum all case expense amounts where ``date`` falls in the current calendar year.
-    Uses a collection-group query across all cases/{caseId}/expenses subcollections.
+    Sum case expenses for the current calendar year.
+
+    Expenses are stored as an ``items`` array on the document at
+    ``cases/{caseId}/settlement/expenses``.  Each item has ``amount``
+    (float) and ``addedAt`` (Firestore Timestamp).  We iterate all
+    cases, fetch each settlement/expenses doc, and sum items whose
+    ``addedAt`` falls on or after Jan 1 of this year.
     """
     db = get_firestore_client()
     now = now_utc()
-    ytd_start = to_firestore_timestamp(
-        now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-    )
+    ytd_start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+    ytd_start_naive = ytd_start.replace(tzinfo=None)
     total = 0.0
+
     try:
-        docs = (
-            db.collection_group("expenses")
-            .where("date", ">=", ytd_start)
-            .stream()
-        )
-        for doc in docs:
-            data = doc.to_dict() or {}
-            try:
-                total += float(data.get("amount", 0))
-            except (TypeError, ValueError):
-                logger.warning("Non-numeric amount on expense doc %s", doc.id)
+        for case_doc in db.collection("cases").stream():
+            exp_ref = (
+                case_doc.reference
+                .collection("settlement")
+                .document("expenses")
+            )
+            exp_doc = exp_ref.get()
+            if not exp_doc.exists:
+                continue
+            items = (exp_doc.to_dict() or {}).get("items", [])
+            for item in items:
+                added_at = parse_dt(item.get("addedAt"))
+                if added_at is None:
+                    continue
+                added_naive = added_at.replace(tzinfo=None) if added_at.tzinfo else added_at
+                if added_naive < ytd_start_naive:
+                    continue
+                try:
+                    total += float(item.get("amount", 0))
+                except (TypeError, ValueError):
+                    logger.warning("Non-numeric amount in settlement/expenses for case %s", case_doc.id)
     except Exception as exc:
         logger.warning("get_ytd_expenses failed: %s", exc)
+
     return round(total, 2)
 
 

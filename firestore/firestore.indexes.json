@@ -135,13 +135,6 @@
       "fields": [
         { "fieldPath": "createdAt", "order": "ASCENDING" }
       ]
-    },
-    {
-      "collectionGroup": "expenses",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        { "fieldPath": "date", "order": "ASCENDING" }
-      ]
     }
   ],
 
