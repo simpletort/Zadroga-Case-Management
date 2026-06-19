@@ -3,6 +3,7 @@ conftest.py — Shared pytest fixtures for enrollment-workflow tests.
 """
 
 import os
+import sys
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
@@ -12,6 +13,55 @@ import pytest
 os.environ.setdefault("GCP_PROJECT_ID", "test-project")
 os.environ.setdefault("FIRESTORE_DATABASE_ID", "(default)")
 os.environ.setdefault("APP_ENV", "development")
+
+# ---------------------------------------------------------------------------
+# Stub shared middleware package — not installed in the test environment.
+# Uses a no-op ASGI pass-through so FastAPI can still wrap and call it.
+# ---------------------------------------------------------------------------
+
+class _NoopMiddleware:
+    def __init__(self, app, **kwargs):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        await self.app(scope, receive, send)
+
+
+def _get_cors_origins_stub(environment: str) -> list:
+    return ["http://localhost:3000"]
+
+
+_shared_auth_mod = MagicMock()
+_shared_auth_mod.AuthMiddleware = _NoopMiddleware
+
+_shared_cors_mod = MagicMock()
+_shared_cors_mod.get_cors_origins = _get_cors_origins_stub
+
+_shared_error_mod = MagicMock()
+_shared_error_mod.ErrorHandlerMiddleware = _NoopMiddleware
+
+_shared_logging_mod = MagicMock()
+_shared_logging_mod.LoggingMiddleware = _NoopMiddleware
+
+_shared_middlewares_mod = MagicMock()
+_shared_middlewares_mod.AuthMiddleware = _NoopMiddleware
+_shared_middlewares_mod.ErrorHandlerMiddleware = _NoopMiddleware
+_shared_middlewares_mod.LoggingMiddleware = _NoopMiddleware
+_shared_middlewares_mod.get_cors_origins = _get_cors_origins_stub
+_shared_middlewares_mod.auth = _shared_auth_mod
+_shared_middlewares_mod.cors = _shared_cors_mod
+_shared_middlewares_mod.error_handler = _shared_error_mod
+_shared_middlewares_mod.logging = _shared_logging_mod
+
+_shared_mod = MagicMock()
+_shared_mod.middlewares = _shared_middlewares_mod
+
+sys.modules.setdefault("shared", _shared_mod)
+sys.modules.setdefault("shared.middlewares", _shared_middlewares_mod)
+sys.modules.setdefault("shared.middlewares.auth", _shared_auth_mod)
+sys.modules.setdefault("shared.middlewares.cors", _shared_cors_mod)
+sys.modules.setdefault("shared.middlewares.error_handler", _shared_error_mod)
+sys.modules.setdefault("shared.middlewares.logging", _shared_logging_mod)
 
 
 @pytest.fixture
