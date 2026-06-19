@@ -11,10 +11,9 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 
 from config import get_settings
-from middleware.auth import StaffUser, require_paralegal_or_above
 from models.wtc_models import (
     TriggerWTCWorkflowRequest,
     UpdateWTCStatusRequest,
@@ -38,7 +37,7 @@ router = APIRouter()
 )
 async def trigger_wtc(
     request: TriggerWTCWorkflowRequest,
-    current_user: StaffUser = Depends(require_paralegal_or_above),
+    http_request: Request,
 ):
     """
     Trigger automated WTC Health Program enrollment sub-workflow.
@@ -71,7 +70,7 @@ async def trigger_wtc(
                 old_status="",
                 new_status="Not Enrolled",
                 workflow_type="WTC",
-                performed_by=current_user.uid,
+                performed_by=http_request.state.user.get("uid", ""),
             )
         except Exception as exc:
             logger.warning("pubsub_publish_failed caseId=%s: %s", request.case_id, exc)
@@ -93,7 +92,6 @@ async def trigger_wtc(
 )
 async def get_wtc_status(
     case_id: str,
-    current_user: StaffUser = Depends(require_paralegal_or_above),
 ):
     """Retrieve current WTC Health Program enrollment status and workflow step."""
     db = get_db()
@@ -118,7 +116,7 @@ async def get_wtc_status(
 async def update_wtc(
     case_id: str,
     request: UpdateWTCStatusRequest,
-    current_user: StaffUser = Depends(require_paralegal_or_above),
+    http_request: Request,
 ):
     """
     Update WTC enrollment status.
@@ -128,8 +126,7 @@ async def update_wtc(
     db = get_db()
     settings = get_settings()
 
-    # Override performed_by with authenticated user
-    request = request.model_copy(update={"performed_by": current_user.uid})
+    request = request.model_copy(update={"performed_by": http_request.state.user.get("uid", "")})
 
     try:
         result = update_wtc_status(db=db, case_id=case_id, request=request)
@@ -152,7 +149,7 @@ async def update_wtc(
             old_status=result["old_status"],
             new_status=result["new_status"],
             workflow_type="WTC",
-            performed_by=current_user.uid,
+            performed_by=http_request.state.user.get("uid", ""),
         )
     except Exception as exc:
         logger.warning("pubsub_publish_failed caseId=%s: %s", case_id, exc)

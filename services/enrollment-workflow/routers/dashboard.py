@@ -15,10 +15,8 @@ import logging
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
-
-from middleware.auth import StaffUser, require_paralegal_or_above
 from models.vcf_models import (
     DeadlineStatus,
     EnrollmentDashboardResponse,
@@ -42,7 +40,6 @@ async def enrollment_dashboard(
     vcf_status: Optional[str] = Query(None, description="Filter by VCF registration status"),
     deadline_status: Optional[str] = Query(None, description="Filter by deadline status (warning_30, warning_60, warning_90, expired)"),
     limit: int = Query(100, ge=1, le=500),
-    current_user: StaffUser = Depends(require_paralegal_or_above),
 ):
     """
     Returns enrollment pipeline data for all cases.
@@ -165,7 +162,6 @@ async def deadline_summary(
     ),
     paralegal_id: Optional[str] = Query(None),
     limit: int = Query(100, ge=1, le=500),
-    current_user: StaffUser = Depends(require_paralegal_or_above),
 ):
     """
     Returns all cases with VCF filing deadlines, sorted by urgency.
@@ -239,7 +235,6 @@ async def deadline_summary(
 )
 async def export_csv(
     paralegal_id: Optional[str] = Query(None),
-    current_user: StaffUser = Depends(require_paralegal_or_above),
 ):
     """Export all enrollment data as CSV. Filterable by paralegal."""
     db = get_db()

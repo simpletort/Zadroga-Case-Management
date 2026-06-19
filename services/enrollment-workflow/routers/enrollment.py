@@ -23,11 +23,9 @@ Endpoints:
 from __future__ import annotations
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status  # Depends kept for _get_db
 from services.firestore_client import get_db as _get_db
 from config import settings
-
-from middleware.auth import require_paralegal_or_above
 from models.certification_models import (
     CertificationEnrollmentRecord,
     CertificationStatusUpdateResponse,
@@ -77,7 +75,6 @@ router = APIRouter(prefix="/api/v1/enrollment", tags=["Enrollment"])
 )
 async def trigger_certification(
     body: TriggerCertificationWorkflowRequest,
-    _user=Depends(require_paralegal_or_above),
     db=Depends(_get_db),
 ):
     try:
@@ -103,7 +100,6 @@ async def trigger_certification(
 )
 async def get_certification(
     case_id: str,
-    _user=Depends(require_paralegal_or_above),
     db=Depends(_get_db),
 ):
     record = await get_certification_enrollment(db=db, case_id=case_id)
@@ -127,7 +123,6 @@ async def get_certification(
 async def update_certification(
     case_id: str,
     body: UpdateCertificationStatusRequest,
-    _user=Depends(require_paralegal_or_above),
     db=Depends(_get_db),
 ):
     try:
@@ -167,7 +162,6 @@ async def update_certification(
 )
 async def initiate_registration_endpoint(
     body: InitiateRegistrationRequest,
-    _user=Depends(require_paralegal_or_above),
     db=Depends(_get_db),
 ):
     # Validate prerequisite: must have certification completed
@@ -201,7 +195,6 @@ async def initiate_registration_endpoint(
 )
 async def get_registration_endpoint(
     case_id: str,
-    _user=Depends(require_paralegal_or_above),
     db=Depends(_get_db),
 ):
     record = await get_registration(db=db, case_id=case_id)
@@ -224,7 +217,6 @@ async def get_registration_endpoint(
 async def update_registration_endpoint(
     case_id: str,
     body: UpdateRegistrationStatusRequest,
-    _user=Depends(require_paralegal_or_above),
     db=Depends(_get_db),
 ):
     try:
@@ -260,7 +252,6 @@ async def update_registration_endpoint(
 )
 async def get_prefill(
     case_id: str,
-    _user=Depends(require_paralegal_or_above),
     db=Depends(_get_db),
 ):
     data = await get_registration_prefill(db=db, case_id=case_id)

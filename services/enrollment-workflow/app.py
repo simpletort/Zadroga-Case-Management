@@ -38,6 +38,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from shared.middlewares import AuthMiddleware, ErrorHandlerMiddleware, LoggingMiddleware
+from shared.middlewares.cors import get_cors_origins
+
 from config import settings
 
 log = structlog.get_logger()
@@ -68,20 +71,36 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# In production, allow_origins was an empty list — Starlette's CORSMiddleware
-# rejects every preflight with 400 "Disallowed CORS origin" when no origin can
-# match. That broke /api/v1/dashboard/deadlines for the Pipeline Analytics
-# dashboard (and any other prod frontend). Explicitly allow the known prod
-# origins instead of leaving the list empty.
+# Orchestrator adapter paths are authenticated at the GCP infrastructure level
+# (Cloud Workflows service account OIDC) — skip application-level auth for them.
+_ORCHESTRATOR_SKIP_PATHS = [
+    "/api/v1/enrollment/wtc-status",
+    "/api/v1/enrollment/vcf-status",
+    "/api/v1/enrollment/deadlines",
+]
+
+# No route-level permission keys needed — all human-facing endpoints require
+# only a valid authenticated session (any staff role).
+_ROUTE_PERMISSIONS: list[tuple[str, str, str]] = []
+
+app.add_middleware(ErrorHandlerMiddleware)
+app.add_middleware(LoggingMiddleware)
+app.add_middleware(
+    AuthMiddleware,
+    route_permissions=_ROUTE_PERMISSIONS,
+    roles_firestore_project=settings.gcp_project_id,
+    roles_firestore_database=settings.firestore_database_id,
+    trusted_service_accounts=settings.trusted_service_accounts,
+    skip_paths=["/health", "/"] + _ORCHESTRATOR_SKIP_PATHS,
+    firebase_project_id=settings.gcp_project_id,
+    app_env=settings.app_env,
+)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if settings.is_development else [
-        "https://simpletort.web.app",
-        "https://staff.simpletort.com",
-    ],
+    allow_origins=get_cors_origins(settings.app_env),
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["Authorization", "Content-Type", "x-apigateway-api-userinfo"],
 )
 
 # ── Routers ───────────────────────────────────────────────────────────────────

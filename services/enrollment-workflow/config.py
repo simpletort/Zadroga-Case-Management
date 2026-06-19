@@ -16,6 +16,14 @@ class Settings(BaseSettings):
     # ── Auth ───────────────────────────────────────────────────────────────
     jwt_audience: str = ""
     jwt_issuer: str = ""
+    trusted_service_accounts: list[str] = []
+
+    @field_validator("trusted_service_accounts", mode="before")
+    @classmethod
+    def parse_trusted_accounts(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return [e.strip() for e in v.split(",") if e.strip()]
+        return v
 
     # ── Pub/Sub Topics ─────────────────────────────────────────────────────
     pubsub_topic_enrollment: str = "enrollment-status-changes"

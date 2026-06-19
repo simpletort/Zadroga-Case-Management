@@ -12,10 +12,9 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 
 from config import get_settings
-from middleware.auth import StaffUser, require_paralegal_or_above
 from models.vcf_models import (
     InitiateVCFRegistrationRequest,
     UpdateVCFStatusRequest,
@@ -45,7 +44,7 @@ router = APIRouter()
 )
 async def register_vcf(
     request: InitiateVCFRegistrationRequest,
-    current_user: StaffUser = Depends(require_paralegal_or_above),
+    http_request: Request,
 ):
     """
     Initiate VCF registration workflow.
@@ -73,7 +72,7 @@ async def register_vcf(
                 old_status="",
                 new_status="Not Registered",
                 workflow_type="VCF",
-                performed_by=current_user.uid,
+                performed_by=http_request.state.user.get("uid", ""),
             )
         except Exception as exc:
             logger.warning("pubsub_publish_failed caseId=%s: %s", request.case_id, exc)
@@ -95,7 +94,6 @@ async def register_vcf(
 )
 async def get_vcf_status(
     case_id: str,
-    current_user: StaffUser = Depends(require_paralegal_or_above),
 ):
     """Retrieve current VCF registration status, claim number, and deadline."""
     db = get_db()
@@ -120,7 +118,7 @@ async def get_vcf_status(
 async def update_vcf(
     case_id: str,
     request: UpdateVCFStatusRequest,
-    current_user: StaffUser = Depends(require_paralegal_or_above),
+    http_request: Request,
 ):
     """
     Update VCF registration status.
@@ -130,7 +128,7 @@ async def update_vcf(
     db = get_db()
     settings = get_settings()
 
-    request = request.model_copy(update={"performed_by": current_user.uid})
+    request = request.model_copy(update={"performed_by": http_request.state.user.get("uid", "")})
 
     try:
         result = update_vcf_status(db=db, case_id=case_id, request=request)
@@ -153,7 +151,7 @@ async def update_vcf(
             old_status=result["old_status"],
             new_status=result["new_status"],
             workflow_type="VCF",
-            performed_by=current_user.uid,
+            performed_by=http_request.state.user.get("uid", ""),
             extra={"vcfFilingDeadline": result.get("vcf_filing_deadline")},
         )
     except Exception as exc:
@@ -178,7 +176,6 @@ async def update_vcf(
 )
 async def get_vcf_prefill(
     case_id: str,
-    current_user: StaffUser = Depends(require_paralegal_or_above),
 ):
     """
     Generate pre-filled VCF registration form data from the case record.

@@ -16,7 +16,6 @@ COPY app.py config.py logging_config.py ./
 COPY routers/ ./routers/
 COPY models/ ./models/
 COPY services/ ./services/
-COPY middleware/ ./middleware/
 
 EXPOSE 8080
 
