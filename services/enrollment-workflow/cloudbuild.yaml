@@ -24,9 +24,9 @@ steps:
         GCP_PROJECT_ID=test APP_ENV=development pytest tests/ -v --tb=short
 
   # ── Build image ────────────────────────────────────────────────────────
+  # Build context is repo root so the shared/ package is accessible.
   - name: "gcr.io/cloud-builders/docker"
     id: build
-    dir: "services/enrollment-workflow"
     waitFor: ["test"]
     args:
       - build
@@ -34,6 +34,8 @@ steps:
       - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
       - "-t"
       - "$_REPO/$_SERVICE_NAME:$_ENV-latest"
+      - "-f"
+      - "services/enrollment-workflow/Dockerfile"
       - "."
 
   # ── Push image ─────────────────────────────────────────────────────────
