@@ -16,7 +16,7 @@ from shared.middlewares.error_handler import ErrorHandlerMiddleware
 from shared.middlewares.logging import LoggingMiddleware
 
 from app.config import get_settings
-from app.routes import assignment, dashboard, communication, review, search, attorney_review, escalation, rejection, decision_audit, update
+from app.routes import assignment, dashboard, communication, review, search, attorney_review, escalation, rejection, decision_audit, update, status_update
 
 settings = get_settings()
 
@@ -79,6 +79,8 @@ _ROUTE_PERMISSIONS: list[tuple[str, str, str]] = [
     ("POST",   r"^/api/v1/search/presets$",                   "cases.write"),
     ("PATCH",  r"^/api/v1/search/presets/[^/]+$",            "cases.write"),
     ("DELETE", r"^/api/v1/search/presets/[^/]+$",            "cases.delete"),
+    # Case status (manual override)
+    ("PATCH",  r"^/api/v1/cases/[^/]+/status$",               "cases.status.update"),
     # Case updates
     ("GET",    r"^/api/v1/cases/[^/]+/updates$",              "cases.read"),
     ("POST",   r"^/api/v1/cases/[^/]+/updates$",              "cases.write"),
@@ -121,3 +123,4 @@ app.include_router(escalation.router)
 app.include_router(rejection.router)
 app.include_router(decision_audit.router)
 app.include_router(update.router)
+app.include_router(status_update.router)
