@@ -86,6 +86,13 @@ class TestUpdateCaseStatusService:
         assert "updatedAt"           in case_update_kwargs
         assert "lastStatusChangedAt" in case_update_kwargs
 
+        # statusHistory entry appended
+        history_entry = case_update_kwargs["statusHistory"].values[0]
+        assert history_entry["status"]    == "Awarded"
+        assert history_entry["updatedBy"] == _UID
+        assert history_entry["note"]      == "Settlement reached"
+        assert "timestamp" in history_entry
+
         # Timeline event written
         timeline_set_kwargs = batch.set.call_args[0][1]
         assert timeline_set_kwargs["eventType"]                    == "StatusChange"
@@ -118,6 +125,27 @@ class TestUpdateCaseStatusService:
 
         timeline_set_kwargs = batch.set.call_args[0][1]
         assert timeline_set_kwargs["metadata"]["notes"] is None
+
+    def test_default_note_when_notes_none(self):
+        from app.services.status_update_service import update_case_status
+
+        db, _, _ = _make_db(current_status="New Lead")
+        batch = db.batch.return_value
+
+        with patch("app.services.status_update_service.datetime") as mock_dt:
+            mock_dt.now.return_value = _NOW
+            update_case_status(
+                db=db,
+                case_id=_CASE,
+                new_status="Closed",
+                actor_uid=_UID,
+                actor_name=_NAME,
+                notes=None,
+            )
+
+        case_update_kwargs = batch.update.call_args[0][1]
+        history_entry = case_update_kwargs["statusHistory"].values[0]
+        assert history_entry["note"] == "Manual status update"
 
     def test_404_when_case_not_found(self):
         from app.services.status_update_service import update_case_status
