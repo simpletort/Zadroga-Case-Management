@@ -764,6 +764,109 @@ paths:
         401:
           description: Unauthorized
 
+  # --- Case Status Registry (firmSettings) ---
+
+  /api/v1/settings/case-statuses:
+    options:
+      operationId: corsPreflightCaseStatusRegistry
+      security: []
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: "List all available case statuses from firmSettings (min role: paralegal)"
+      operationId: listCaseStatuses
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Ordered list of case status entries
+        401:
+          description: Unauthorized
+    post:
+      summary: "Create a new case status in the registry (min role: admin_staff)"
+      operationId: createCaseStatus
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required: [value, label, category, order, color]
+            properties:
+              value:    { type: string, description: "Unique status key, e.g. 'Awarded'" }
+              label:    { type: string, description: "Human-readable display name" }
+              category: { type: string, description: "Group: active | closed | terminal" }
+              order:    { type: integer, description: "Sort order in UI dropdown" }
+              color:    { type: string, description: "Hex color for UI badge, e.g. '#22C55E'" }
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        201:
+          description: Status created
+        401:
+          description: Unauthorized
+        409:
+          description: Status value already exists
+
+  /api/v1/settings/case-statuses/{value}:
+    options:
+      operationId: corsPreflightCaseStatusRegistryByValue
+      security: []
+      parameters:
+        - { name: value, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    patch:
+      summary: "Edit a case status entry by value (min role: admin_staff)"
+      operationId: updateCaseStatusByValue
+      parameters:
+        - { name: value, in: path, required: true, type: string, description: "URL-encoded status value, e.g. New%20Lead" }
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+              label:    { type: string }
+              category: { type: string }
+              order:    { type: integer }
+              color:    { type: string }
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Status updated
+        401:
+          description: Unauthorized
+        404:
+          description: Status value not found
+    delete:
+      summary: "Delete a case status entry by value (min role: admin_staff)"
+      operationId: deleteCaseStatusByValue
+      parameters:
+        - { name: value, in: path, required: true, type: string, description: "URL-encoded status value" }
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Status deleted, remaining list returned
+        401:
+          description: Unauthorized
+        404:
+          description: Status value not found
+
   # --- Case Status (manual override) ---
 
   /api/v1/cases/{caseId}/status:
