@@ -118,7 +118,7 @@ def register_upload(
 
     # 3. Generate the staging signed URL
     gcs_client = get_gcs_client()
-    signed_url, expires_at = generate_signed_url(
+    signed_url, expires_at, _ = generate_signed_url(
         gcs_client=gcs_client,
         blob_path=staging_path,
         action=UrlAction.write,

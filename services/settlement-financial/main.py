@@ -299,8 +299,13 @@ app.openapi = _custom_openapi
 
 _settings = get_settings()
 
-app.add_middleware(ErrorHandlerMiddleware)
-app.add_middleware(LoggingMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_cors_origins(_settings.environment),
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allow_headers=["Authorization", "Content-Type", "x-apigateway-api-userinfo"],
+)
 if not _settings.is_development:
     app.add_middleware(
         AuthMiddleware,
@@ -312,19 +317,8 @@ if not _settings.is_development:
         ],
         skip_paths=["/health", "/docs", "/openapi.json", "/redoc"],
     )
-# https://simpletort.web.app is only in get_cors_origins()'s dev list, not
-# prod — appended here (scoped to this service only) so the case Financial
-# tab's settlement reads (inputs/expenses/liens/loans/disbursements/etc.)
-# stop failing CORS in production without touching the shared origin list
-# that auth-rbac-cr, case-development, notification, lead-intake,
-# task-management, and storage-gateway also depend on.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=get_cors_origins(_settings.environment) + ["https://simpletort.web.app"],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-    allow_headers=["Authorization", "Content-Type", "x-apigateway-api-userinfo"],
-)
+app.add_middleware(LoggingMiddleware)
+app.add_middleware(ErrorHandlerMiddleware)
 
 
 # ── Timestamp helper ──────────────────────────────────────────────────────────
