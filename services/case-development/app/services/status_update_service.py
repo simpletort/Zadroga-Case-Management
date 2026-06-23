@@ -31,12 +31,6 @@ def update_case_status(
         "status":              new_status,
         "updatedAt":           now,
         "lastStatusChangedAt": now,
-        "statusHistory":       firestore.ArrayUnion([{
-            "status":    new_status,
-            "timestamp": now.isoformat(),
-            "updatedBy": actor_uid,
-            "note":      notes or "Manual status update",
-        }]),
     })
 
     timeline_ref = case_ref.collection("timeline").document()
