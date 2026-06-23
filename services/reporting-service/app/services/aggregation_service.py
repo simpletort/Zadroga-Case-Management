@@ -467,7 +467,7 @@ def get_staff_case_counts() -> Dict[str, dict]:
         docs = db.collection("cases").where("status", "==", status).stream()
         for doc in docs:
             data = doc.to_dict()
-            assignment = data.get("assignment", {})
+            assignment = data.get("assignment") or {}
             uid = assignment.get("assignedParalegal") or assignment.get("assignedAttorney")
             if uid:
                 result[uid]["active_cases"] += 1
@@ -485,7 +485,7 @@ def get_staff_case_counts() -> Dict[str, dict]:
         .stream()
     ):
         data = doc.to_dict()
-        assignment = data.get("assignment", {})
+        assignment = data.get("assignment") or {}
         uid = assignment.get("assignedParalegal") or assignment.get("assignedAttorney")
         if uid:
             result[uid]["cases_completed_period"] += 1
@@ -503,7 +503,7 @@ def get_staff_case_counts() -> Dict[str, dict]:
         .stream()
     ):
         data = doc.to_dict()
-        assignment = data.get("assignment", {})
+        assignment = data.get("assignment") or {}
         uid = assignment.get("assignedParalegal") or assignment.get("assignedAttorney")
         if not uid:
             continue
