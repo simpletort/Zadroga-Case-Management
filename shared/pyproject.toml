@@ -21,6 +21,5 @@ dependencies = [
     # Added for unified auth middleware:
     "python-jose[cryptography]>=3.3",
     "httpx>=0.24",
-    "python-magic>=0.4.27",
     "python-multipart>=0.0.9",
 ]
