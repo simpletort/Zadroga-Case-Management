@@ -133,6 +133,11 @@ ROLES = [
             "system.admin", "staff.manage", "staff.invite", "auditLog.read",
             "cases.read", "cases.write", "cases.delete",
             "settings.read", "settings.write",
+            "storage.signed_url", "storage.metadata.read",
+            "storage.upload.read", "storage.upload.write",
+            "storage.documents.read", "storage.documents.write",
+            "storage.hold.write",
+            "storage.lifecycle.read", "storage.lifecycle.write",
         ],
     },
 ]
