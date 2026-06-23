@@ -1,6 +1,10 @@
 """
 shared/middlewares/file_validation.py — File type and size validation middleware.
 
+Dependency note: requires `python-magic` (listed in pyproject.toml).
+On Windows, also install `python-magic-bin` which bundles the libmagic DLL:
+    pip install python-magic-bin
+
 Checks every multipart/form-data upload field:
   - Extension must be in ALLOWED_EXTENSIONS (case-insensitive)
   - python-magic detected MIME type must be in ALLOWED_MIME_TYPES
