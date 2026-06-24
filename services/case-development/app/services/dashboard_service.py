@@ -92,7 +92,12 @@ def get_dashboard(
 
         last_activity = data.get("updatedAt")
 
-        if hasattr(last_activity, "tzinfo") and last_activity is not None and last_activity.tzinfo is None:
+        if isinstance(last_activity, str):
+            try:
+                last_activity = datetime.fromisoformat(last_activity).replace(tzinfo=timezone.utc)
+            except ValueError:
+                last_activity = None
+        elif hasattr(last_activity, "tzinfo") and last_activity is not None and last_activity.tzinfo is None:
             last_activity = last_activity.replace(tzinfo=timezone.utc)
 
         vcf_details  = data.get("vcfScreeningDetails") or {}
@@ -206,7 +211,12 @@ def get_case_detail(db: firestore.Client, case_id: str) -> dict | None:
 
     last_activity = data.get("updatedAt")
 
-    if hasattr(last_activity, "tzinfo") and last_activity is not None and last_activity.tzinfo is None:
+    if isinstance(last_activity, str):
+        try:
+            last_activity = datetime.fromisoformat(last_activity).replace(tzinfo=timezone.utc)
+        except ValueError:
+            last_activity = None
+    elif hasattr(last_activity, "tzinfo") and last_activity is not None and last_activity.tzinfo is None:
         last_activity = last_activity.replace(tzinfo=timezone.utc)
 
     vcf_details  = data.get("vcfScreeningDetails") or {}
