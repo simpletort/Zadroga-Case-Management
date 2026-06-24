@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     # ── Runtime environment ───────────────────────────────────────────────
     app_env: str = Field("development", alias="APP_ENV")
     environment: str = Field("production", alias="ENVIRONMENT")
-    gcp_project_id: str = Field("simpletort-zadroga-dev", alias="GCP_PROJECT_ID")
+    gcp_project_id: str = Field(alias="GCP_PROJECT_ID")
 
     @property
     def is_production(self) -> bool:

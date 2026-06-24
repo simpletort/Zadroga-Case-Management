@@ -11,17 +11,17 @@ Usage
   gcloud auth application-default login
 
   # Dry run
-  python scripts/seed_rbac.py --project simpletort-zadroga-dev --dry-run
+  python scripts/seed_rbac.py --project <your-gcp-project-id> --dry-run
 
   # Seed
-  python scripts/seed_rbac.py --project simpletort-zadroga-dev
+  python scripts/seed_rbac.py --project <your-gcp-project-id>
 
   # Overwrite existing documents
-  python scripts/seed_rbac.py --project simpletort-zadroga-dev --overwrite
+  python scripts/seed_rbac.py --project <your-gcp-project-id> --overwrite
 
 Options
 -------
-  --project PROJECT   GCP project ID (default: simpletort-zadroga-dev)
+  --project PROJECT   GCP project ID (default: <your-gcp-project-id>)
   --database DB       Firestore database ID (default: simpletort-dev)
   --dry-run           Print what would be written without writing
   --overwrite         Overwrite existing documents (default: skip)
@@ -169,7 +169,7 @@ def _load_permissions(repo_root: Path) -> list[dict]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Seed RBAC roles and permissions into Firestore.")
-    parser.add_argument("--project",  default="simpletort-zadroga-dev", help="GCP project ID")
+    parser.add_argument("--project",  default=os.environ.get("GCP_PROJECT_ID"), help="GCP project ID")
     parser.add_argument("--database", default="simpletort-dev",         help="Firestore database ID")
     parser.add_argument("--dry-run",  action="store_true",              help="Print without writing")
     parser.add_argument("--overwrite",action="store_true",              help="Overwrite existing documents")

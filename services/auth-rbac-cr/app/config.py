@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    gcp_project_id: str = "simpletort-zadroga-dev"
+    gcp_project_id: str = Field(alias="GCP_PROJECT_ID")
     firestore_database_id: str = "simpletort-dev"
     firebase_service_account_key_path: str = "/secrets/firebase-sa-key.json"
     environment: str = "production"

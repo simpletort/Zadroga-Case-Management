@@ -28,7 +28,7 @@ SERVICE_ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SERVICE_ROOT)
 
 os.environ.setdefault("FIRESTORE_DATABASE_ID", "simpletort-dev")
-os.environ.setdefault("GCP_PROJECT_ID", "simpletort-zadroga-dev")
+os.environ.setdefault("GCP_PROJECT_ID", "")
 os.environ.setdefault("FIRESTORE_SMS_TEMPLATES_COLLECTION", "notificationTemplates")
 os.environ.setdefault("SENDGRID_FROM_EMAIL", "azad@plutusllp.com")
 os.environ.setdefault("SENDGRID_FROM_NAME", "Zadroga Law")
@@ -62,7 +62,7 @@ def _result(status: str, msg: str, detail: str = "") -> None:
 
 def _get_sync_firestore():
     from google.cloud import firestore
-    project = os.environ.get("GCP_PROJECT_ID", "simpletort-zadroga-dev")
+    project = os.environ.get("GCP_PROJECT_ID") or exit("ERROR: GCP_PROJECT_ID is not set")
     database = os.environ.get("FIRESTORE_DATABASE_ID", "simpletort-dev")
     return firestore.Client(project=project, database=database)
 
@@ -299,11 +299,12 @@ def tc4_secret_manager() -> bool:
 
     # Check 2: gcloud secret accessible
     try:
+        _project = os.environ.get("GCP_PROJECT_ID", "")
         cmds = [
             ["gcloud", "secrets", "versions", "access", "latest",
-             "--secret=SENDGRID_API_KEY", "--project=simpletort-zadroga-dev"],
+             "--secret=SENDGRID_API_KEY", f"--project={_project}"],
             ["gcloud.cmd", "secrets", "versions", "access", "latest",
-             "--secret=SENDGRID_API_KEY", "--project=simpletort-zadroga-dev"],
+             "--secret=SENDGRID_API_KEY", f"--project={_project}"],
         ]
         secret_val = None
         for cmd in cmds:
@@ -329,7 +330,7 @@ def tc4_secret_manager() -> bool:
             try:
                 r = subprocess.run(
                     cmd_prefix + ["run", "revisions", "describe", "notification-dev-00040-8fb",
-                                  "--region=us-central1", "--project=simpletort-zadroga-dev",
+                                  "--region=us-central1", f"--project={os.environ.get('GCP_PROJECT_ID', '')}",
                                   "--format=value(spec.containers[0].env)"],
                     capture_output=True, text=True, check=True, timeout=20
                 )

@@ -29,7 +29,7 @@ ALLOWED_ORIGINS: list[str] = [
     o.strip()
     for o in os.environ.get(
         "ALLOWED_ORIGINS",
-        "https://simpletort-zadroga-dev.web.app,http://localhost:5173",
+        "https://simpletort.web.app,http://localhost:5173",
     ).split(",")
     if o.strip()
 ]

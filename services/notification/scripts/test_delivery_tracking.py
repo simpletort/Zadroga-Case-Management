@@ -20,7 +20,7 @@ SERVICE_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 sys.path.insert(0, SERVICE_ROOT)
 
 os.environ.setdefault("FIRESTORE_DATABASE_ID",              "simpletort-dev")
-os.environ.setdefault("GCP_PROJECT_ID",                     "simpletort-zadroga-dev")
+os.environ.setdefault("GCP_PROJECT_ID",                     "")
 os.environ.setdefault("FIRESTORE_SMS_TEMPLATES_COLLECTION", "notificationTemplates")
 os.environ.setdefault("SENDGRID_FROM_EMAIL",                "azad@plutusllp.com")
 os.environ.setdefault("SENDGRID_FROM_NAME",                 "Zadroga Law")
@@ -103,10 +103,10 @@ async def run(case_id: str):
     print(f"  Records written to Firestore. Verify at:")
     print(f"")
     print(f"  Subcollection (per-case):")
-    print(f"  https://console.cloud.google.com/firestore/databases/simpletort-dev/data/panel/cases/{case_id}/notifications?project=simpletort-zadroga-dev")
+    print(f"  https://console.cloud.google.com/firestore/databases/simpletort-dev/data/panel/cases/{case_id}/notifications?project={os.environ.get('GCP_PROJECT_ID', '<GCP_PROJECT_ID>')}")
     print(f"")
     print(f"  Top-level collection (cross-case):")
-    print(f"  https://console.cloud.google.com/firestore/databases/simpletort-dev/data/panel/notifications?project=simpletort-zadroga-dev")
+    print(f"  https://console.cloud.google.com/firestore/databases/simpletort-dev/data/panel/notifications?project={os.environ.get('GCP_PROJECT_ID', '<GCP_PROJECT_ID>')}")
     print(f"{'=' * 60}")
 
 

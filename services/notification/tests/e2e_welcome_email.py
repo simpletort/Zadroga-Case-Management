@@ -10,20 +10,20 @@ Tests the full pipeline:
 
 Usage — preview rendered email content (no email sent):
   python services/notification/tests/e2e_welcome_email.py \\
-    --project simpletort-zadroga-dev \\
+    --project <your-gcp-project-id> \\
     --database simpletort-dev \\
     --case-id ZAD-2024-01-0001
 
   # Preview a specific template (e.g. document reminders)
   python services/notification/tests/e2e_welcome_email.py \\
-    --project simpletort-zadroga-dev \\
+    --project <your-gcp-project-id> \\
     --database simpletort-dev \\
     --case-id ZAD-2024-01-0001 \\
     --template document_reminder_48hr_email
 
   # List available cases to pick one for testing
   python services/notification/tests/e2e_welcome_email.py \\
-    --project simpletort-zadroga-dev \\
+    --project <your-gcp-project-id> \\
     --database simpletort-dev \\
     --list-cases
 """
@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -39,7 +40,7 @@ from datetime import datetime, timezone
 # ── Config ─────────────────────────────────────────────────────────────────────
 
 DEFAULT_SERVICE_URL  = "https://notification-dev-292736139819.us-central1.run.app"
-DEFAULT_PROJECT      = "simpletort-zadroga-dev"
+DEFAULT_PROJECT      = os.environ.get("GCP_PROJECT_ID", "")
 DEFAULT_DATABASE     = "simpletort-dev"
 DEFAULT_COLLECTION   = "notificationTemplates"
 DEFAULT_TEMPLATE     = "welcome_email"
