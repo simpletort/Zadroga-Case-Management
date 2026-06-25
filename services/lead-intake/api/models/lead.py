@@ -84,6 +84,7 @@ class LeadRequest(BaseModel):
     lastName:              str                    = Field(..., min_length=1, max_length=100)
     email:                 EmailStr
     phone:                 str                    = Field(..., examples=["+12125551234"])
+    ssn:                   Optional[str]          = Field(None, description= "Client SSN")
     dateOfBirth:           Optional[date]         = Field(None, description="Client date of birth (YYYY-MM-DD)")
     address:               Optional[Address]      = None
     exposureLocation:      str                    = Field(..., min_length=1, max_length=500)
@@ -121,6 +122,16 @@ class LeadRequest(BaseModel):
         if not phonenumbers.is_valid_number(parsed):
             raise ValueError(f"phone number not valid: {raw!r}")
         return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
+
+    @field_validator("ssn")
+    @classmethod
+    def normalize_ssn_field(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        digits = "".join(c for c in v if c.isdigit())
+        if len(digits) != 9:
+            raise ValueError("ssn must contain exactly 9 digits")
+        return digits
 
     @field_validator("conditions", mode="before")
     @classmethod
@@ -189,6 +200,9 @@ class CaseDocument(BaseModel):
     lastName:              str
     email:                 str
     phone:                 str
+    ssn:                   Optional[str] = None
+    ssn_encrypted:         Optional[str] = None
+    ssn_hash:              Optional[str] = None   # SHA-256 for duplicate detection queries
     dateOfBirth:           Optional[date]    = None  # optional — not always provided at intake
     address:               Optional[Address] = None
     exposureLocation:      str
@@ -224,8 +238,21 @@ class CaseDocument(BaseModel):
     vcfScreeningDetails: Optional[dict] = None
 
     def to_firestore_dict(self) -> dict:
-        """Serialize to a Firestore-safe plain dict (dates/enums → strings)."""
-        data = self.model_dump()
+        """
+        Serialize to a Firestore-safe plain dict (dates/enums → strings).
+
+        SECURITY: plaintext `ssn` is NEVER written to Firestore.
+        If ssn is present, it is encrypted into `ssn_encrypted` via Cloud KMS CMEK.
+        """
+        # Exclude plaintext ssn from Firestore payload — always.
+        data = self.model_dump(exclude={"ssn"})
+
+        # Encrypt SSN → ssn_encrypted if plaintext was provided
+        if self.ssn:
+            from shared.crypto import encrypt_ssn, compute_ssn_hash
+            data["ssn_encrypted"] = encrypt_ssn(self.ssn)
+            data["ssn_hash"] = compute_ssn_hash(self.ssn)
+
         for key, val in data.items():
             if isinstance(val, (date, datetime)):
                 data[key] = val.isoformat()
@@ -253,6 +280,7 @@ class CaseDocument(BaseModel):
             lastName=lead.lastName,
             email=str(lead.email),
             phone=lead.phone,
+            ssn=lead.ssn,  # plaintext; to_firestore_dict() encrypts before write
             dateOfBirth=lead.dateOfBirth,
             address=lead.address,
             exposureLocation=lead.exposureLocation,

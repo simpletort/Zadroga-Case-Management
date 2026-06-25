@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     # ── GCP ──────────────────────────────────────────────────────────────────
     gcp_project_id: str = "simpletort-zadroga-dev"
 
+    # ── Cloud KMS (PHI encryption) ─────────────────────────────────────────
+    # Full resource name for SSN CMEK key.
+    # Format: projects/{project}/locations/{loc}/keyRings/{ring}/cryptoKeys/{key}
+    ssn_kms_key_name: str = ""
+
     # FIX: default changed from "development" → "production".
     # A missing APP_ENV env var on a deployed Cloud Run instance previously
     # caused _verify_firebase_jwt() to skip signature verification entirely,

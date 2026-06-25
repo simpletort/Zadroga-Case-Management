@@ -211,7 +211,16 @@ async def get_case(case_id: str, db: firestore.AsyncClient) -> Optional[CaseDocu
     if not doc.exists:
         return None
     try:
-        return CaseDocument(**doc.to_dict())
+        data = doc.to_dict()
+        # Decrypt ssn_encrypted → ssn (in-memory only, never re-persisted as plaintext)
+        if data.get("ssn_encrypted"):
+            try:
+                from shared.crypto import decrypt_ssn
+                data["ssn"] = decrypt_ssn(data["ssn_encrypted"])
+            except Exception as exc:
+                logger.error("ssn_decryption_failed", case_id=case_id, error=str(exc))
+                data["ssn"] = None
+        return CaseDocument(**data)
     except Exception as exc:
         logger.error("case_deserialisation_failed", case_id=case_id, error=str(exc))
         raise
