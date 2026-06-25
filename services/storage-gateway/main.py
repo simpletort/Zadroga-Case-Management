@@ -19,7 +19,6 @@ from app.routes import signed_url, metadata, lifecycle, upload, documents, brows
 from shared.middlewares import (
     AuthMiddleware,
     ErrorHandlerMiddleware,
-    FileValidationMiddleware,
     LoggingMiddleware,
     get_cors_origins,
 )
@@ -83,7 +82,6 @@ app = FastAPI(
 )
 
 # Middleware stack — added in innermost-first order; last added = outermost.
-app.add_middleware(FileValidationMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_cors_origins(settings.environment),

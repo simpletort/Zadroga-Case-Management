@@ -16,7 +16,7 @@ from shared.middlewares.error_handler import ErrorHandlerMiddleware
 from shared.middlewares.logging import LoggingMiddleware
 
 from app.config import get_settings
-from app.routes import assignment, dashboard, communication, review, search, attorney_review, escalation, rejection, decision_audit, update, status_update, case_status_registry
+from app.routes import assignment, dashboard, communication, review, search, attorney_review, escalation, rejection, decision_audit, update, status_update, case_status_registry, timeline
 
 settings = get_settings()
 
@@ -57,6 +57,8 @@ _ROUTE_PERMISSIONS: list[tuple[str, str, str]] = [
     # Communications
     ("GET",    r"^/api/v1/cases/[^/]+/communications$",       "communications.read"),
     ("POST",   r"^/api/v1/cases/[^/]+/communications$",       "communications.write"),
+    # Timeline
+    ("GET",    r"^/api/v1/cases/[^/]+/timeline$",             "cases.read"),
     # Dashboard
     ("GET",    r"^/api/v1/dashboard/cases$",                  "cases.read"),
     ("GET",    r"^/api/v1/dashboard/cases/[^/]+$",            "cases.read"),
@@ -93,8 +95,13 @@ _ROUTE_PERMISSIONS: list[tuple[str, str, str]] = [
     ("DELETE", r"^/api/v1/cases/[^/]+/updates/[^/]+$",       "cases.delete"),
 ]
 
-app.add_middleware(ErrorHandlerMiddleware)
-app.add_middleware(LoggingMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_cors_origins(settings.environment),
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
+    allow_headers=["Authorization", "Content-Type", "x-apigateway-api-userinfo"],
+)
 app.add_middleware(
     AuthMiddleware,
     route_permissions=_ROUTE_PERMISSIONS,
@@ -104,13 +111,8 @@ app.add_middleware(
         e.strip() for e in settings.trusted_service_accounts.split(",") if e.strip()
     ],
 )
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=get_cors_origins(settings.environment),
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PATCH", "DELETE"],
-    allow_headers=["Authorization", "Content-Type", "x-apigateway-api-userinfo"],
-)
+app.add_middleware(LoggingMiddleware)
+app.add_middleware(ErrorHandlerMiddleware)
 
 
 @app.get("/health", include_in_schema=False)
@@ -130,3 +132,4 @@ app.include_router(decision_audit.router)
 app.include_router(update.router)
 app.include_router(status_update.router)
 app.include_router(case_status_registry.router)
+app.include_router(timeline.router)

@@ -7,9 +7,13 @@ add the field to the existing document without overwriting the mode value.
 
     python scripts/seed_assignment_settings.py
 """
+import os
 from google.cloud import firestore
 
-db = firestore.Client(project="simpletort-zadroga-dev", database="simpletort-dev")
+db = firestore.Client(
+    project=os.environ["GCP_PROJECT_ID"],
+    database=os.environ.get("FIRESTORE_DATABASE_ID", "simpletort-dev"),
+)
 
 ref = db.collection("firmSettings").document("assignment_mode")
 ref.set(

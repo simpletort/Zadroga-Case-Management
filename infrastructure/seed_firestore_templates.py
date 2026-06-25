@@ -20,8 +20,8 @@ Usage
   gcloud auth application-default login
 
   # Seed dev project (dry-run first)
-  python infrastructure/seed_firestore_templates.py --project simpletort-zadroga-dev --dry-run
-  python infrastructure/seed_firestore_templates.py --project simpletort-zadroga-dev
+  python infrastructure/seed_firestore_templates.py --project <your-gcp-project-id> --dry-run
+  python infrastructure/seed_firestore_templates.py --project <your-gcp-project-id>
 
   # Seed production project
   python infrastructure/seed_firestore_templates.py --project simpletort-prod

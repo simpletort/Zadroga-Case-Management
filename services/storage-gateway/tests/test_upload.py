@@ -242,7 +242,7 @@ class TestRegisterUploadService:
 
         with patch("app.services.upload_service.get_firestore_client", return_value=mock_db), \
              patch("app.services.upload_service.generate_signed_url") as mock_url:
-            mock_url.return_value = ("https://storage.googleapis.com/signed", datetime.datetime(2024, 1, 15, 13, 0))
+            mock_url.return_value = ("https://storage.googleapis.com/signed", datetime.datetime(2024, 1, 15, 13, 0), False)
 
             result = register_upload(
                 file_name="report.pdf",
@@ -293,7 +293,7 @@ class TestRegisterUploadService:
 
         with patch("app.services.upload_service.get_firestore_client", return_value=mock_db), \
              patch("app.services.upload_service.generate_signed_url") as mock_url:
-            mock_url.return_value = ("https://storage.googleapis.com/signed", datetime.datetime(2024, 1, 15, 13, 0))
+            mock_url.return_value = ("https://storage.googleapis.com/signed", datetime.datetime(2024, 1, 15, 13, 0), False)
 
             register_upload(
                 file_name="contract.pdf",

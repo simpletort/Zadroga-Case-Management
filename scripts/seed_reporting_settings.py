@@ -9,9 +9,13 @@ Creates / updates the three firmSettings documents read by reporting-service:
 Run once per environment:
     python scripts/seed_reporting_settings.py
 """
+import os
 from google.cloud import firestore
 
-db = firestore.Client(project="simpletort-zadroga-dev", database="simpletort-dev")
+db = firestore.Client(
+    project=os.environ["GCP_PROJECT_ID"],
+    database=os.environ.get("FIRESTORE_DATABASE_ID", "simpletort-dev"),
+)
 
 documents = [
     {

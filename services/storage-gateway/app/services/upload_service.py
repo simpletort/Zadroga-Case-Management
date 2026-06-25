@@ -67,6 +67,9 @@ def register_upload(
             detail="Invalid folder_path: must not escape the case directory.",
         )
 
+    from shared.middlewares.file_validation import validate_file_extension
+    validate_file_extension(file_name)
+
     file_id = str(uuid.uuid4())
     staging_path = _staging_path(file_id, file_name)
     final_path = "{}/{}/{}".format(case_id, folder_path, file_name) if folder_path else "{}/{}".format(case_id, file_name)
@@ -118,7 +121,7 @@ def register_upload(
 
     # 3. Generate the staging signed URL
     gcs_client = get_gcs_client()
-    signed_url, expires_at = generate_signed_url(
+    signed_url, expires_at, _ = generate_signed_url(
         gcs_client=gcs_client,
         blob_path=staging_path,
         action=UrlAction.write,

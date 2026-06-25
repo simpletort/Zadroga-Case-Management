@@ -7,7 +7,7 @@ RAW_KEY  = "zad_testkey_localdevelopment"       # use this in X-API-Key header
 KEY_HASH = hashlib.sha256(RAW_KEY.encode()).hexdigest()
 
 async def main():
-    db = firestore.AsyncClient(project="simpletort-zadroga-dev")
+    db = firestore.AsyncClient(project=os.environ["GCP_PROJECT_ID"])
     await db.collection("partners").document("partner_local01").set({
         "partnerId":     "partner_local01",
         "name":          "Local Dev Partner",
