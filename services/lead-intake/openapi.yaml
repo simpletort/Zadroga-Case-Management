@@ -152,6 +152,74 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /admin/settings/max-file-size:
+    get:
+      operationId: getMaxFileSize
+      summary: Get the current maximum file upload size
+      description: Returns the firm-wide max file size in MB. Falls back to 25 MB if not yet configured.
+      tags:
+        - Firm Settings
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Current max file size setting
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaxFileSizeResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden — admin role required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    patch:
+      operationId: updateMaxFileSize
+      summary: Update the firm-wide maximum file upload size
+      description: Writes the new limit to firmSettings/max_file_size. Requires senior_partner or system_admin role.
+      tags:
+        - Firm Settings
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMaxFileSizeRequest'
+      responses:
+        '200':
+          description: Setting updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaxFileSizeResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden — admin role required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
   securitySchemes:
     BearerAuth:
@@ -161,6 +229,30 @@ components:
       description: JWT issued via OAuth2 client credentials. Contains `partner_id` claim.
 
   schemas:
+    UpdateMaxFileSizeRequest:
+      type: object
+      required:
+        - maxFileSizeMb
+      properties:
+        maxFileSizeMb:
+          type: integer
+          minimum: 1
+          maximum: 500
+          description: Maximum allowed file size in megabytes.
+          example: 25
+
+    MaxFileSizeResponse:
+      type: object
+      properties:
+        maxFileSizeMb:
+          type: integer
+          example: 25
+        updatedAt:
+          type: string
+          format: date-time
+        updatedBy:
+          type: string
+
     LeadRequest:
       type: object
       required:

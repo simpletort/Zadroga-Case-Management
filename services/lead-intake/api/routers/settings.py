@@ -26,7 +26,10 @@ router = APIRouter(prefix="/admin/settings", tags=["Firm Settings"])
 _ADMIN_ROLES               = {"senior_partner", "system_admin"}
 _FIRM_SETTINGS_COLLECTION  = "firmSettings"
 _CASE_ID_PREFIX_DOC        = "case_id_prefix"
+_MAX_FILE_SIZE_DOC         = "max_file_size"
 _SCREENING_RULES_COLLECTION = "screeningRules"
+
+_DEFAULT_MAX_FILE_SIZE_MB  = 25
 
 
 def _require_admin(partner: PartnerContext) -> PartnerContext:
@@ -138,6 +141,97 @@ async def get_case_id_prefix(
         updatedAt = (data.get("updatedAt") or datetime.utcnow()).isoformat() + "Z"
             if not isinstance(data.get("updatedAt"), str) else data["updatedAt"],
         updatedBy = data.get("updatedBy", ""),
+    )
+
+
+# ── Max File Size ────────────────────────────────────────────────────────────────
+
+
+class UpdateMaxFileSizeRequest(BaseModel):
+    maxFileSizeMb: int = Field(
+        ...,
+        ge=1,
+        le=500,
+        description="Maximum allowed file size in megabytes (1–500).",
+        examples=[25, 50],
+    )
+
+
+class MaxFileSizeResponse(BaseModel):
+    maxFileSizeMb: int
+    updatedAt:     str
+    updatedBy:     str
+
+
+@router.patch(
+    "/max-file-size",
+    response_model=MaxFileSizeResponse,
+    summary="Update the firm-wide maximum file upload size",
+    description=(
+        "Writes `maxFileSizeMb` to `firmSettings/max_file_size` in Firestore. "
+        "The frontend reads this via GET to enforce the limit client-side before upload."
+    ),
+)
+async def update_max_file_size(
+    body:    UpdateMaxFileSizeRequest,
+    partner: PartnerContext = Depends(get_partner),
+    db:      firestore.AsyncClient = Depends(get_db),
+) -> MaxFileSizeResponse:
+    _require_admin(partner)
+
+    now        = datetime.utcnow()
+    updated_by = partner.raw_claims.get("email") or partner.partner_id
+
+    await db.collection(_FIRM_SETTINGS_COLLECTION).document(_MAX_FILE_SIZE_DOC).set(
+        {
+            "maxFileSizeMb": body.maxFileSizeMb,
+            "updatedAt":     firestore.SERVER_TIMESTAMP,
+            "updatedBy":     updated_by,
+        },
+        merge=True,
+    )
+
+    logger.info("max_file_size_updated", max_file_size_mb=body.maxFileSizeMb, updated_by=updated_by)
+
+    return MaxFileSizeResponse(
+        maxFileSizeMb = body.maxFileSizeMb,
+        updatedAt     = now.isoformat() + "Z",
+        updatedBy     = updated_by,
+    )
+
+
+@router.get(
+    "/max-file-size",
+    response_model=MaxFileSizeResponse,
+    summary="Get the current maximum file upload size",
+    description=(
+        "Returns `firmSettings/max_file_size`. Falls back to "
+        f"{_DEFAULT_MAX_FILE_SIZE_MB} MB if not yet configured."
+    ),
+)
+async def get_max_file_size(
+    partner: PartnerContext = Depends(get_partner),
+    db:      firestore.AsyncClient = Depends(get_db),
+) -> MaxFileSizeResponse:
+    _require_admin(partner)
+
+    doc = await db.collection(_FIRM_SETTINGS_COLLECTION).document(_MAX_FILE_SIZE_DOC).get()
+    if not doc.exists:
+        return MaxFileSizeResponse(
+            maxFileSizeMb = _DEFAULT_MAX_FILE_SIZE_MB,
+            updatedAt     = datetime.utcnow().isoformat() + "Z",
+            updatedBy     = "",
+        )
+
+    data       = doc.to_dict() or {}
+    updated_at = data.get("updatedAt") or datetime.utcnow()
+    if not isinstance(updated_at, str):
+        updated_at = updated_at.isoformat() + "Z"
+
+    return MaxFileSizeResponse(
+        maxFileSizeMb = int(data.get("maxFileSizeMb", _DEFAULT_MAX_FILE_SIZE_MB)),
+        updatedAt     = updated_at,
+        updatedBy     = data.get("updatedBy", ""),
     )
 
 
