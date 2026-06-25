@@ -1,0 +1,131 @@
+steps:
+  # ------------------------------------------------------------------
+  # Step 1 — Check whether openapi.yaml changed in this push.
+  # If it did not, write a sentinel file and skip all subsequent steps.
+  # ------------------------------------------------------------------
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: check-diff
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        # On the very first build there is no previous commit to diff against,
+        # so treat it as changed.
+        if git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -q '^openapi\.yaml$$'; then
+          echo "openapi.yaml changed — proceeding with gateway deploy"
+          echo "changed" > /workspace/gateway_changed
+        elif [ ! -f openapi.yaml ]; then
+          echo "openapi.yaml not found — skipping"
+        else
+          echo "openapi.yaml unchanged — skipping gateway deploy"
+        fi
+
+  # ------------------------------------------------------------------
+  # Step 2 — Fetch the current API config name and compute the next one.
+  # E.g. "my-config-v1-37"  →  "my-config-v1-38"
+  # ------------------------------------------------------------------
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: compute-config-name
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        [ -f /workspace/gateway_changed ] || { echo "Skipping (no change)"; exit 0; }
+
+        # Fetch the most-recently-created config for this gateway
+        CURRENT=$(gcloud api-gateway api-configs list \
+          --api="$_GATEWAY_API_ID" \
+          --project="$PROJECT_ID" \
+          --sort-by="~createTime" \
+          --limit=1 \
+          --format="value(name)" \
+          | sed 's|.*/||')   # strip the full resource path, keep just the config ID
+
+        echo "Current config: $CURRENT"
+
+        if [ -z "$CURRENT" ]; then
+          # No existing config — start at v1-1
+          NEW_CONFIG="${_CONFIG_BASE}-1"
+        else
+          # Extract the trailing integer, increment it
+          PREFIX=$(echo "$CURRENT" | sed 's/-[0-9]*$//')
+          NUM=$(echo "$CURRENT" | grep -o '[0-9]*$')
+          NEW_NUM=$((NUM + 1))
+          NEW_CONFIG="${PREFIX}-${NEW_NUM}"
+        fi
+
+        echo "New config: $NEW_CONFIG"
+        echo "$NEW_CONFIG" > /workspace/new_config_name
+
+  # ------------------------------------------------------------------
+  # Step 3 — Create the new API config from openapi.yaml
+  # ------------------------------------------------------------------
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: create-api-config
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        [ -f /workspace/gateway_changed ] || { echo "Skipping (no change)"; exit 0; }
+
+        NEW_CONFIG=$(cat /workspace/new_config_name)
+        echo "Creating API config: $NEW_CONFIG"
+
+        gcloud api-gateway api-configs create "$NEW_CONFIG" \
+          --api="$_GATEWAY_API_ID" \
+          --openapi-spec="openapi.yaml" \
+          --project="$PROJECT_ID" \
+          --backend-auth-service-account="$_GATEWAY_SA"
+
+  # ------------------------------------------------------------------
+  # Step 4 — Update the gateway to use the new config
+  # ------------------------------------------------------------------
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: update-gateway
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        [ -f /workspace/gateway_changed ] || { echo "Skipping (no change)"; exit 0; }
+
+        NEW_CONFIG=$(cat /workspace/new_config_name)
+        echo "Updating gateway $_GATEWAY_ID to use config $NEW_CONFIG"
+
+        gcloud api-gateway gateways update "$_GATEWAY_ID" \
+          --api="$_GATEWAY_API_ID" \
+          --api-config="$NEW_CONFIG" \
+          --location="$_REGION" \
+          --project="$PROJECT_ID"
+
+  # ------------------------------------------------------------------
+  # Step 5 — Print a summary
+  # ------------------------------------------------------------------
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: summary
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        if [ -f /workspace/gateway_changed ]; then
+          NEW_CONFIG=$(cat /workspace/new_config_name)
+          echo "================================================================"
+          echo "Gateway deploy complete"
+          echo "  API:    $_GATEWAY_API_ID"
+          echo "  Config: $NEW_CONFIG"
+          echo "  Gateway: $_GATEWAY_ID  (region: $_REGION)"
+          echo "================================================================"
+        else
+          echo "openapi.yaml unchanged — gateway deploy skipped"
+        fi
+
+substitutions:
+  # Override these in the Cloud Build trigger substitution variables
+  _GATEWAY_API_ID:  "simpletort-api"
+  _GATEWAY_ID:      "simpletort-dev-gateway"
+  _REGION:          "us-central1"
+  _CONFIG_BASE:     "my-config-v1"
+  # Service account used by the gateway to invoke Cloud Run backends
+  _GATEWAY_SA:      "api-gateway-sa@${PROJECT_ID}.iam.gserviceaccount.com"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
