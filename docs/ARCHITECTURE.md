@@ -323,7 +323,31 @@ sequenceDiagram
 | Signed URL expiry middleware | `shared/shared/middlewares/signed_url_expiry.py` | **Stub — pass-through only** |
 | Audit logging | PHI access and case state changes logged with timestamp, user identity, action, document ID | Implemented in `services/storage-gateway/app/utils/audit.py` |
 | Virus scanning | `virus-scanner` CF triggered on every GCS `finalize` event; document quarantined until `scan_status = clean` | Live |
-| GCP SA credentials in CI | GitHub Actions (`deploy.yml`) uses `GCP_SA_KEY` (service account JSON secret) rather than Workload Identity Federation | Sub-optimal — see [Known Issues](#known-issues--gaps) |
+| GCP CI/CD auth | GitHub Actions (`deploy.yml`) authenticates via **Workload Identity Federation** — no long-lived SA JSON key | Live — `GCP_SA_KEY` secret deleted from GitHub |
+
+---
+
+## Service Account Inventory
+
+All service accounts follow the pattern `<role>@simpletort-zadroga-dev.iam.gserviceaccount.com`.
+
+| Service Account | Used by | IAM Roles (minimum required) | Notes |
+|---|---|---|---|
+| `cloudbuild-sa@simpletort-zadroga-dev.iam.gserviceaccount.com` | Cloud Build (all services) | `roles/run.admin` — deploy Cloud Run services<br>`roles/artifactregistry.writer` — push images<br>`roles/iam.serviceAccountUser` — act as Cloud Run SA on deploy<br>`roles/logging.logWriter` — Cloud Build logs | Default Cloud Build SA. No `roles/editor` or `roles/owner`. |
+| `api-gateway-sa@simpletort-zadroga-dev.iam.gserviceaccount.com` | Cloud API Gateway backend auth | `roles/run.invoker` on each Cloud Run service | Impersonated by the gateway to call backend services. Set via `_GATEWAY_SA` substitution in `cloudbuild.gateway.yaml`. |
+| `storage-gcs-sa@simpletort-zadroga-dev.iam.gserviceaccount.com` | `storage-gateway` Cloud Run service | `roles/storage.objectAdmin` on bucket `zadroga-case-files-simpletort-prod`<br>`roles/datastore.user` — read/write Firestore `file_uploads` and `cases/*/documents` | Set via `_GCS_SA_EMAIL` substitution. Scoped to GCS + Firestore only — no other GCP APIs. |
+| `virus-scanner-sa@simpletort-zadroga-dev.iam.gserviceaccount.com` | `virus-scanner` Cloud Run (CF Gen 2) | `roles/storage.objectAdmin` on bucket (move staging → final/quarantine)<br>`roles/datastore.user` — update `file_uploads/{fileId}` scan status<br>`roles/pubsub.publisher` — publish quarantine notifications<br>`roles/eventarc.eventReceiver` — receive Eventarc GCS trigger | |
+| `cloudrun-invoker-sa@simpletort-zadroga-dev.iam.gserviceaccount.com` | Cloud Tasks, Cloud Scheduler, Cloud Workflows | `roles/run.invoker` on target Cloud Run services | Bound per target service, not project-wide. Used by Cloud Tasks HTTP auth and Cloud Scheduler → `case-reminder-trigger`. |
+| `github-wif-sa@simpletort-zadroga-dev.iam.gserviceaccount.com` | GitHub Actions (`deploy.yml`) via WIF | `roles/firebase.admin` — Firebase deploy for `auth-rbac`<br>`roles/iam.serviceAccountTokenCreator` on itself (WIF impersonation) | Authenticated via Workload Identity Federation pool bound to `attribute.repository == "simpletort/Zadroga-Case-Management"`. No SA JSON key ever exported. |
+
+### Principle of Least Privilege — Enforcement Rules
+
+1. **No project-wide `roles/editor` or `roles/owner`** on any service account.
+2. **Storage access is bucket-scoped**, not project-wide `roles/storage.admin`.
+3. **Firestore access is `roles/datastore.user`** (read/write data), never `roles/datastore.owner`.
+4. **Cloud Run invocation bindings are per-service**, not project-wide `roles/run.invoker`.
+5. **WIF pool is repo-scoped** — `attribute.repository == "simpletort/Zadroga-Case-Management"` prevents other repos from impersonating the SA.
+6. **No long-lived SA JSON keys** exist in any secret store. `GCP_SA_KEY` has been deleted from GitHub Secrets.
 
 ---
 
@@ -367,7 +391,7 @@ These are real discrepancies found between the code and the documented design. E
 | 8 | `firestore/firestore.indexes.json` | Only contains indexes for the `notifications` collection. No composite indexes exist for `leads`, `cases`, `enrollments`, or any other collection. | Low — queries on those collections will either full-scan or fail at scale |
 | 9 | `openapi.yaml` | `reporting-kpi` (`https://reporting-kpi-292736139819.us-central1.run.app`) is registered in the gateway but the service is a stub — any routed request returns an unexpected response | Low — skeleton service should not be in the gateway spec |
 | 10 | `.github/workflows/deploy.yml` | Only covers `auth-rbac`. All other services rely on `cloudbuild.yaml` per-service. No unified CI view. | Low — operational visibility gap |
-| 11 | `deploy.yml` | Uses `GCP_SA_KEY` (service account JSON key) rather than Workload Identity Federation — long-lived credential in GitHub Secrets | Low — security best practice violation, not an immediate vulnerability |
+| ~~11~~ | ~~`deploy.yml`~~ | ~~Uses `GCP_SA_KEY` (service account JSON key) rather than Workload Identity Federation~~ | **Resolved** — WIF live, `GCP_SA_KEY` deleted from GitHub Secrets |
 
 ---
 
