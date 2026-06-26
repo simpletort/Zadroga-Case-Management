@@ -9,31 +9,32 @@ from dateutil.relativedelta import relativedelta
 logger = logging.getLogger(__name__)
 
 # Maps internal Firestore status values to display names used across the UI.
-STATUS_MAP = {
-    "Qualified": "Pending Paralegal Review",
-}
 
 ALL_STATUSES = [
     "New Lead",
-    "Pending Client Info",
+    "Pending Client Information",
     "Pending Paralegal Review",
     "Pending Attorney Review",
-    "Ready for Filing",
+    "Pending Senior Review",
+    "Approved for Filing",
     "VCF - Submitted",
     "Awarded",
     "Settled",
+    "Closed",
     "Does Not Qualify",
     "Withdrawn",
+    "Disqualified",
     "On Hold",
 ]
 
 # Fallback used when firmSettings/case_statuses is absent or has no activeStatuses field.
 DEFAULT_ACTIVE_STATUSES = [
     "New Lead",
-    "Pending Client Info",
+    "Pending Client Information",
     "Pending Paralegal Review",
     "Pending Attorney Review",
-    "Ready for Filing",
+    "Pending Senior Review",
+    "Approved for Filing",
     "VCF - Submitted",
     "Awarded",
     "On Hold",
@@ -69,7 +70,7 @@ def get_cases_by_status() -> List[dict]:
 
     for doc in docs:
         data = doc.to_dict()
-        status = STATUS_MAP.get(data.get("status", "Unknown"), data.get("status", "Unknown"))
+        status = data.get("status", "Unknown")
         last_status_change = parse_dt(data.get("lastStatusChangedAt"))
         created_at = parse_dt(data.get("createdAt"))
 
@@ -84,8 +85,20 @@ def get_cases_by_status() -> List[dict]:
 
         status_buckets[status].append(days_in_status)
 
+    # Build ordered status list from firmSettings/case_statuses, fall back to ALL_STATUSES
+    try:
+        cs_doc = db.collection("firmSettings").document("case_statuses").get()
+        cs_data = cs_doc.to_dict() if cs_doc.exists else {}
+        ordered_statuses = [s["value"] for s in sorted(
+            cs_data.get("statuses", []), key=lambda x: x.get("order", 999)
+        ) if s.get("value")]
+    except Exception:
+        ordered_statuses = []
+    if not ordered_statuses:
+        ordered_statuses = ALL_STATUSES
+
     result = []
-    for status in ALL_STATUSES:
+    for status in ordered_statuses:
         days_list = status_buckets.get(status, [])
         count = len(days_list)
         avg_days = round(sum(days_list) / count, 1) if count > 0 else None
@@ -430,7 +443,7 @@ def get_bottleneck_cases(threshold_days: int = 30) -> List[dict]:
                 continue
             days_stuck = (now - last_change).days
             if days_stuck >= threshold_days:
-                display_status = STATUS_MAP.get(data.get("status", ""), data.get("status", ""))
+                display_status = data.get("status", "")
                 bottlenecks.append({
                     **data,
                     "status": display_status,
