@@ -7,12 +7,9 @@ from __future__ import annotations
 _PROD_ORIGINS = [
     "https://staff.simpletort.com",
     "https://simpletort.web.app",
-    "https://simpletort-zadroga-dev.web.app",
-    "https://simpletort-zadroga-dev.firebaseapp.com",
 ]
 
 _DEV_EXTRAS = [
-    "https://simpletort-zadroga-dev.web.app",
     "https://simpletort.web.app",
     "http://localhost:3000",
     "http://localhost:5173",

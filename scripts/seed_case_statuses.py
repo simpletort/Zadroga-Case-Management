@@ -7,10 +7,14 @@ Status values are kept in sync with firmSettings/pipeline (activeStatuses + clos
 Run once per environment:
     python scripts/seed_case_statuses.py
 """
+import os
 from google.cloud import firestore
 from datetime import datetime, timezone
 
-db = firestore.Client(project="simpletort-zadroga-dev", database="simpletort-dev")
+db = firestore.Client(
+    project=os.environ["GCP_PROJECT_ID"],
+    database=os.environ.get("FIRESTORE_DATABASE_ID", "simpletort-dev"),
+)
 
 statuses = [
     # ── Active statuses ────────────────────────────────────────────────────────

@@ -22,7 +22,7 @@ Usage:
 Environment variables required (or set defaults below):
     FIRESTORE_DATABASE_ID=simpletort-dev
     FIRESTORE_SMS_TEMPLATES_COLLECTION=notificationTemplates
-    GCP_PROJECT_ID=simpletort-zadroga-dev
+    GCP_PROJECT_ID=<your-gcp-project-id>
     SENDGRID_API_KEY=...
     SENDGRID_FROM_EMAIL=...
     SENDGRID_FROM_NAME=...
@@ -41,7 +41,7 @@ sys.path.insert(0, SERVICE_ROOT)
 
 # ── Set required env vars if not already present ──────────────────────────────
 os.environ.setdefault("FIRESTORE_DATABASE_ID",                    "simpletort-dev")
-os.environ.setdefault("GCP_PROJECT_ID",                           "simpletort-zadroga-dev")
+os.environ.setdefault("GCP_PROJECT_ID",                           "")
 os.environ.setdefault("FIRESTORE_SMS_TEMPLATES_COLLECTION",       "notificationTemplates")
 os.environ.setdefault("FIRESTORE_EMAIL_DELIVERY_RECORDS_COLLECTION", "email_delivery_records")
 
@@ -57,7 +57,7 @@ def _get_sync_firestore():
     except ImportError:
         print("ERROR: pip install google-cloud-firestore")
         sys.exit(1)
-    project  = os.environ.get("GCP_PROJECT_ID", "simpletort-zadroga-dev")
+    project  = os.environ.get("GCP_PROJECT_ID") or exit("ERROR: GCP_PROJECT_ID is not set")
     database = os.environ.get("FIRESTORE_DATABASE_ID", "simpletort-dev")
     return firestore.Client(project=project, database=database)
 

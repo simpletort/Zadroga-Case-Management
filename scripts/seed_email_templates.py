@@ -4,9 +4,13 @@ seed_email_templates.py — Create email notification templates in Firestore.
 Run once:
     python scripts/seed_email_templates.py
 """
+import os
 from google.cloud import firestore
 
-db = firestore.Client(project="simpletort-zadroga-dev", database="simpletort-dev")
+db = firestore.Client(
+    project=os.environ["GCP_PROJECT_ID"],
+    database=os.environ.get("FIRESTORE_DATABASE_ID", "simpletort-dev"),
+)
 collection = db.collection("notificationTemplates")
 
 templates = [

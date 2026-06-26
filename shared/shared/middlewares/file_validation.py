@@ -26,6 +26,18 @@ ALLOWED_EXTENSIONS: frozenset[str] = frozenset(
 )
 
 
+def validate_file_extension(file_name: str) -> None:
+    """Raise HTTP 415 if the file extension is not in ALLOWED_EXTENSIONS."""
+    import os
+    from fastapi import HTTPException
+    ext = os.path.splitext(file_name)[1].lstrip(".").lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=415,
+            detail=f"File type '.{ext}' is not allowed. Accepted: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
+        )
+
+
 def _reject(error: str, detail: str) -> JSONResponse:
     return JSONResponse(
         status_code=415,

@@ -26,7 +26,12 @@ class Settings(BaseSettings):
     )
 
     # ── GCP ──────────────────────────────────────────────────────────────────
-    gcp_project_id: str = "simpletort-zadroga-dev"
+    gcp_project_id: str
+
+    # ── Cloud KMS (PHI encryption) ─────────────────────────────────────────
+    # Full resource name for SSN CMEK key.
+    # Format: projects/{project}/locations/{loc}/keyRings/{ring}/cryptoKeys/{key}
+    ssn_kms_key_name: str = ""
 
     # FIX: default changed from "development" → "production".
     # A missing APP_ENV env var on a deployed Cloud Run instance previously
@@ -37,7 +42,7 @@ class Settings(BaseSettings):
 
     # ── Firebase ──────────────────────────────────────────────────────────────
     # Used to verify Firebase Auth JWT tokens issued by auth-rbac for staff.
-    firebase_project_id: str = "simpletort-zadroga-dev"
+    firebase_project_id: str
 
     # ── Firestore ─────────────────────────────────────────────────────────────
     # FIX: removed duplicate `firestore_database_id` field with wrong default

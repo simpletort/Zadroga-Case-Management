@@ -1,6 +1,10 @@
+import os
 from google.cloud import firestore
 
-db = firestore.Client(project='simpletort-zadroga-dev', database='simpletort-dev')
+db = firestore.Client(
+    project=os.environ["GCP_PROJECT_ID"],
+    database=os.environ.get("FIRESTORE_DATABASE_ID", "simpletort-dev"),
+)
 col = db.collection('notificationTemplates')
 
 renames = [

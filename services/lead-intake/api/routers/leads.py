@@ -47,7 +47,7 @@ from services.case_service import (
     create_case, get_case, update_case_status,
     apply_vcf_screening_result, write_staff_screening_notification,
 )
-from services.duplicate_detection import detect_duplicate, is_idempotent_retry
+from services.duplicate_detection import detect_duplicate, detect_ssn_dob_duplicate, is_idempotent_retry
 from services.firestore_client import get_db
 from services.pubsub_service import (
     publish_lead_created, publish_lead_screened, publish_lead_followup,
@@ -105,7 +105,14 @@ async def create_lead(
                 timestamp=datetime.utcnow(),
             )
 
-    # Duplicate detection
+    # ── SSN + DOB hard duplicate check (mass_tort per AI_CONTEXT.md) ─────────
+    # If match found: still create the case, but auto-flag as Disqualified
+    # with a note referencing the matched case.
+    ssn_dob_match = await detect_ssn_dob_duplicate(
+        ssn=lead.ssn, date_of_birth=lead.dateOfBirth, db=db,
+    )
+
+    # Email + phone soft duplicate — blocks entirely (409)
     existing_case_id = await detect_duplicate(
         email=str(lead.email), phone=lead.phone, db=db,
     )
@@ -131,6 +138,39 @@ async def create_lead(
         raise HTTPException(
             status_code=500,
             detail=_err(request_id, "INTERNAL_ERROR", "Failed to create case."),
+        )
+
+    # ── SSN + DOB hard duplicate → auto-Disqualify ────────────────────────────
+    # Case is created first (preserves the intake record for audit), then
+    # immediately flagged.  VCF screening is skipped for duplicates.
+    if ssn_dob_match:
+        dup_note = f"Duplicate: matched caseId={ssn_dob_match.matched_case_id}"
+        try:
+            await update_case_status(
+                case_id=case.caseId,
+                new_status=CaseStatus.DISQUALIFIED.value,
+                updated_by="system",
+                note=dup_note,
+                db=db,
+            )
+            case.status = CaseStatus.DISQUALIFIED
+            logger.info(
+                "ssn_dob_duplicate_auto_disqualified",
+                case_id=case.caseId,
+                matched_case_id=ssn_dob_match.matched_case_id,
+            )
+        except Exception as exc:
+            logger.error(
+                "ssn_dob_duplicate_disqualify_failed",
+                case_id=case.caseId, error=str(exc),
+            )
+
+        return LeadCreatedResponse(
+            leadId=case.caseId,
+            status=case.status,
+            vcfScreeningStatus=VCFEligibility.PENDING,
+            requestId=request_id,
+            timestamp=datetime.utcnow(),
         )
 
     # ── Inline VCF screening ──────────────────────────────────────────────────
