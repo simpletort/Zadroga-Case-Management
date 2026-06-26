@@ -1,0 +1,23 @@
+steps:
+  - name: "python:3.11-slim"
+    dir: "cloud-functions/auth-triggers"
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        pip install -r requirements.txt -q
+        python -c "import main; print('Import OK')"
+
+  - name: "node:20-slim"
+    dir: "cloud-functions/auth-triggers"
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        npm install -g firebase-tools
+        firebase deploy --only functions \
+          --non-interactive \
+          --project $PROJECT_ID
+
+options:
+  logging: CLOUD_LOGGING_ONLY

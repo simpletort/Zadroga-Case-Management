@@ -1,0 +1,10 @@
+{
+  "functions": [
+    {
+      "source":   ".",
+      "codebase": "auth-triggers",
+      "runtime":  "python311",
+      "ignore":   ["venv", ".venv", "**/__pycache__", "**/*.pyc", "tests/**"]
+    }
+  ]
+}
