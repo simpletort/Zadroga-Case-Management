@@ -60,7 +60,7 @@ PUBSUB_TOPIC = os.environ.get("PUBSUB_TOPIC_ENROLLMENT", "enrollment-status-chan
 # Kept as ultimate fallback; primary source is firmSettings/deadlines.deadlineYears
 DEADLINE_YEARS = int(os.environ.get("DEADLINE_YEARS", "2"))
 
-# Fallback used when firmSettings/pipeline is absent or Firestore is unreachable
+# Fallback used when firmSettings/case_statuses is absent or Firestore is unreachable
 DEFAULT_SKIP_STATUSES: frozenset = frozenset({
     "Closed", "Settled", "Does Not Qualify", "Rejected"
 })
@@ -118,7 +118,7 @@ def _get_firm_config() -> dict:
 
 def _get_closed_statuses() -> frozenset:
     """
-    Load closed/terminal case statuses from firmSettings/pipeline.closedStatuses[].
+    Load closed/terminal case statuses from firmSettings/case_statuses.closedStatuses[].
     Cached for the lifetime of the function instance (cold-start load).
 
     Falls back to DEFAULT_SKIP_STATUSES when the document is absent or Firestore
@@ -129,14 +129,16 @@ def _get_closed_statuses() -> frozenset:
         return _closed_statuses_cache
     try:
         db = _get_db()
-        doc = db.collection("firmSettings").document("pipeline").get()
-        statuses = (doc.to_dict() or {}).get("closedStatuses") if doc.exists else None
-        if statuses:
-            _closed_statuses_cache = frozenset(statuses)
-            return _closed_statuses_cache
+        doc = db.collection("firmSettings").document("case_statuses").get()
+        if doc.exists:
+            all_statuses = (doc.to_dict() or {}).get("statuses", [])
+            closed = [s["value"] for s in all_statuses if s.get("category") in ("closed", "terminal")]
+            if closed:
+                _closed_statuses_cache = frozenset(closed)
+                return _closed_statuses_cache
     except Exception as exc:
         logger.warning(
-            "Failed to load firmSettings/pipeline.closedStatuses: %s; using defaults", exc
+            "Failed to load firmSettings/case_statuses.closedStatuses: %s; using defaults", exc
         )
     _closed_statuses_cache = DEFAULT_SKIP_STATUSES
     return _closed_statuses_cache

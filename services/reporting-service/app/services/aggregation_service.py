@@ -27,7 +27,7 @@ ALL_STATUSES = [
     "On Hold",
 ]
 
-# Fallback used when firmSettings/pipeline is absent or has no activeStatuses field.
+# Fallback used when firmSettings/case_statuses is absent or has no activeStatuses field.
 DEFAULT_ACTIVE_STATUSES = [
     "New Lead",
     "Pending Client Info",
@@ -42,7 +42,7 @@ DEFAULT_ACTIVE_STATUSES = [
 
 def get_active_statuses(db=None) -> List[str]:
     """
-    Load active case statuses from ``firmSettings/pipeline.activeStatuses[]``.
+    Load active case statuses from ``firmSettings/case_statuses.activeStatuses[]``.
 
     Falls back to ``DEFAULT_ACTIVE_STATUSES`` when the document is absent,
     the field is missing, or Firestore is unreachable — so KPI queries always
@@ -50,13 +50,14 @@ def get_active_statuses(db=None) -> List[str]:
     """
     try:
         _db = db or get_firestore_client()
-        doc = _db.collection("firmSettings").document("pipeline").get()
+        doc = _db.collection("firmSettings").document("case_statuses").get()
         if doc.exists:
-            statuses = (doc.to_dict() or {}).get("activeStatuses")
-            if statuses:
-                return statuses
+            statuses = (doc.to_dict() or {}).get("statuses", [])
+            active = [s["value"] for s in statuses if s.get("category") == "active"]
+            if active:
+                return active
     except Exception as exc:
-        logger.warning("Failed to load activeStatuses from firmSettings/pipeline: %s", exc)
+        logger.warning("Failed to load activeStatuses from firmSettings/case_statuses: %s", exc)
     return DEFAULT_ACTIVE_STATUSES
 
 
