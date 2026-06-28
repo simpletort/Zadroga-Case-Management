@@ -236,28 +236,31 @@ def get_monthly_revenue(num_months: int = 12) -> List[MonthlyRevenueItem]:
     ]
 
 
-CONVERTED_STATUSES = {
-    "Pending Client Info",
-    "Qualified", "Pending Paralegal Review", "Pending Attorney Review",
-    "Ready for Filing", "VCF - Submitted", "Awarded", "Settled", "On Hold",
-}
-# Stages where a lead has moved past initial intake into the active pipeline
-CASE_CREATED_STATUSES = {
-    "Pending Client Info",
-    "Qualified", "Pending Paralegal Review", "Pending Attorney Review",
-    "Ready for Filing", "VCF - Submitted", "Awarded", "Settled", "On Hold",
-}
 VCF_ELIGIBLE_STATUSES = {"VCF - Submitted", "Awarded", "Settled"}
-DISQUALIFIED = {"Does Not Qualify", "Withdrawn", "Disqualified"}
+
+
+def _get_converted_statuses(db=None) -> set:
+    try:
+        _db = db or get_firestore_client()
+        doc = _db.collection("firmSettings").document("case_statuses").get()
+        statuses = (doc.to_dict() or {}).get("statuses", []) if doc.exists else []
+        converted = {s["value"] for s in statuses if s.get("category") in ("active", "closed")}
+        if converted:
+            return converted
+    except Exception as exc:
+        logger.warning("Failed to load converted statuses from firmSettings: %s", exc)
+    return {
+        "New Lead", "Pending Client Information", "Pending Paralegal Review",
+        "Pending Attorney Review", "Pending Senior Review", "Approved for Filing",
+        "VCF - Submitted", "Awarded", "Settled", "Rejected", "On Hold",
+    }
 
 
 FUNNEL_STAGE_DEFS = [
-    ("Initial Contact",   lambda c: True),
-    # Matches Lead Management "Qualified" count — Firestore stores "Qualified"
-    ("Qualified Lead",    lambda c: c.get("status") == "Qualified"),
-    # No tracking data available for these stages yet
-    ("Intake Form Sent",  None),
-    ("Form Submitted",    None),
+    ("Initial Contact",  lambda c: True),
+    ("Qualified Lead",   lambda c: c.get("status") not in {"Does Not Qualify", "Withdrawn", "Closed", "Rejected"}),
+    ("Intake Form Sent", None),
+    ("Form Submitted",   None),
 ]
 
 
@@ -266,8 +269,10 @@ def get_lead_conversion_analytics() -> dict:
     cases = [doc.to_dict() for doc in db.collection("cases").stream()]
     total = len(cases)
 
+    converted_statuses = _get_converted_statuses(db)
+
     # --- KPIs ---
-    converted = sum(1 for c in cases if c.get("status") in CONVERTED_STATUSES)
+    converted = sum(1 for c in cases if c.get("status") in converted_statuses)
     conversion_rate = round(converted / total * 100, 1) if total else 0.0
 
     # --- Best channel ---
@@ -276,7 +281,7 @@ def get_lead_conversion_analytics() -> dict:
     for c in cases:
         src = c.get("marketingSource") or "Unknown"
         channel_leads[src] += 1
-        if c.get("status") in CONVERTED_STATUSES:
+        if c.get("status") in converted_statuses:
             channel_converted[src] += 1
 
     best_channel = None
@@ -310,7 +315,7 @@ def get_lead_conversion_analytics() -> dict:
             continue
         label = start_of_month(dt).strftime("%b %Y")
         monthly_leads[label] += 1
-        if c.get("status") in CONVERTED_STATUSES:
+        if c.get("status") in converted_statuses:
             monthly_converted[label] += 1
 
     from datetime import datetime as _dt
