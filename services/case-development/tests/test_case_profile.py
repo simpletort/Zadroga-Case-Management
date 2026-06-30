@@ -23,8 +23,13 @@ def _case_snap(exists=True, assigned_paralegal="para-uid", assigned_attorney="at
     snap = MagicMock()
     snap.exists = exists
     snap.to_dict.return_value = {
+        "caseId": "ZAD-2026-04-0001",
         "status": "Pending Paralegal Review",
-        "client": {"phone": "555-0000", "email": "old@example.com", "address": "Old St"},
+        "firstName": "Jane",
+        "lastName": "Doe",
+        "phone": "555-0000",
+        "email": "old@example.com",
+        "address": {"street": "1 Old St", "city": "NYC", "state": "NY", "zip": "10001"},
         "notes": "",
         "assignment": {
             "assignedParalegal": assigned_paralegal,
@@ -109,7 +114,7 @@ class TestPatchCaseService:
         assert "phone" in result["updated_fields"]
         assert len(result["audit_log_id"]) == 36  # UUID
 
-    def test_firestore_update_uses_dot_path_for_phone(self):
+    def test_firestore_update_uses_top_level_path_for_phone(self):
         from app.services.case_profile_service import patch_case
 
         db, case_ref, _ = _make_db()
@@ -120,8 +125,9 @@ class TestPatchCaseService:
         )
         batch = db.batch.return_value
         update_args = batch.update.call_args[0][1]
-        assert "client.phone" in update_args
-        assert update_args["client.phone"] == "555-9999"
+        assert "phone" in update_args
+        assert update_args["phone"] == "555-9999"
+        assert "client.phone" not in update_args
 
     def test_firestore_update_uses_dot_path_for_assigned_attorney(self):
         from app.services.case_profile_service import patch_case
@@ -135,6 +141,25 @@ class TestPatchCaseService:
         batch = db.batch.return_value
         update_args = batch.update.call_args[0][1]
         assert "assignment.assignedAttorney" in update_args
+        assert update_args["assignment.assignedAttorney"] == "atty-new"
+
+    def test_address_expanded_to_dot_paths(self):
+        from app.services.case_profile_service import patch_case
+        from app.models.case_profile import AddressPatch
+
+        db, _, _ = _make_db()
+        patch_case(
+            db=db, case_id="ZAD-2026-04-0001",
+            changed={"address": AddressPatch(street="99 New St", city="Brooklyn")},
+            actor_uid="para-uid", actor_role="paralegal",
+        )
+        batch = db.batch.return_value
+        update_args = batch.update.call_args[0][1]
+        assert update_args["address.street"] == "99 New St"
+        assert update_args["address.city"] == "Brooklyn"
+        # Sub-fields not provided must not appear — no overwriting unset fields
+        assert "address.state" not in update_args
+        assert "address.zip" not in update_args
 
     def test_batch_committed_once(self):
         from app.services.case_profile_service import patch_case

@@ -14,10 +14,18 @@ ALLOWED_FIELDS: frozenset[str] = frozenset(
 )
 
 
+class AddressPatch(BaseModel):
+    """Partial address update — only provided sub-fields are written."""
+    street: str | None = None
+    city: str | None = None
+    state: str | None = None
+    zip: str | None = None
+
+
 class CasePatchRequest(BaseModel):
     phone: str | None = None
     email: str | None = None
-    address: str | None = None
+    address: AddressPatch | None = None
     notes: str | None = None
     assigned_attorney: str | None = None
 

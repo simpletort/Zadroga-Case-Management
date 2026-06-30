@@ -41,12 +41,14 @@ _PRIVILEGED_ROLES: frozenset[str] = frozenset(
 )
 
 # Maps request field name → Firestore dot-path on the cases document.
+# phone and email are top-level fields; address is a top-level map {street,city,state,zip};
+# notes is top-level; assigned_attorney is nested under assignment.
 _FIELD_TO_FIRESTORE: dict[str, str] = {
-    "phone":             "client.phone",
-    "email":             "client.email",
-    "address":           "client.address",
+    "phone":             "phone",
+    "email":             "email",
     "notes":             "notes",
     "assigned_attorney": "assignment.assignedAttorney",
+    # address sub-fields are expanded separately — see _build_update_payload
 }
 
 
@@ -109,9 +111,17 @@ def patch_case(
     now = datetime.now(tz=timezone.utc)
     update_payload: dict[str, Any] = {"updatedAt": now}
     for field, value in changed.items():
-        fs_path = _FIELD_TO_FIRESTORE.get(field)
-        if fs_path:
-            update_payload[fs_path] = value
+        if field == "address" and value is not None:
+            # address is a top-level Firestore map {street, city, state, zip}.
+            # Write only the sub-fields that were explicitly provided so we don't
+            # overwrite unmentioned sub-fields with None.
+            addr_dict = value if isinstance(value, dict) else value.model_dump(exclude_none=True)
+            for sub_field, sub_value in addr_dict.items():
+                update_payload["address.{}".format(sub_field)] = sub_value
+        else:
+            fs_path = _FIELD_TO_FIRESTORE.get(field)
+            if fs_path:
+                update_payload[fs_path] = value
 
     audit_log_id = str(uuid.uuid4())
     audit_ref    = db.collection("audit_logs").document(audit_log_id)

@@ -1929,8 +1929,33 @@ paths:
       operationId: patchCase
       parameters:
         - { name: caseId, in: path, required: true, type: string }
-      consumes:
-        - application/json
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            minProperties: 1
+            properties:
+              phone:
+                type: string
+                description: Client phone number (top-level field)
+              email:
+                type: string
+                description: Client email address (top-level field)
+              address:
+                type: object
+                description: Partial address update — only provided sub-fields are written
+                properties:
+                  street: { type: string }
+                  city:   { type: string }
+                  state:  { type: string }
+                  zip:    { type: string }
+              notes:
+                type: string
+                description: Internal case notes
+              assigned_attorney:
+                type: string
+                description: UID of the attorney to assign to this case
       x-google-backend:
         address: https://case-development-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
