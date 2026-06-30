@@ -80,7 +80,7 @@ ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@simpletort.com")
 TOKEN_EXPIRY_DAYS = int(os.environ.get("TOKEN_EXPIRY_DAYS", "30"))
 
 CASE_ID_RE = re.compile(r"^ZAD-\d{4}-\d{2}-\d{4}$")
-ALLOWED_STATUSES = {"New Lead", "Pending Client Info"}
+ALLOWED_STATUSES = {"New Lead"}
 
 # Module-level singletons (reused across warm invocations)
 _db: firestore.Client | None = None
@@ -400,12 +400,12 @@ def send_intake_form(request: flask.Request) -> flask.Response:
     if current_status == "New Lead":
         case_ref.update(
             {
-                "status": "Pending Client Info",
+                "status": "Pending Client Information",
                 "updatedAt": firestore.SERVER_TIMESTAMP,
             }
         )
         logger.info(
-            "case status advanced to Pending Client Info: %s", case_id
+            "case status advanced to Pending Client Information: %s", case_id
         )
 
     return flask.make_response(
