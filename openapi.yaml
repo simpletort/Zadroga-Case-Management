@@ -261,6 +261,38 @@ paths:
         403:
           description: Insufficient role
 
+  # --- Intake Form ---
+
+  /api/v1/cases/{caseId}/resend-intake-form:
+    options:
+      operationId: corsPreflightResendIntakeForm
+      security: []
+      parameters:
+        - { name: caseId, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://intake-form-dispatcher-77rcsztg7a-uc.a.run.app
+        path_translation: CONSTANT_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    post:
+      summary: "Resend prefilled intake form to client (status: Pending Client Information)"
+      operationId: resendIntakeForm
+      parameters:
+        - { name: caseId, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://intake-form-dispatcher-77rcsztg7a-uc.a.run.app/send
+        path_translation: CONSTANT_ADDRESS
+      responses:
+        200:
+          description: Form resent successfully
+        404:
+          description: Case not found
+        409:
+          description: Case status does not allow resend
+        422:
+          description: Case has no email address
+
   # --- Escalation ---
 
   /api/v1/cases/{caseId}/escalate:
