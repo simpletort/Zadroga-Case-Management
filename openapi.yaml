@@ -1912,6 +1912,67 @@ paths:
   # ============================================================
   # add teh line here -- Adi
 
+  /api/v1/cases/{caseId}:
+    options:
+      operationId: corsPreflightCaseById
+      security: []
+      parameters:
+        - { name: caseId, in: path, required: true, type: string }
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    patch:
+      summary: "Update editable case fields (min role: paralegal)"
+      operationId: patchCase
+      parameters:
+        - { name: caseId, in: path, required: true, type: string }
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            minProperties: 1
+            properties:
+              phone:
+                type: string
+                description: Client phone number (top-level field)
+              email:
+                type: string
+                description: Client email address (top-level field)
+              address:
+                type: object
+                description: Partial address update — only provided sub-fields are written
+                properties:
+                  street: { type: string }
+                  city:   { type: string }
+                  state:  { type: string }
+                  zip:    { type: string }
+              notes:
+                type: string
+                description: Internal case notes
+              assigned_attorney:
+                type: string
+                description: UID of the attorney to assign to this case
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Case updated — returns changed field names and audit log ID
+        400:
+          description: Request body contains a disallowed field (status, case_id, created_at)
+        401:
+          description: Unauthorized
+        403:
+          description: Paralegal is not assigned to this case
+        404:
+          description: Case not found
+        422:
+          description: Empty body — no editable fields provided
+
   # /api/v1/cases:
   #   options:
   #     operationId: corsPreflightCases
