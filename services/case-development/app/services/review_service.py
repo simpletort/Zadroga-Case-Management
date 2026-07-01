@@ -23,6 +23,8 @@ from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from google.cloud import firestore
 
+from app.services.feature_flags_service import get_feature_flags
+
 logger = logging.getLogger(__name__)
 
 # Statuses from which a paralegal may submit for attorney review
@@ -105,11 +107,15 @@ def run_preflight(db: firestore.Client, case_id: str) -> dict:
     })
 
     # ── 4. AI summary generated ────────────────────────────────────────────
+    # Gate is configurable via firmSettings/feature_flags.require_ai_summary
+    # (default: True). When disabled, this check passes unconditionally.
+    require_ai_summary = get_feature_flags(db)["require_ai_summary"]
     ai_done = bool(case_data.get("aiSummaryGenerated", False))
+    ai_check_passed = ai_done or not require_ai_summary
     checks.append({
         "name":   "ai_summary_generated",
-        "passed": ai_done,
-        "detail": None if ai_done else "AI case summary has not been generated.",
+        "passed": ai_check_passed,
+        "detail": None if ai_check_passed else "AI case summary has not been generated.",
     })
 
     all_passed = all(c["passed"] for c in checks)

@@ -867,6 +867,53 @@ paths:
         404:
           description: Status value not found
 
+  # --- Feature Flags (firmSettings) ---
+
+  /api/v1/settings/feature-flags:
+    options:
+      operationId: corsPreflightFeatureFlags
+      security: []
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: "Get current firm-wide feature flags from firmSettings (min role: junior_partner)"
+      operationId: getFeatureFlags
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Current feature flag values
+        401:
+          description: Unauthorized
+    patch:
+      summary: "Update firm-wide feature flags (min role: senior_partner / system_admin — admin only)"
+      operationId: updateFeatureFlags
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+              require_ai_summary:
+                type: boolean
+                description: "When false, the AI-summary pre-flight check on submit-for-review passes unconditionally."
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Feature flags updated
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient role (admin only)
+
   # --- Case Status (manual override) ---
 
   /api/v1/cases/{caseId}/status:

@@ -160,6 +160,43 @@ class TestRunPreflight:
         assert ai_check["passed"] is False
         assert result["all_passed"] is False
 
+    def test_ai_summary_missing_still_fails_when_flag_defaults_true(self):
+        """No firmSettings/feature_flags doc configured → require_ai_summary defaults True."""
+        from app.services.review_service import run_preflight
+
+        result = run_preflight(self._db(ai_summary=False), "ZAD-2026-04-0001")
+
+        ai_check = next(c for c in result["checks"] if c["name"] == "ai_summary_generated")
+        assert ai_check["passed"] is False
+
+    def test_ai_summary_check_passes_unconditionally_when_flag_disabled(self):
+        from app.services.review_service import run_preflight
+
+        with patch(
+            "app.services.review_service.get_feature_flags",
+            return_value={"require_ai_summary": False, "updated_at": None, "updated_by": None},
+        ):
+            result = run_preflight(self._db(ai_summary=False), "ZAD-2026-04-0001")
+
+        ai_check = next(c for c in result["checks"] if c["name"] == "ai_summary_generated")
+        assert ai_check["passed"] is True
+        assert ai_check["detail"] is None
+        # Other checks are unaffected by the flag
+        assert result["all_passed"] is True
+
+    def test_ai_summary_check_still_blocks_when_flag_explicitly_enabled(self):
+        from app.services.review_service import run_preflight
+
+        with patch(
+            "app.services.review_service.get_feature_flags",
+            return_value={"require_ai_summary": True, "updated_at": None, "updated_by": None},
+        ):
+            result = run_preflight(self._db(ai_summary=False), "ZAD-2026-04-0001")
+
+        ai_check = next(c for c in result["checks"] if c["name"] == "ai_summary_generated")
+        assert ai_check["passed"] is False
+        assert result["all_passed"] is False
+
     def test_case_not_found_raises_404(self):
         from app.services.review_service import run_preflight
 
