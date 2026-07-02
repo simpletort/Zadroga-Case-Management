@@ -16,7 +16,7 @@ from shared.middlewares.error_handler import ErrorHandlerMiddleware
 from shared.middlewares.logging import LoggingMiddleware
 
 from app.config import get_settings
-from app.routes import assignment, dashboard, communication, review, search, attorney_review, escalation, rejection, decision_audit, update, status_update, case_status_registry, timeline, case_profile
+from app.routes import assignment, dashboard, communication, review, search, attorney_review, escalation, rejection, decision_audit, update, status_update, case_status_registry, timeline, case_profile, feature_flags
 
 settings = get_settings()
 
@@ -86,6 +86,9 @@ _ROUTE_PERMISSIONS: list[tuple[str, str, str]] = [
     ("POST",   r"^/api/v1/settings/case-statuses$",            "cases.status.update"),
     ("PATCH",  r"^/api/v1/settings/case-statuses/[^/]+$",      "cases.status.update"),
     ("DELETE", r"^/api/v1/settings/case-statuses/[^/]+$",      "cases.status.update"),
+    # Feature flags (firmSettings) — PATCH is admin-only (senior_partner / system_admin)
+    ("GET",    r"^/api/v1/settings/feature-flags$",             "settings.read"),
+    ("PATCH",  r"^/api/v1/settings/feature-flags$",             "settings.write"),
     # Case profile PATCH
     ("PATCH",  r"^/api/v1/cases/[^/]+$",                      "cases.write"),
     # Case status (manual override)
@@ -136,3 +139,4 @@ app.include_router(status_update.router)
 app.include_router(case_status_registry.router)
 app.include_router(timeline.router)
 app.include_router(case_profile.router)
+app.include_router(feature_flags.router)
