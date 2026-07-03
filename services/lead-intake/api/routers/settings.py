@@ -235,6 +235,118 @@ async def get_max_file_size(
     )
 
 
+# ── Document Checklists ──────────────────────────────────────────────────────────
+
+_DOCUMENT_CHECKLISTS_DOC    = "document_checklists"
+_DEFAULT_DOCUMENT_CHECKLIST = ["medical-records", "proof-of-presence", "id-documents"]
+
+
+class DocumentChecklistsRequest(BaseModel):
+    default: list[str] = Field(
+        ...,
+        min_length=1,
+        description="Document categories required for any case with no matching case_type override.",
+        examples=[["medical-records", "proof-of-presence", "id-documents"]],
+    )
+    overrides: dict[str, list[str]] = Field(
+        default_factory=dict,
+        description="Map of case_type -> required document categories. Overrides the default for matching cases.",
+        examples=[{"wtc": ["medical-records", "proof-of-presence", "id-documents", "employment-records"]}],
+    )
+
+
+class DocumentChecklistsResponse(BaseModel):
+    default:    list[str]
+    overrides:  dict[str, list[str]]
+    updatedAt:  str
+    updatedBy:  str
+
+
+@router.put(
+    "/document-checklists",
+    response_model=DocumentChecklistsResponse,
+    summary="Replace the document checklist configuration",
+    description=(
+        "Writes `default` and `overrides` to `firmSettings/document_checklists` in "
+        "Firestore. Full replacement — the next pre-flight check for any case picks "
+        "up the new configuration immediately. Does not affect cases already at "
+        "Pending Attorney Review or beyond, since pre-flight only runs for cases in "
+        "Pending Paralegal Review."
+    ),
+)
+async def update_document_checklists(
+    body:    DocumentChecklistsRequest,
+    partner: PartnerContext = Depends(get_partner),
+    db:      firestore.AsyncClient = Depends(get_db),
+) -> DocumentChecklistsResponse:
+    _require_admin(partner)
+
+    now        = datetime.utcnow()
+    updated_by = partner.raw_claims.get("email") or partner.partner_id
+
+    doc_ref = db.collection(_FIRM_SETTINGS_COLLECTION).document(_DOCUMENT_CHECKLISTS_DOC)
+    await doc_ref.set(
+        {
+            "default":   body.default,
+            "overrides": body.overrides,
+            "updatedAt": firestore.SERVER_TIMESTAMP,
+            "updatedBy": updated_by,
+        },
+        merge=False,
+    )
+
+    logger.info(
+        "document_checklists_updated",
+        default=body.default,
+        overrides=list(body.overrides.keys()),
+        updated_by=updated_by,
+    )
+
+    return DocumentChecklistsResponse(
+        default    = body.default,
+        overrides  = body.overrides,
+        updatedAt  = now.isoformat() + "Z",
+        updatedBy  = updated_by,
+    )
+
+
+@router.get(
+    "/document-checklists",
+    response_model=DocumentChecklistsResponse,
+    summary="Get the current document checklist configuration",
+    description=(
+        "Returns `firmSettings/document_checklists`. Falls back to "
+        f"{_DEFAULT_DOCUMENT_CHECKLIST} with no overrides if not yet configured."
+    ),
+)
+async def get_document_checklists(
+    partner: PartnerContext = Depends(get_partner),
+    db:      firestore.AsyncClient = Depends(get_db),
+) -> DocumentChecklistsResponse:
+    _require_admin(partner)
+
+    doc = await db.collection(_FIRM_SETTINGS_COLLECTION).document(_DOCUMENT_CHECKLISTS_DOC).get()
+    if not doc.exists:
+        return DocumentChecklistsResponse(
+            default    = _DEFAULT_DOCUMENT_CHECKLIST,
+            overrides  = {},
+            updatedAt  = datetime.utcnow().isoformat() + "Z",
+            updatedBy  = "",
+        )
+
+    data       = doc.to_dict() or {}
+    updated_at = data.get("updatedAt") or datetime.utcnow()
+    if not isinstance(updated_at, str):
+        updated_at = updated_at.isoformat() + "Z"
+
+    return DocumentChecklistsResponse(
+        default    = data.get("default") or _DEFAULT_DOCUMENT_CHECKLIST,
+        overrides  = data.get("overrides") or {},
+        updatedAt  = updated_at,
+        updatedBy  = data.get("updatedBy", ""),
+    )
+
+
 # ── Screening Rules ─────────────────────────────────────────────────────────────
 
 

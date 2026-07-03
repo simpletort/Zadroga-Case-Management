@@ -1646,6 +1646,69 @@ paths:
         403:
           description: Insufficient role
 
+  /api/v1/admin/settings/document-checklists:
+    options:
+      operationId: corsPreflightAdminDocumentChecklists
+      security: []
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: "Get the current document checklist configuration (min role: senior_partner)"
+      operationId: getDocumentChecklists
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Current document checklist configuration — falls back to the built-in default if not yet configured
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient role
+    put:
+      summary: "Replace the document checklist configuration (min role: senior_partner)"
+      operationId: updateDocumentChecklists
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required:
+              - default
+              - overrides
+            properties:
+              default:
+                type: array
+                items:
+                  type: string
+                minItems: 1
+                description: "Document categories required for any case with no matching case_type override"
+                example: ["medical-records", "proof-of-presence", "id-documents"]
+              overrides:
+                type: object
+                additionalProperties:
+                  type: array
+                  items:
+                    type: string
+                description: "Map of case_type -> required document categories. Overrides the default for matching cases."
+      x-google-backend:
+        address: https://lead-intake-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Document checklist configuration replaced — takes effect on the next pre-flight check
+        400:
+          description: Validation error (empty default list)
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient role
+
   /api/v1/admin/settings/screening-rules:
     options:
       operationId: corsPreflightScreeningRules
