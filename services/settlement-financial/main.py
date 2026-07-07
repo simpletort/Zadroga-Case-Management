@@ -142,43 +142,173 @@ from models.storage import CaseFileType, FileListResponse, FileUploadResponse, S
 
 logger = get_logger(__name__)
 
-# Single settlement subcollection — inputs doc + calculation docs
-_SETTLEMENT_SUB = "settlement"
-_INPUTS_DOC     = "inputs"
+# ── Settlement: SINGLE DOCUMENT model ────────────────────────────────────────
+#
+# All settlement data lives in ONE Firestore document at:
+#   cases/{caseId}/settlement/settlement
+#
+# Internal structure (nested maps):
+#   { inputs: {...}, expenses: {items: [...]}, liens: {items: [...]},
+#     loans: {items: [...]}, disbursements: {items: [...]},
+#     fee_override: {...}, calculations: {...}, statements: {...} }
+#
+# Previously each section was a separate document in the settlement
+# subcollection — this caused auto-ID confusion and scattered reads.
 
-# Documents inside settlement/ that are NOT saved calculations
+_SETTLEMENT_DOC_ID = "settlement"
+
+# Keys that hold operational data (not saved calculations)
 _SETTLEMENT_RESERVED = {"inputs", "expenses", "liens", "loans", "disbursements", "fee_override"}
 
 def _is_reserved(doc_id: str) -> bool:
-    """Return True for any doc that is not a saved calculation UUID."""
+    """Return True for any key that is not a saved calculation UUID."""
     return doc_id in _SETTLEMENT_RESERVED or doc_id.startswith("statement_")
 
 
 # ── Firestore reference helpers ───────────────────────────────────────────────
 
-def _settlement_ref(db, case_id: str):
-    return db.collection("cases").document(case_id).collection(_SETTLEMENT_SUB)
+def _settlement_doc_ref(db, case_id: str):
+    """Single settlement document for this case."""
+    return db.collection("cases").document(case_id).collection("settlement").document(_SETTLEMENT_DOC_ID)
 
-def _calcs_ref(db, case_id: str):
-    return _settlement_ref(db, case_id)
+
+class _SettlementSection:
+    """
+    Adapter that makes a section of the single settlement document behave
+    like an independent DocumentReference for read/write operations.
+
+    Callers can still do:
+        snap = await section.get()        # reads only this section
+        await section.set(data)           # writes only this section (merge)
+        await section.update(fields)      # dot-prefix update
+    """
+
+    def __init__(self, doc_ref, section: str):
+        self._ref = doc_ref
+        self._section = section
+
+    async def get(self):
+        snap = await self._ref.get()
+        if not snap.exists:
+            return _EmptySnap(self._section)
+        section_data = (snap.to_dict() or {}).get(self._section)
+        if section_data is None:
+            return _EmptySnap(self._section)
+        return _SectionSnap(section_data)
+
+    async def set(self, data, merge=False):
+        """Write this section. Always merges at the top level to avoid overwriting siblings."""
+        await self._ref.set({self._section: data}, merge=True)
+
+    async def update(self, fields: dict):
+        """Dot-prefix update within this section."""
+        prefixed = {f"{self._section}.{k}": v for k, v in fields.items()}
+        await self._ref.update(prefixed)
+
+    @property
+    def id(self):
+        return self._section
+
+    @property
+    def path(self):
+        return f"{self._ref.path}/{self._section}"
+
+    def document(self, sub_id: str):
+        """Return a sub-section adapter for nested documents (e.g. calculations/{calc_id})."""
+        return _SettlementSubDoc(self._ref, self._section, sub_id)
+
+    async def stream(self):
+        """Iterate sub-documents within this section (e.g. all calculations)."""
+        snap = await self._ref.get()
+        if not snap.exists:
+            return
+        section_data = (snap.to_dict() or {}).get(self._section) or {}
+        for sub_id, sub_data in section_data.items():
+            if isinstance(sub_data, dict):
+                yield _SectionSnap(sub_data, doc_id=sub_id)
+
+
+class _SettlementSubDoc:
+    """
+    Adapter for a nested key within a section (e.g. calculations/{calc_id}).
+    Supports .get(), .set(), .update(), .delete() on the nested path.
+    """
+
+    def __init__(self, doc_ref, section: str, sub_id: str):
+        self._ref = doc_ref
+        self._section = section
+        self._sub_id = sub_id
+
+    async def get(self):
+        snap = await self._ref.get()
+        if not snap.exists:
+            return _EmptySnap(self._sub_id)
+        sub_data = (snap.to_dict() or {}).get(self._section, {}).get(self._sub_id)
+        if sub_data is None:
+            return _EmptySnap(self._sub_id)
+        return _SectionSnap(sub_data, doc_id=self._sub_id)
+
+    async def set(self, data, merge=False):
+        await self._ref.set({self._section: {self._sub_id: data}}, merge=True)
+
+    async def update(self, fields: dict):
+        prefixed = {f"{self._section}.{self._sub_id}.{k}": v for k, v in fields.items()}
+        await self._ref.update(prefixed)
+
+    async def delete(self):
+        from google.cloud.firestore_v1 import transforms
+        await self._ref.update({f"{self._section}.{self._sub_id}": transforms.DELETE_FIELD})
+
+    @property
+    def id(self):
+        return self._sub_id
+
+    @property
+    def path(self):
+        return f"{self._ref.path}/{self._section}/{self._sub_id}"
+
+
+class _SectionSnap:
+    """Mimics a Firestore DocumentSnapshot for a nested section."""
+    def __init__(self, data: dict, doc_id: str = "settlement"):
+        self._data = data
+        self.exists = True
+        self.id = doc_id
+
+    def to_dict(self):
+        return self._data
+
+
+class _EmptySnap:
+    """Mimics a non-existent Firestore DocumentSnapshot."""
+    def __init__(self, section: str):
+        self.exists = False
+        self.id = section
+
+    def to_dict(self):
+        return None
+
 
 def _inputs_ref(db, case_id: str):
-    return _settlement_ref(db, case_id).document(_INPUTS_DOC)
+    return _SettlementSection(_settlement_doc_ref(db, case_id), "inputs")
 
 def _expenses_ref(db, case_id: str):
-    return _settlement_ref(db, case_id).document("expenses")
+    return _SettlementSection(_settlement_doc_ref(db, case_id), "expenses")
 
 def _liens_ref(db, case_id: str):
-    return _settlement_ref(db, case_id).document("liens")
+    return _SettlementSection(_settlement_doc_ref(db, case_id), "liens")
 
 def _loans_ref(db, case_id: str):
-    return _settlement_ref(db, case_id).document("loans")
+    return _SettlementSection(_settlement_doc_ref(db, case_id), "loans")
 
 def _disbursements_ref(db, case_id: str):
-    return _settlement_ref(db, case_id).document("disbursements")
+    return _SettlementSection(_settlement_doc_ref(db, case_id), "disbursements")
 
 def _case_fee_override_ref(db, case_id: str):
-    return _settlement_ref(db, case_id).document("fee_override")
+    return _SettlementSection(_settlement_doc_ref(db, case_id), "fee_override")
+
+def _calcs_ref(db, case_id: str):
+    return _SettlementSection(_settlement_doc_ref(db, case_id), "calculations")
 
 def _firm_fee_config_ref(db):
     return db.collection("firmSettings").document("fee_config")
@@ -299,13 +429,8 @@ app.openapi = _custom_openapi
 
 _settings = get_settings()
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=get_cors_origins(_settings.environment),
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-    allow_headers=["Authorization", "Content-Type", "x-apigateway-api-userinfo"],
-)
+app.add_middleware(ErrorHandlerMiddleware)
+app.add_middleware(LoggingMiddleware)
 if not _settings.is_development:
     app.add_middleware(
         AuthMiddleware,
@@ -317,8 +442,19 @@ if not _settings.is_development:
         ],
         skip_paths=["/health", "/docs", "/openapi.json", "/redoc"],
     )
-app.add_middleware(LoggingMiddleware)
-app.add_middleware(ErrorHandlerMiddleware)
+# https://simpletort.web.app is only in get_cors_origins()'s dev list, not
+# prod — appended here (scoped to this service only) so the case Financial
+# tab's settlement reads (inputs/expenses/liens/loans/disbursements/etc.)
+# stop failing CORS in production without touching the shared origin list
+# that auth-rbac-cr, case-development, notification, lead-intake,
+# task-management, and storage-gateway also depend on.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_cors_origins(_settings.environment) + ["https://simpletort.web.app"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allow_headers=["Authorization", "Content-Type", "x-apigateway-api-userinfo"],
+)
 
 
 # ── Timestamp helper ──────────────────────────────────────────────────────────
@@ -1856,13 +1992,12 @@ async def generate_statement(
             detail=f"Failed to generate statement: {exc}",
         )
 
-    # Persist statement metadata in Firestore
-    # Path: cases/{caseId}/settlement/statements/{statementId}
-    stmt_ref = (
-        db.collection("cases").document(case_id)
-          .collection("settlement").document(f"statement_{result.statement_id}")
-    )
-    await stmt_ref.set({
+    # Persist statement metadata in the single settlement document
+    # Path: cases/{caseId}/settlement/settlement → statements.statement_{id}
+    stmt_section = _SettlementSection(
+        _settlement_doc_ref(db, case_id), "statements"
+    ).document(f"statement_{result.statement_id}")
+    await stmt_section.set({
         "statementId":   result.statement_id,
         "caseId":        case_id,
         "gcsPath":       result.gcs_path,

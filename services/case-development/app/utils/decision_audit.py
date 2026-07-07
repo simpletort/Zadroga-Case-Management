@@ -2,14 +2,14 @@
 Decision Audit Utility
 
 Writes one AuditEvent document to TWO Firestore paths atomically in the same batch:
-  audit_events/{eventId}               ← global log (all services, per Common Audit Log Schema)
-  cases/{caseId}/audit_events/{eventId} ← denormalized for case-scoped queries
+  audit_logs/{eventId}               ← global log (all services, per Common Audit Log Schema)
+  cases/{caseId}/audit_logs/{eventId} ← denormalized for case-scoped queries
 
 Both writes must be included in the caller's already-open WriteBatch BEFORE batch.commit().
 
 Immutability contract:
   - This module only ever calls batch.set().
-  - It never calls batch.update() or batch.delete() on audit_events documents.
+  - It never calls batch.update() or batch.delete() on audit_logs documents.
   - Firestore Security Rules should enforce create-only access on this collection.
 """
 
@@ -115,20 +115,20 @@ def write_decision_audit_event(
         },
     }
 
-    # Write 1: global audit_events collection
-    global_ref = db.collection("audit_events").document(event_id)
+    # Write 1: global audit_logs collection
+    global_ref = db.collection("audit_logs").document(event_id)
     batch.set(global_ref, doc)
 
     # Write 2: denormalized case-scoped sub-collection
     case_ref = (
         db.collection("cases")
         .document(case_id)
-        .collection("audit_events")
+        .collection("audit_logs")
         .document(event_id)
     )
     batch.set(case_ref, doc)
 
     logger.debug(
-        "audit_events write queued: event_id=%s case=%s decision_type=%s actor=%s",
+        "audit_logs write queued: event_id=%s case=%s decision_type=%s actor=%s",
         event_id, case_id, decision_type, performed_by,
     )

@@ -286,3 +286,68 @@ async def update_case_vcf_status(
         "updatedAt":           firestore.SERVER_TIMESTAMP,
     })
     logger.info("case_vcf_updated", case_id=case_id, vcf_eligibility=vcf_eligibility)
+
+
+# ── Transactional case assignment ────────────────────────────────────────────
+
+class AssignmentConflict(Exception):
+    """Raised when a case already has an assignedParalegal."""
+    def __init__(self, case_id: str, existing_assignee: str):
+        self.case_id = case_id
+        self.existing_assignee = existing_assignee
+        super().__init__(
+            f"Case {case_id} already assigned to {existing_assignee}"
+        )
+
+
+async def assign_case_transactional(
+    case_id:    str,
+    assignee:   str,
+    db:         firestore.AsyncClient,
+) -> dict:
+    """
+    Assign a paralegal to a case inside a Firestore transaction.
+
+    Read-check-write pattern:
+      1. Read the case document inside the transaction.
+      2. If assignment.assignedParalegal is already set → raise AssignmentConflict
+         (the caller decides whether to skip or surface the conflict).
+      3. Otherwise, write the assignment atomically.
+
+    Returns the written assignment dict on success.
+    Raises AssignmentConflict if already assigned.
+    Raises ValueError if the case document does not exist.
+    """
+    settings = get_settings()
+    doc_ref  = db.collection(settings.firestore_cases_collection).document(case_id)
+
+    @firestore.async_transactional
+    async def _txn(transaction: AsyncTransaction):
+        snapshot = await doc_ref.get(transaction=transaction)
+
+        if not snapshot.exists:
+            raise ValueError(f"Case {case_id} not found")
+
+        data = snapshot.to_dict()
+        existing_assignment = data.get("assignment") or {}
+        existing_paralegal  = existing_assignment.get("assignedParalegal")
+
+        if existing_paralegal:
+            raise AssignmentConflict(case_id, existing_paralegal)
+
+        assignment_payload = {
+            "assignment.assignedParalegal": assignee,
+            "assignment.assignmentDate":    firestore.SERVER_TIMESTAMP,
+            "updatedAt":                    firestore.SERVER_TIMESTAMP,
+        }
+        transaction.update(doc_ref, assignment_payload)
+
+        logger.info(
+            "case_assigned_transactional",
+            case_id=case_id,
+            assignee=assignee,
+        )
+        return {"assignedParalegal": assignee, "case_id": case_id}
+
+    transaction = db.transaction()
+    return await _txn(transaction)

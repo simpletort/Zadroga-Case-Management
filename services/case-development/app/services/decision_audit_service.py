@@ -1,7 +1,7 @@
 """
 Decision Audit Query Service
 
-Reads from the global `audit_events` collection, always filtered to
+Reads from the global `audit_logs` collection, always filtered to
 service == "case-management" so cross-service writes are excluded.
 
 This service is intentionally read-only: no .set(), .update(), or .delete() calls.
@@ -13,7 +13,7 @@ Query strategy:
   - Sorting and pagination are Python-side (avoids composite index requirements).
 
 For single-case queries, prefer the case-scoped sub-collection
-(cases/{caseId}/audit_events) to avoid a full collection scan.
+(cases/{caseId}/audit_logs) to avoid a full collection scan.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ _SERVICE_FILTER = "case-management"
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _to_item(doc_data: dict) -> dict:
-    """Normalise an audit_events document to the snake_case API shape."""
+    """Normalise an audit_logs document to the snake_case API shape."""
     meta = doc_data.get("metadata") or {}
     changes = doc_data.get("changes") or {}
     status_change = changes.get("status") or {}
@@ -74,7 +74,7 @@ def _build_base_query(
     Base query: always scoped to case-management, optionally date-ranged.
     Both filters on different fields require only simple single-field indexes.
     """
-    query = db.collection("audit_events").where("service", "==", _SERVICE_FILTER)
+    query = db.collection("audit_logs").where("service", "==", _SERVICE_FILTER)
     if date_from is not None:
         if date_from.tzinfo is None:
             date_from = date_from.replace(tzinfo=timezone.utc)
@@ -125,12 +125,12 @@ def get_decisions(
     query = _build_base_query(db, date_from, date_to)
 
     # When only case_id is provided (no date range), use the case-scoped
-    # sub-collection to avoid a full audit_events scan.
+    # sub-collection to avoid a full audit_logs scan.
     if case_id and date_from is None and date_to is None and performed_by is None and decision_type is None:
         query = (
             db.collection("cases")
             .document(case_id)
-            .collection("audit_events")
+            .collection("audit_logs")
         )
 
     raw_docs = [doc.to_dict() or {} for doc in query.stream()]
@@ -166,7 +166,7 @@ def get_case_decisions(
     query = (
         db.collection("cases")
         .document(case_id)
-        .collection("audit_events")
+        .collection("audit_logs")
     )
     raw_docs = [doc.to_dict() or {} for doc in query.stream()]
     raw_docs.sort(key=lambda d: (d.get("timestamp") or datetime.min))
@@ -264,7 +264,7 @@ def generate_compliance_report(
         query = (
             db.collection("cases")
             .document(case_id)
-            .collection("audit_events")
+            .collection("audit_logs")
         )
     else:
         query = _build_base_query(db, date_from, date_to)

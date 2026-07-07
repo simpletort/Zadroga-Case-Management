@@ -103,10 +103,9 @@ async def _load_case_info(db, case_id: str) -> dict[str, str]:
 
 
 async def _load_settlement_inputs(db, case_id: str) -> dict:
-    ref = (db.collection("cases").document(case_id)
-             .collection("settlement").document("inputs"))
+    ref = db.collection("cases").document(case_id).collection("settlement").document("settlement")
     doc = await ref.get()
-    data = doc.to_dict() if doc.exists else {}
+    data = (doc.to_dict() or {}).get("inputs", {}) if doc.exists else {}
     gross        = _dec(data.get("grossAward",     data.get("gross_award")))
     fee_pct      = _dec(data.get("attorneyFeePct", data.get("attorney_fee_pct", "33.33")))
     attorney_fee = (gross * fee_pct / Decimal("100")).quantize(Decimal("0.01"))
@@ -118,10 +117,9 @@ async def _load_settlement_inputs(db, case_id: str) -> dict:
 
 
 async def _load_expenses(db, case_id: str) -> tuple[list[dict], Decimal]:
-    ref = (db.collection("cases").document(case_id)
-             .collection("settlement").document("expenses"))
+    ref = db.collection("cases").document(case_id).collection("settlement").document("settlement")
     doc = await ref.get()
-    items = (doc.to_dict() or {}).get("items", []) if doc.exists else []
+    items = (doc.to_dict() or {}).get("expenses", {}).get("items", []) if doc.exists else []
     expenses, total = [], Decimal("0")
     for it in items:
         amt = _dec(it.get("amount"))
@@ -131,10 +129,9 @@ async def _load_expenses(db, case_id: str) -> tuple[list[dict], Decimal]:
 
 
 async def _load_liens(db, case_id: str) -> tuple[list[dict], Decimal]:
-    ref = (db.collection("cases").document(case_id)
-             .collection("settlement").document("liens"))
+    ref = db.collection("cases").document(case_id).collection("settlement").document("settlement")
     doc = await ref.get()
-    items = (doc.to_dict() or {}).get("items", []) if doc.exists else []
+    items = (doc.to_dict() or {}).get("liens", {}).get("items", []) if doc.exists else []
     liens, total = [], Decimal("0")
     for it in items:
         amt = _dec(it.get("amount"))
@@ -149,10 +146,9 @@ async def _load_liens(db, case_id: str) -> tuple[list[dict], Decimal]:
 
 
 async def _load_loans(db, case_id: str) -> tuple[list[dict], Decimal]:
-    ref = (db.collection("cases").document(case_id)
-             .collection("settlement").document("loans"))
+    ref = db.collection("cases").document(case_id).collection("settlement").document("settlement")
     doc = await ref.get()
-    items = (doc.to_dict() or {}).get("items", []) if doc.exists else []
+    items = (doc.to_dict() or {}).get("loans", {}).get("items", []) if doc.exists else []
     loans, total = [], Decimal("0")
     for it in items:
         amt    = _dec(it.get("amount"))

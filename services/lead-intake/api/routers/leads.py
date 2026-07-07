@@ -46,6 +46,7 @@ from models.lead import (
 from services.case_service import (
     create_case, get_case, update_case_status,
     apply_vcf_screening_result, write_staff_screening_notification,
+    assign_case_transactional, AssignmentConflict,
 )
 from services.duplicate_detection import detect_duplicate, detect_ssn_dob_duplicate, is_idempotent_retry
 from services.firestore_client import get_db
@@ -365,18 +366,33 @@ async def bulk_assign(
         })
 
     cfg= get_settings()
-    updated, failed = [], []
+    updated, failed, skipped = [], [], []
     for case_id in case_ids:
         try:
-            await db.collection(cfg.firestore_cases_collection).document(case_id).update(
-                {"assignment.assignedParalegal": assignment, "assignment.assignmentDate": firestore.SERVER_TIMESTAMP}
+            await assign_case_transactional(
+                case_id=case_id, assignee=assignment, db=db,
             )
             updated.append(case_id)
+        except AssignmentConflict as conflict:
+            logger.info(
+                "bulk_assign_skipped_already_assigned",
+                case_id=case_id,
+                existing_assignee=conflict.existing_assignee,
+            )
+            skipped.append({
+                "caseId": case_id,
+                "existingAssignee": conflict.existing_assignee,
+            })
         except Exception as exc:
             logger.error("bulk_assign_failed", case_id=case_id, error=str(exc))
             failed.append(case_id)
 
-    return {"updated": updated, "failed": failed, "total": len(updated)}
+    return {
+        "updated": updated,
+        "skipped": skipped,
+        "failed":  failed,
+        "total":   len(updated),
+    }
 
 
 # ── GET /leads/export/csv ─────────────────────────────────────────────────────

@@ -324,8 +324,15 @@ components:
             - Screened
             - Qualified
             - Disqualified
+            - Needs Review
             - Active
             - Closed
+            - attorney_review
+            - manual_review_required
+            - settlement_pending_approval
+            - Pending Client Information
+            - VCF - Submitted
+            - Awarded
         vcfEligibility:
           type: string
           enum:

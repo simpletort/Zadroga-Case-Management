@@ -198,18 +198,23 @@ def get_monthly_revenue(num_months: int = 12) -> List[MonthlyRevenueItem]:
             award_counts[label] += 1
 
             # Look up canonical settlement calculation doc for this case
-            for sdoc in doc.reference.collection("settlement").stream():
-                sdata = sdoc.to_dict() or {}
-                if sdata.get("calculation_id") != sdoc.id:
-                    continue   # skip sibling docs (inputs, expenses, liens …)
-                try:
-                    award_totals[label] += float(sdata.get("gross_award", 0))
-                except (TypeError, ValueError):
-                    logger.warning(
-                        "Non-numeric gross_award on case %s settlement doc %s",
-                        doc.id, sdoc.id,
-                    )
-                break  # only one canonical doc per case
+            # Single settlement document: cases/{caseId}/settlement/settlement
+            settle_ref = doc.reference.collection("settlement").document("settlement")
+            settle_snap = settle_ref.get()
+            if settle_snap.exists:
+                settle_data = settle_snap.to_dict() or {}
+                calcs = settle_data.get("calculations", {})
+                for calc_id, calc_data in calcs.items():
+                    if not isinstance(calc_data, dict):
+                        continue
+                    try:
+                        award_totals[label] += float(calc_data.get("gross_award", 0))
+                    except (TypeError, ValueError):
+                        logger.warning(
+                            "Non-numeric gross_award on case %s calculation %s",
+                            doc.id, calc_id,
+                        )
+                    break  # only one canonical calc per case
 
     return [
         MonthlyRevenueItem(
@@ -342,11 +347,11 @@ def get_expense_summary() -> dict:
 
     try:
         for case_doc in db.collection("cases").stream():
-            exp_ref = case_doc.reference.collection("settlement").document("expenses")
-            exp_doc = exp_ref.get()
-            if not exp_doc.exists:
+            settle_ref = case_doc.reference.collection("settlement").document("settlement")
+            settle_doc = settle_ref.get()
+            if not settle_doc.exists:
                 continue
-            for item in (exp_doc.to_dict() or {}).get("items", []):
+            for item in (settle_doc.to_dict() or {}).get("expenses", {}).get("items", []):
                 category = item.get("category") or "Other"
                 try:
                     category_totals[category] += float(item.get("amount", 0))
@@ -385,15 +390,15 @@ def get_ytd_expenses() -> float:
 
     try:
         for case_doc in db.collection("cases").stream():
-            exp_ref = (
+            settle_ref = (
                 case_doc.reference
                 .collection("settlement")
-                .document("expenses")
+                .document("settlement")
             )
-            exp_doc = exp_ref.get()
-            if not exp_doc.exists:
+            settle_doc = settle_ref.get()
+            if not settle_doc.exists:
                 continue
-            items = (exp_doc.to_dict() or {}).get("items", [])
+            items = (settle_doc.to_dict() or {}).get("expenses", {}).get("items", [])
             for item in items:
                 added_at = parse_dt(item.get("addedAt"))
                 if added_at is None:
@@ -467,7 +472,7 @@ def get_staff_case_counts() -> Dict[str, dict]:
         docs = db.collection("cases").where("status", "==", status).stream()
         for doc in docs:
             data = doc.to_dict()
-            assignment = data.get("assignment") or {}
+            assignment = data.get("assignment", {})
             uid = assignment.get("assignedParalegal") or assignment.get("assignedAttorney")
             if uid:
                 result[uid]["active_cases"] += 1
@@ -485,7 +490,7 @@ def get_staff_case_counts() -> Dict[str, dict]:
         .stream()
     ):
         data = doc.to_dict()
-        assignment = data.get("assignment") or {}
+        assignment = data.get("assignment", {})
         uid = assignment.get("assignedParalegal") or assignment.get("assignedAttorney")
         if uid:
             result[uid]["cases_completed_period"] += 1
@@ -503,7 +508,7 @@ def get_staff_case_counts() -> Dict[str, dict]:
         .stream()
     ):
         data = doc.to_dict()
-        assignment = data.get("assignment") or {}
+        assignment = data.get("assignment", {})
         uid = assignment.get("assignedParalegal") or assignment.get("assignedAttorney")
         if not uid:
             continue

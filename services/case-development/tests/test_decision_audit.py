@@ -3,7 +3,7 @@ Tests for the Decision Audit Trail.
 
 Covers:
   - write_decision_audit_event helper: field correctness, duration math, immutability,
-    dual-write to global audit_events + cases/{caseId}/audit_events
+    dual-write to global audit_logs + cases/{caseId}/audit_logs
   - decision_audit_service: get_decisions, get_case_decisions, get_decision_metrics,
     generate_compliance_report
   - Route integration via FastAPI TestClient (RBAC + response shapes)
@@ -35,7 +35,7 @@ def _make_db():
     """Mock Firestore client for write-helper tests.
 
     Handles:
-      db.collection("audit_events").document(X)              → audit_ref
+      db.collection("audit_logs").document(X)              → audit_ref
       db.collection("cases").document(Y).collection(...).document(X) → nested via MagicMock chain
     """
     db = MagicMock()
@@ -115,8 +115,8 @@ def _make_query_db(docs: list[dict]):
     Firestore mock for read-service tests.
 
     Handles both query paths used by decision_audit_service:
-      - db.collection("audit_events").where(...).stream()          (global query)
-      - db.collection("cases").document(X).collection("audit_events").stream()  (case sub-collection)
+      - db.collection("audit_logs").where(...).stream()          (global query)
+      - db.collection("cases").document(X).collection("audit_logs").stream()  (case sub-collection)
 
     Both paths return the same `docs` list so Python-side filters are exercised.
     """
@@ -128,19 +128,19 @@ def _make_query_db(docs: list[dict]):
         coll.stream.side_effect = lambda: iter([_doc_snap(d) for d in docs])
         return coll
 
-    audit_events_sub = _make_streamable()
+    audit_logs_sub = _make_streamable()
     case_doc = MagicMock()
-    case_doc.collection.return_value = audit_events_sub
+    case_doc.collection.return_value = audit_logs_sub
     cases_coll = MagicMock()
     cases_coll.document.return_value = case_doc
 
-    audit_events_coll = _make_streamable()
+    audit_logs_coll = _make_streamable()
 
     def _collection(name):
         if name == "cases":
             return cases_coll
-        if name == "audit_events":
-            return audit_events_coll
+        if name == "audit_logs":
+            return audit_logs_coll
         c = _make_streamable()
         return c
 
@@ -192,15 +192,15 @@ class TestWriteDecisionAuditEvent:
         doc2 = batch.set.call_args_list[1][0][1]
         assert doc1 == doc2
 
-    def test_global_collection_is_audit_events(self):
+    def test_global_collection_is_audit_logs(self):
         batch, db = self._call()
-        # First set() writes to audit_events/{event_id}
+        # First set() writes to audit_logs/{event_id}
         first_ref = batch.set.call_args_list[0][0][0]
-        db.collection.assert_any_call("audit_events")
+        db.collection.assert_any_call("audit_logs")
 
     def test_case_scoped_collection_written(self):
         batch, db = self._call()
-        # Second set() is on the cases/{caseId}/audit_events sub-collection
+        # Second set() is on the cases/{caseId}/audit_logs sub-collection
         db.collection.assert_any_call("cases")
 
     # ── Field correctness (Common Audit Log Schema) ────────────────────────────
