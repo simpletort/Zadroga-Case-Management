@@ -42,6 +42,17 @@ steps:
       - "--min-instances=0"
       - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,ENVIRONMENT=$_ENV,FIRESTORE_DATABASE_ID=$_FIRESTORE_DATABASE_ID,TRUSTED_SERVICE_ACCOUNTS=$_TRUSTED_SERVICE_ACCOUNTS,EMAIL_PROVIDER=$_EMAIL_PROVIDER"
 
+  - name: "node:20-slim"
+    dir: "services/auth-rbac-cr"
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        npm install -g firebase-tools
+        firebase deploy --only firestore:rules,firestore:indexes \
+          --non-interactive \
+          --project $PROJECT_ID
+
 images:
   - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
   - "$_REPO/$_SERVICE_NAME:latest"

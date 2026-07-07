@@ -261,7 +261,11 @@ class TestGetClosedStatuses:
         mock_doc = MagicMock()
         mock_doc.exists = True
         mock_doc.to_dict.return_value = {
-            "closedStatuses": ["Closed", "Settled", "Withdrawn"]
+            "statuses": [
+                {"value": "Closed",    "category": "closed"},
+                {"value": "Settled",   "category": "closed"},
+                {"value": "Withdrawn", "category": "terminal"},
+            ]
         }
         mock_db.collection.return_value.document.return_value.get.return_value = mock_doc
 

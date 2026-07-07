@@ -1,9 +1,0 @@
-{
-  "projects": {
-    "default":    "simpletort-zadroga-dev",
-    "development":"simpletort-zadroga-dev",
-    "staging":    "simpletort-zadroga-dev",
-    "production": "simpletort-zadroga-dev",
-    "demo-no-project": "simpletort-zadroga-dev"
-  }
-}

@@ -4,6 +4,8 @@ Submit-for-Attorney-Review Service
 Pre-flight checks:
   1. Case exists and is in a submittable status ("Pending Paralegal Review")
   2. Required document categories all have at least one clean upload
+     (configurable via firmSettings/document_checklists; resolution order is
+     cases/{caseId}.case_type override -> default)
   3. Questionnaire is marked complete (cases/{caseId}.questionnaireComplete == True)
   4. AI summary has been generated (cases/{caseId}.aiSummaryGenerated == True)
 
@@ -23,6 +25,9 @@ from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from google.cloud import firestore
 
+from app.services.document_checklist_service import get_required_document_categories
+from app.services.feature_flags_service import get_feature_flags
+
 logger = logging.getLogger(__name__)
 
 # Statuses from which a paralegal may submit for attorney review
@@ -30,13 +35,6 @@ SUBMITTABLE_STATUSES = {"Pending Paralegal Review"}
 
 # New status after submission
 TARGET_STATUS = "Pending Attorney Review"
-
-# Document categories that must have at least one clean file before submission
-REQUIRED_DOCUMENT_CATEGORIES = [
-    "medical-records",
-    "proof-of-presence",
-    "id-documents",
-]
 
 
 def _check_case_exists(db: firestore.Client, case_id: str) -> dict:
@@ -88,7 +86,11 @@ def run_preflight(db: firestore.Client, case_id: str) -> dict:
             if category:
                 uploaded_categories.add(category)
 
-    for category in REQUIRED_DOCUMENT_CATEGORIES:
+    # Required categories are configurable via firmSettings/document_checklists.
+    # Resolution order: case_type override -> default.
+    required_categories = get_required_document_categories(db, case_data.get("case_type"))
+
+    for category in required_categories:
         present = category in uploaded_categories
         checks.append({
             "name":   "document_{}".format(category.replace("-", "_")),
@@ -105,11 +107,15 @@ def run_preflight(db: firestore.Client, case_id: str) -> dict:
     })
 
     # ── 4. AI summary generated ────────────────────────────────────────────
+    # Gate is configurable via firmSettings/feature_flags.require_ai_summary
+    # (default: True). When disabled, this check passes unconditionally.
+    require_ai_summary = get_feature_flags(db)["require_ai_summary"]
     ai_done = bool(case_data.get("aiSummaryGenerated", False))
+    ai_check_passed = ai_done or not require_ai_summary
     checks.append({
         "name":   "ai_summary_generated",
-        "passed": ai_done,
-        "detail": None if ai_done else "AI case summary has not been generated.",
+        "passed": ai_check_passed,
+        "detail": None if ai_check_passed else "AI case summary has not been generated.",
     })
 
     all_passed = all(c["passed"] for c in checks)

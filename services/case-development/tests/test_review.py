@@ -26,6 +26,7 @@ def _case_snap(
     ai_summary=True,
     attorney="atty-1",
     exists=True,
+    case_type=None,
 ):
     snap = MagicMock()
     snap.exists = exists
@@ -34,6 +35,7 @@ def _case_snap(
         "questionnaireComplete": questionnaire,
         "aiSummaryGenerated": ai_summary,
         "assignment": {"assignedAttorney": attorney},
+        "case_type": case_type,
     }
     return snap
 
@@ -80,6 +82,7 @@ class TestRunPreflight:
         questionnaire=True,
         ai_summary=True,
         docs=None,
+        case_type=None,
     ):
         if docs is None:
             docs = _all_clean_docs()
@@ -90,6 +93,7 @@ class TestRunPreflight:
             status=case_status,
             questionnaire=questionnaire,
             ai_summary=ai_summary,
+            case_type=case_type,
         )
 
         docs_coll = MagicMock()
@@ -160,6 +164,43 @@ class TestRunPreflight:
         assert ai_check["passed"] is False
         assert result["all_passed"] is False
 
+    def test_ai_summary_missing_still_fails_when_flag_defaults_true(self):
+        """No firmSettings/feature_flags doc configured → require_ai_summary defaults True."""
+        from app.services.review_service import run_preflight
+
+        result = run_preflight(self._db(ai_summary=False), "ZAD-2026-04-0001")
+
+        ai_check = next(c for c in result["checks"] if c["name"] == "ai_summary_generated")
+        assert ai_check["passed"] is False
+
+    def test_ai_summary_check_passes_unconditionally_when_flag_disabled(self):
+        from app.services.review_service import run_preflight
+
+        with patch(
+            "app.services.review_service.get_feature_flags",
+            return_value={"require_ai_summary": False, "updated_at": None, "updated_by": None},
+        ):
+            result = run_preflight(self._db(ai_summary=False), "ZAD-2026-04-0001")
+
+        ai_check = next(c for c in result["checks"] if c["name"] == "ai_summary_generated")
+        assert ai_check["passed"] is True
+        assert ai_check["detail"] is None
+        # Other checks are unaffected by the flag
+        assert result["all_passed"] is True
+
+    def test_ai_summary_check_still_blocks_when_flag_explicitly_enabled(self):
+        from app.services.review_service import run_preflight
+
+        with patch(
+            "app.services.review_service.get_feature_flags",
+            return_value={"require_ai_summary": True, "updated_at": None, "updated_by": None},
+        ):
+            result = run_preflight(self._db(ai_summary=False), "ZAD-2026-04-0001")
+
+        ai_check = next(c for c in result["checks"] if c["name"] == "ai_summary_generated")
+        assert ai_check["passed"] is False
+        assert result["all_passed"] is False
+
     def test_case_not_found_raises_404(self):
         from app.services.review_service import run_preflight
 
@@ -174,19 +215,108 @@ class TestRunPreflight:
         assert exc_info.value.status_code == 404
 
     def test_returns_all_check_names(self):
-        from app.services.review_service import (
-            run_preflight,
-            REQUIRED_DOCUMENT_CATEGORIES,
-        )
+        from app.services.review_service import run_preflight
 
-        result = run_preflight(self._db(), "ZAD-2026-04-0001")
+        default_categories = ["medical-records", "proof-of-presence", "id-documents"]
+        with patch(
+            "app.services.review_service.get_required_document_categories",
+            return_value=default_categories,
+        ):
+            result = run_preflight(self._db(), "ZAD-2026-04-0001")
         names = {c["name"] for c in result["checks"]}
 
         assert "case_status" in names
         assert "questionnaire_complete" in names
         assert "ai_summary_generated" in names
-        for cat in REQUIRED_DOCUMENT_CATEGORIES:
+        for cat in default_categories:
             assert "document_{}".format(cat.replace("-", "_")) in names
+
+
+# ── Document checklist resolution tests ─────────────────────────────────────
+
+class TestDocumentChecklistResolution:
+
+    def _db(self, case_type=None, docs=None):
+        if docs is None:
+            docs = _all_clean_docs()
+
+        db = MagicMock()
+        case_ref = MagicMock()
+        case_ref.get.return_value = _case_snap(case_type=case_type)
+
+        docs_coll = MagicMock()
+        docs_coll.stream.return_value = iter(docs)
+        case_ref.collection.side_effect = lambda name: (
+            docs_coll if name == "documents" else MagicMock()
+        )
+
+        db.collection.return_value.document.return_value = case_ref
+        return db
+
+    def test_default_categories_used_when_unconfigured(self):
+        """No firmSettings/document_checklists doc configured -> falls back to the built-in default."""
+        from app.services.review_service import run_preflight
+
+        with patch(
+            "app.services.review_service.get_required_document_categories",
+            return_value=["medical-records", "proof-of-presence", "id-documents"],
+        ) as mock_get:
+            result = run_preflight(self._db(), "ZAD-2026-04-0001")
+
+        mock_get.assert_called_once_with(mock_get.call_args[0][0], None)
+        assert result["all_passed"] is True
+
+    def test_case_type_override_used_when_configured(self):
+        """A case_type with a configured override uses the override list, not the default."""
+        from app.services.review_service import run_preflight
+
+        override_categories = ["medical-records", "proof-of-presence", "id-documents", "employment-records"]
+        docs = [
+            _doc_snap("medical-records"),
+            _doc_snap("proof-of-presence"),
+            _doc_snap("id-documents"),
+        ]  # missing "employment-records" -> should fail if override is applied
+
+        with patch(
+            "app.services.review_service.get_required_document_categories",
+            return_value=override_categories,
+        ) as mock_get:
+            result = run_preflight(self._db(case_type="wtc", docs=docs), "ZAD-2026-04-0001")
+
+        mock_get.assert_called_once_with(mock_get.call_args[0][0], "wtc")
+        assert result["all_passed"] is False
+        names = {c["name"]: c["passed"] for c in result["checks"]}
+        assert names["document_employment_records"] is False
+
+    def test_missing_doc_falls_back_to_default(self):
+        """No firmSettings/document_checklists doc exists -> built-in default categories."""
+        from app.services.document_checklist_service import get_required_document_categories
+
+        db = MagicMock()
+        missing = MagicMock()
+        missing.exists = False
+        db.collection.return_value.document.return_value.get.return_value = missing
+
+        result = get_required_document_categories(db, "wtc")
+
+        assert result == ["medical-records", "proof-of-presence", "id-documents"]
+
+    def test_case_type_with_no_matching_override_falls_back_to_default(self):
+        """A case_type present on the case but absent from overrides resolves to the default list."""
+        from app.services.document_checklist_service import get_required_document_categories
+
+        db = MagicMock()
+        doc = MagicMock()
+        doc.exists = True
+        doc.to_dict.return_value = {
+            "default": ["medical-records", "proof-of-presence", "id-documents"],
+            "overrides": {"wtc": ["medical-records", "proof-of-presence", "id-documents", "employment-records"]},
+        }
+        db.collection.return_value.document.return_value.get.return_value = doc
+
+        result = get_required_document_categories(db, "vcf")
+
+        assert result == ["medical-records", "proof-of-presence", "id-documents"]
 
 
 # ── submit_for_review unit tests ───────────────────────────────────────────

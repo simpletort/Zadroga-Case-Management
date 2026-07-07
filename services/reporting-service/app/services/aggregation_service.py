@@ -9,31 +9,32 @@ from dateutil.relativedelta import relativedelta
 logger = logging.getLogger(__name__)
 
 # Maps internal Firestore status values to display names used across the UI.
-STATUS_MAP = {
-    "Qualified": "Pending Paralegal Review",
-}
 
 ALL_STATUSES = [
     "New Lead",
-    "Pending Client Info",
+    "Pending Client Information",
     "Pending Paralegal Review",
     "Pending Attorney Review",
-    "Ready for Filing",
+    "Pending Senior Review",
+    "Approved for Filing",
     "VCF - Submitted",
     "Awarded",
     "Settled",
+    "Closed",
     "Does Not Qualify",
     "Withdrawn",
+    "Disqualified",
     "On Hold",
 ]
 
-# Fallback used when firmSettings/pipeline is absent or has no activeStatuses field.
+# Fallback used when firmSettings/case_statuses is absent or has no activeStatuses field.
 DEFAULT_ACTIVE_STATUSES = [
     "New Lead",
-    "Pending Client Info",
+    "Pending Client Information",
     "Pending Paralegal Review",
     "Pending Attorney Review",
-    "Ready for Filing",
+    "Pending Senior Review",
+    "Approved for Filing",
     "VCF - Submitted",
     "Awarded",
     "On Hold",
@@ -42,7 +43,7 @@ DEFAULT_ACTIVE_STATUSES = [
 
 def get_active_statuses(db=None) -> List[str]:
     """
-    Load active case statuses from ``firmSettings/pipeline.activeStatuses[]``.
+    Load active case statuses from ``firmSettings/case_statuses.activeStatuses[]``.
 
     Falls back to ``DEFAULT_ACTIVE_STATUSES`` when the document is absent,
     the field is missing, or Firestore is unreachable — so KPI queries always
@@ -50,13 +51,14 @@ def get_active_statuses(db=None) -> List[str]:
     """
     try:
         _db = db or get_firestore_client()
-        doc = _db.collection("firmSettings").document("pipeline").get()
+        doc = _db.collection("firmSettings").document("case_statuses").get()
         if doc.exists:
-            statuses = (doc.to_dict() or {}).get("activeStatuses")
-            if statuses:
-                return statuses
+            statuses = (doc.to_dict() or {}).get("statuses", [])
+            active = [s["value"] for s in statuses if s.get("category") == "active"]
+            if active:
+                return active
     except Exception as exc:
-        logger.warning("Failed to load activeStatuses from firmSettings/pipeline: %s", exc)
+        logger.warning("Failed to load activeStatuses from firmSettings/case_statuses: %s", exc)
     return DEFAULT_ACTIVE_STATUSES
 
 
@@ -68,7 +70,7 @@ def get_cases_by_status() -> List[dict]:
 
     for doc in docs:
         data = doc.to_dict()
-        status = STATUS_MAP.get(data.get("status", "Unknown"), data.get("status", "Unknown"))
+        status = data.get("status", "Unknown")
         last_status_change = parse_dt(data.get("lastStatusChangedAt"))
         created_at = parse_dt(data.get("createdAt"))
 
@@ -83,8 +85,20 @@ def get_cases_by_status() -> List[dict]:
 
         status_buckets[status].append(days_in_status)
 
+    # Build ordered status list from firmSettings/case_statuses, fall back to ALL_STATUSES
+    try:
+        cs_doc = db.collection("firmSettings").document("case_statuses").get()
+        cs_data = cs_doc.to_dict() if cs_doc.exists else {}
+        ordered_statuses = [s["value"] for s in sorted(
+            cs_data.get("statuses", []), key=lambda x: x.get("order", 999)
+        ) if s.get("value")]
+    except Exception:
+        ordered_statuses = []
+    if not ordered_statuses:
+        ordered_statuses = ALL_STATUSES
+
     result = []
-    for status in ALL_STATUSES:
+    for status in ordered_statuses:
         days_list = status_buckets.get(status, [])
         count = len(days_list)
         avg_days = round(sum(days_list) / count, 1) if count > 0 else None
@@ -227,28 +241,31 @@ def get_monthly_revenue(num_months: int = 12) -> List[MonthlyRevenueItem]:
     ]
 
 
-CONVERTED_STATUSES = {
-    "Pending Client Info",
-    "Qualified", "Pending Paralegal Review", "Pending Attorney Review",
-    "Ready for Filing", "VCF - Submitted", "Awarded", "Settled", "On Hold",
-}
-# Stages where a lead has moved past initial intake into the active pipeline
-CASE_CREATED_STATUSES = {
-    "Pending Client Info",
-    "Qualified", "Pending Paralegal Review", "Pending Attorney Review",
-    "Ready for Filing", "VCF - Submitted", "Awarded", "Settled", "On Hold",
-}
 VCF_ELIGIBLE_STATUSES = {"VCF - Submitted", "Awarded", "Settled"}
-DISQUALIFIED = {"Does Not Qualify", "Withdrawn", "Disqualified"}
+
+
+def _get_converted_statuses(db=None) -> set:
+    try:
+        _db = db or get_firestore_client()
+        doc = _db.collection("firmSettings").document("case_statuses").get()
+        statuses = (doc.to_dict() or {}).get("statuses", []) if doc.exists else []
+        converted = {s["value"] for s in statuses if s.get("category") in ("active", "closed")}
+        if converted:
+            return converted
+    except Exception as exc:
+        logger.warning("Failed to load converted statuses from firmSettings: %s", exc)
+    return {
+        "New Lead", "Pending Client Information", "Pending Paralegal Review",
+        "Pending Attorney Review", "Pending Senior Review", "Approved for Filing",
+        "VCF - Submitted", "Awarded", "Settled", "Rejected", "On Hold",
+    }
 
 
 FUNNEL_STAGE_DEFS = [
-    ("Initial Contact",   lambda c: True),
-    # Matches Lead Management "Qualified" count — Firestore stores "Qualified"
-    ("Qualified Lead",    lambda c: c.get("status") == "Qualified"),
-    # No tracking data available for these stages yet
-    ("Intake Form Sent",  None),
-    ("Form Submitted",    None),
+    ("Initial Contact",  lambda c: True),
+    ("Qualified Lead",   lambda c: c.get("status") not in {"Does Not Qualify", "Withdrawn", "Closed", "Rejected"}),
+    ("Intake Form Sent", None),
+    ("Form Submitted",   None),
 ]
 
 
@@ -257,8 +274,10 @@ def get_lead_conversion_analytics() -> dict:
     cases = [doc.to_dict() for doc in db.collection("cases").stream()]
     total = len(cases)
 
+    converted_statuses = _get_converted_statuses(db)
+
     # --- KPIs ---
-    converted = sum(1 for c in cases if c.get("status") in CONVERTED_STATUSES)
+    converted = sum(1 for c in cases if c.get("status") in converted_statuses)
     conversion_rate = round(converted / total * 100, 1) if total else 0.0
 
     # --- Best channel ---
@@ -267,7 +286,7 @@ def get_lead_conversion_analytics() -> dict:
     for c in cases:
         src = c.get("marketingSource") or "Unknown"
         channel_leads[src] += 1
-        if c.get("status") in CONVERTED_STATUSES:
+        if c.get("status") in converted_statuses:
             channel_converted[src] += 1
 
     best_channel = None
@@ -301,7 +320,7 @@ def get_lead_conversion_analytics() -> dict:
             continue
         label = start_of_month(dt).strftime("%b %Y")
         monthly_leads[label] += 1
-        if c.get("status") in CONVERTED_STATUSES:
+        if c.get("status") in converted_statuses:
             monthly_converted[label] += 1
 
     from datetime import datetime as _dt
@@ -434,7 +453,7 @@ def get_bottleneck_cases(threshold_days: int = 30) -> List[dict]:
                 continue
             days_stuck = (now - last_change).days
             if days_stuck >= threshold_days:
-                display_status = STATUS_MAP.get(data.get("status", ""), data.get("status", ""))
+                display_status = data.get("status", "")
                 bottlenecks.append({
                     **data,
                     "status": display_status,
