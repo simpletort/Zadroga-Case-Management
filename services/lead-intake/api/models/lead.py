@@ -24,13 +24,19 @@ class WTCHealthProgramStatus(str, Enum):
 
 
 class CaseStatus(str, Enum):
-    NEW_LEAD     = "New Lead"
-    SCREENED     = "Screened"
-    QUALIFIED    = "Qualified"
-    DISQUALIFIED = "Disqualified"
-    NEEDS_REVIEW = "Needs Review"
-    ACTIVE       = "Active"
-    CLOSED       = "Closed"
+    NEW_LEAD                    = "New Lead"
+    SCREENED                    = "Screened"
+    QUALIFIED                   = "Qualified"
+    DISQUALIFIED                = "Disqualified"
+    NEEDS_REVIEW                = "Needs Review"
+    ACTIVE                      = "Active"
+    CLOSED                      = "Closed"
+    ATTORNEY_REVIEW             = "attorney_review"
+    MANUAL_REVIEW_REQUIRED      = "manual_review_required"
+    SETTLEMENT_PENDING_APPROVAL = "settlement_pending_approval"
+    PENDING_CLIENT_INFO         = "Pending Client Information"
+    VCF_SUBMITTED               = "VCF - Submitted"
+    AWARDED                     = "Awarded"
 
 
 class VCFEligibility(str, Enum):
