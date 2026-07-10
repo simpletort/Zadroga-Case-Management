@@ -187,9 +187,19 @@ class CaseDocument(BaseModel):
     """
     Mirrors a Firestore /cases/{caseId} document.
     Created by case_service.create_case(); read back by get_case().
+
+    status / wtcHealthProgramStatus are plain str, not the CaseStatus /
+    WTCHealthProgramStatus enums: once a case leaves the lead-intake stage,
+    case-development advances `status` through its own admin-configurable
+    registry (firmSettings/case_statuses — e.g. "Pending Paralegal Review",
+    "Approved for Filing"), and external intake integrations (e.g.
+    google-forms/apps-script/Code.gs) patch `wtcHealthProgramStatus` directly
+    in Firestore. get_case() must be able to deserialize those values; the
+    enums remain authoritative for lead-intake's own writes (LeadRequest,
+    UpdateStatusRequest).
     """
     caseId:       str
-    status:       CaseStatus    = CaseStatus.NEW_LEAD
+    status:       str    = CaseStatus.NEW_LEAD.value
     vcfEligibility: VCFEligibility = VCFEligibility.PENDING
 
     # True = still a lead; False = converted to an active case (flipped by update_case_status when status → Active)
@@ -208,7 +218,7 @@ class CaseDocument(BaseModel):
     exposureLocation:      str
     exposureDateStart:     date
     exposureDateEnd:       date
-    wtcHealthProgramStatus: WTCHealthProgramStatus
+    wtcHealthProgramStatus: str
     priorAttorney:         bool
     conditions:            list[str] = Field(default_factory=list)
 
