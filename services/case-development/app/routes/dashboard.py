@@ -1,11 +1,24 @@
-from datetime import datetime
-from typing import Optional
+# Endpoints defined in this module:
+#   GET /api/v1/dashboard/cases   — paginated, filterable case list (min: paralegal)
+#                                   ?statuses=        one or more status values eg. statuses=Pending%20Client%20Info&statuses=Pending%20Paralegal%20Review
+#                                   ?case_type=       all | wtc | vcf
+#                                   ?assignees=       paralegal UID(s) — admin roles only
+#                                   ?deadline_from=   VCF deadline on or after (ISO 8601)
+#                                   ?deadline_to=     VCF deadline on or before (ISO 8601)
+#                                   ?completeness_min/max=  doc completeness % range (0-100)
+#                                   ?qual_min/max=    qualification score range (0-100)
+#                                   ?sort_by=         case_id | client_name | status | case_type | vcf_deadline | doc_completeness_pct | qual_score | last_activity
+#                                   ?sort_dir=        asc | desc  (default: desc)
+#                                   ?page=            page number (default: 1)
+#                                   ?page_size=       items per page (default: 20, max: 100)
 
-from fastapi import APIRouter, Depends, Query
+from datetime import datetime
+from typing import Any, Dict, Optional
+
+from fastapi import APIRouter, HTTPException, Path, Query
 
 from app.models.dashboard import DashboardResponse, DashboardSummary, DashboardPage, CaseSummary
-from app.services.dashboard_service import get_dashboard
-from app.utils.auth import require_min_role
+from app.services.dashboard_service import get_case_detail, get_dashboard
 from app.utils.firestore import get_firestore_client
 
 router = APIRouter(prefix="/api/v1", tags=["Paralegal Dashboard"])
@@ -21,6 +34,15 @@ def paralegal_dashboard(
         default=None,
         description="One or more status values (repeat param for multiple)",
     ),
+    case_type: Optional[str] = Query(
+        default=None,
+        pattern="^(all|wtc|vcf)$",
+        description="Case type filter: all | wtc | vcf",
+    ),
+    assignees: Optional[list[str]] = Query(
+        default=None,
+        description="Filter by assigned paralegal UID(s) — admin roles only (repeat param for multiple)",
+    ),
     deadline_from: Optional[datetime] = Query(
         default=None,
         description="Filter: VCF deadline on or after this date (ISO 8601)",
@@ -35,18 +57,18 @@ def paralegal_dashboard(
     qual_max: Optional[float] = Query(default=None, ge=0, le=100),
     sort_by: str = Query(
         default="last_activity",
-        description="Column to sort by: case_id | client_name | status | vcf_deadline | doc_completeness_pct | qual_score | last_activity",
+        description="Column to sort by: case_id | client_name | status | case_type | vcf_deadline | doc_completeness_pct | qual_score | last_activity",
     ),
     sort_dir: str = Query(default="desc", pattern="^(asc|desc)$"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
-    user: dict = Depends(require_min_role("dashboard_view")),
 ):
     db = get_firestore_client()
     result = get_dashboard(
         db=db,
-        user=user,
         statuses=statuses,
+        case_type=case_type,
+        assignees=assignees,
         deadline_from=deadline_from,
         deadline_to=deadline_to,
         completeness_min=completeness_min,
@@ -70,3 +92,16 @@ def paralegal_dashboard(
             total_pages=raw["total_pages"],
         ),
     )
+
+
+@router.get(
+    "/dashboard/cases/{caseId}",
+    response_model=Dict[str, Any],
+    summary="Get full case document by ID",
+)
+def get_dashboard_case(caseId: str = Path(...)):
+    db = get_firestore_client()
+    doc = db.collection("cases").document(caseId).get()
+    if not doc.exists:
+        raise HTTPException(status_code=404, detail="Case not found")
+    return doc.to_dict()

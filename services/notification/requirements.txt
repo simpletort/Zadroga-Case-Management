@@ -7,6 +7,9 @@ python-multipart==0.0.9    # required by FastAPI for request.form() parsing
 # Twilio SMS
 twilio==9.0.5
 
+# SendGrid Email
+sendgrid==6.11.0
+
 # Firestore / Firebase
 google-cloud-firestore==2.16.0
 firebase-admin==6.5.0

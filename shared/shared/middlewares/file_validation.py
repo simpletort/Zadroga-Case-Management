@@ -1,52 +1,75 @@
-import logging
+"""
+shared/middlewares/file_validation.py — File type and size validation middleware.
+
+Checks every multipart/form-data upload field:
+  - Extension must be in ALLOWED_EXTENSIONS (case-insensitive)
+  - Body must not exceed MAX_FILE_SIZE_BYTES (50 MB)
+
+Rejects with HTTP 415 and JSON {"error": ..., "detail": ...} on any violation.
+Non-multipart requests pass through untouched.
+"""
+
+from __future__ import annotations
+
+import os
+
+from starlette.datastructures import UploadFile
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-logger = logging.getLogger(__name__)
+MB = 1024 * 1024
+MAX_FILE_SIZE_BYTES = 50 * MB
 
-# SITO-444: Allowed content types for uploads
-ALLOWED_CONTENT_TYPES = {
-    "application/pdf",
-    "image/jpeg",
-    "image/png",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",  # .docx
-}
+ALLOWED_EXTENSIONS: frozenset[str] = frozenset(
+    {"pdf", "jpg", "jpeg", "png", "docx", "tiff"}
+)
 
-# SITO-444: 25MB max file size
-MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024
+
+def validate_file_extension(file_name: str) -> None:
+    """Raise HTTP 415 if the file extension is not in ALLOWED_EXTENSIONS."""
+    import os
+    from fastapi import HTTPException
+    ext = os.path.splitext(file_name)[1].lstrip(".").lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=415,
+            detail=f"File type '.{ext}' is not allowed. Accepted: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
+        )
+
+
+def _reject(error: str, detail: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=415,
+        content={"error": error, "detail": detail},
+    )
 
 
 class FileValidationMiddleware(BaseHTTPMiddleware):
-    """
-    Enforces content-type restrictions and file size limits on upload requests.
-    Per SITO-444: Allowed types are PDF, JPG, PNG, DOCX. Max size is 25MB.
-    Only applies to POST/PUT requests.
-    """
-
     async def dispatch(self, request: Request, call_next):
-        if request.method in ("POST", "PUT"):
-            content_type = request.headers.get("content-type", "").split(";")[0].strip()
-            content_length = int(request.headers.get("content-length", 0))
+        content_type = request.headers.get("content-type", "")
+        if "multipart/form-data" not in content_type:
+            return await call_next(request)
 
-            if content_type and content_type not in ALLOWED_CONTENT_TYPES:
-                logger.warning(f"Rejected unsupported content-type: {content_type}")
-                return JSONResponse(
-                    {
-                        "error": f"Unsupported file type: '{content_type}'.",
-                        "allowed_types": list(ALLOWED_CONTENT_TYPES),
-                    },
-                    status_code=415,
+        form = await request.form()
+        for _, field_value in form.multi_items():
+            if not isinstance(field_value, UploadFile):
+                continue
+
+            ext = os.path.splitext(field_value.filename or "")[1].lstrip(".").lower()
+            if ext not in ALLOWED_EXTENSIONS:
+                return _reject(
+                    "Unsupported file type",
+                    f"Extension '.{ext}' is not allowed. Accepted: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
                 )
 
-            if content_length > MAX_FILE_SIZE_BYTES:
-                logger.warning(f"Rejected oversized upload: {content_length} bytes")
-                return JSONResponse(
-                    {
-                        "error": f"File size {content_length} bytes exceeds the 25MB limit.",
-                        "max_size_bytes": MAX_FILE_SIZE_BYTES,
-                    },
-                    status_code=413,
+            content = await field_value.read()
+            if len(content) > MAX_FILE_SIZE_BYTES:
+                return _reject(
+                    "File too large",
+                    f"File exceeds the 50 MB limit ({len(content) // MB} MB uploaded).",
                 )
+
+            await field_value.seek(0)
 
         return await call_next(request)

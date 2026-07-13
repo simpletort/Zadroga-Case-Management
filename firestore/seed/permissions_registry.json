@@ -1,0 +1,78 @@
+{
+  "collection": "permissions_registry",
+  "document": "default",
+  "data": {
+    "permissions": [
+      { "id": "cases.read",           "displayName": "Read Cases",                 "category": "cases",           "description": "View case records and details" },
+      { "id": "cases.write",          "displayName": "Write Cases",                "category": "cases",           "description": "Create and edit case records" },
+      { "id": "cases.status.update",  "displayName": "Update Case Status",         "category": "cases",           "description": "Transition a case to a new status" },
+      { "id": "cases.approve",        "displayName": "Approve Cases",              "category": "cases",           "description": "Give attorney sign-off for filing" },
+      { "id": "cases.delete",         "displayName": "Delete Cases",               "category": "cases",           "description": "Permanently remove a case record" },
+
+      { "id": "clients.read",         "displayName": "Read Clients",               "category": "clients",         "description": "View client profile and contact info" },
+      { "id": "clients.write",        "displayName": "Write Clients",              "category": "clients",         "description": "Create and edit client records" },
+
+      { "id": "documents.read",       "displayName": "Read Documents",             "category": "documents",       "description": "View uploaded documents" },
+      { "id": "documents.upload",     "displayName": "Upload Documents",           "category": "documents",       "description": "Upload new documents to a case" },
+      { "id": "documents.verify",     "displayName": "Verify Documents",           "category": "documents",       "description": "Mark documents as reviewed and verified" },
+      { "id": "documents.override",   "displayName": "Override Documents",         "category": "documents",       "description": "Override document verification decisions" },
+
+      { "id": "tasks.read",           "displayName": "Read Tasks",                 "category": "tasks",           "description": "View tasks in the queue" },
+      { "id": "tasks.write",          "displayName": "Write Tasks",                "category": "tasks",           "description": "Create and edit tasks" },
+      { "id": "tasks.complete",       "displayName": "Complete Tasks",             "category": "tasks",           "description": "Mark tasks as completed" },
+      { "id": "tasks.assign",         "displayName": "Assign Tasks",               "category": "tasks",           "description": "Reassign tasks to other users" },
+      { "id": "tasks.skip",           "displayName": "Skip Tasks",                 "category": "tasks",           "description": "Skip a task with a documented reason" },
+      { "id": "tasks.delete",         "displayName": "Delete Tasks",               "category": "tasks",           "description": "Hard-delete task records" },
+
+      { "id": "communications.read",  "displayName": "Read Communications",        "category": "communications",  "description": "View case communications and notes" },
+      { "id": "communications.write", "displayName": "Write Communications",       "category": "communications",  "description": "Add communications and notes to a case" },
+
+      { "id": "timeline.read",        "displayName": "Read Timeline",              "category": "timeline",        "description": "View the case event timeline" },
+
+      { "id": "expenses.read",        "displayName": "Read Expenses",              "category": "expenses",        "description": "View case expenses" },
+      { "id": "expenses.write",       "displayName": "Write Expenses",             "category": "expenses",        "description": "Record and edit case expenses" },
+
+      { "id": "disbursements.read",   "displayName": "Read Disbursements",         "category": "disbursements",   "description": "View settlement disbursement records" },
+      { "id": "disbursements.write",  "displayName": "Write Disbursements",        "category": "disbursements",   "description": "Record and edit disbursement entries" },
+      { "id": "disbursements.approve","displayName": "Approve Disbursements",      "category": "disbursements",   "description": "Approve disbursement for payment" },
+
+      { "id": "staff.read",           "displayName": "Read Staff",                 "category": "staff",           "description": "View staff profiles and assignments" },
+      { "id": "staff.write",          "displayName": "Write Staff",                "category": "staff",           "description": "Edit staff profile fields" },
+      { "id": "staff.manage",         "displayName": "Manage Staff",               "category": "staff",           "description": "Create, deactivate, and assign roles to staff users" },
+
+      { "id": "reports.read",         "displayName": "Read Reports",               "category": "reports",         "description": "View KPI reports and dashboards" },
+      { "id": "analytics.read",       "displayName": "Read Analytics",             "category": "analytics",       "description": "View firm-wide analytics data" },
+
+      { "id": "settings.read",        "displayName": "Read Settings",              "category": "settings",        "description": "View firm and campaign settings" },
+      { "id": "settings.write",       "displayName": "Write Settings",             "category": "settings",        "description": "Update firm and campaign settings" },
+
+      { "id": "auditLog.read",        "displayName": "Read Audit Log",             "category": "audit",           "description": "View the system audit log" },
+
+      { "id": "system.admin",         "displayName": "System Administration",      "category": "system",          "description": "Full system access — role and permission management" },
+
+      { "id": "storage.signed_url",           "displayName": "Get Signed URLs",            "category": "storage", "description": "Request signed GCS URLs for upload or download" },
+      { "id": "storage.metadata.read",        "displayName": "Read Storage Metadata",      "category": "storage", "description": "View file metadata records" },
+      { "id": "storage.lifecycle.read",       "displayName": "Read Storage Lifecycle",     "category": "storage", "description": "View GCS lifecycle rules" },
+      { "id": "storage.lifecycle.write",      "displayName": "Write Storage Lifecycle",    "category": "storage", "description": "Update GCS lifecycle rules" },
+      { "id": "storage.hold.write",           "displayName": "Place Storage Holds",        "category": "storage", "description": "Place legal holds on stored files" },
+      { "id": "storage.upload.write",         "displayName": "Register Uploads",           "category": "storage", "description": "Register new file uploads" },
+      { "id": "storage.upload.read",          "displayName": "Read Upload Status",         "category": "storage", "description": "Poll virus-scan and upload status" },
+      { "id": "storage.documents.read",       "displayName": "Read Stored Documents",      "category": "storage", "description": "Read documents from permanent GCS storage" },
+      { "id": "storage.documents.write",      "displayName": "Write Stored Documents",     "category": "storage", "description": "Write documents to permanent GCS storage" },
+      { "id": "storage.read",                 "displayName": "Read Storage",               "category": "storage", "description": "Read files from storage" },
+      { "id": "storage.delete",               "displayName": "Delete Storage Files",       "category": "storage", "description": "Delete files from storage" },
+
+      { "id": "feeConfig.read",               "displayName": "Read Fee Config",            "category": "feeConfig",       "description": "View fee configuration settings" },
+      { "id": "feeConfig.write",              "displayName": "Write Fee Config",           "category": "feeConfig",       "description": "Update fee configuration settings" },
+
+      { "id": "notifications.read",           "displayName": "Read Notifications",         "category": "notifications",   "description": "View notifications" },
+      { "id": "notifications.send",           "displayName": "Send Notifications",         "category": "notifications",   "description": "Send notifications to users" },
+
+      { "id": "settlement.read",              "displayName": "Read Settlements",           "category": "settlement",      "description": "View settlement records" },
+      { "id": "settlement.write",             "displayName": "Write Settlements",          "category": "settlement",      "description": "Create and edit settlement records" },
+      { "id": "settlement.approve",           "displayName": "Approve Settlements",        "category": "settlement",      "description": "Approve settlement disbursements" },
+      { "id": "settlement.delete",            "displayName": "Delete Settlements",         "category": "settlement",      "description": "Delete settlement records" }
+    ]
+  },
+  "_comment": "Apply with: firebase firestore:import or a one-time admin script. Collection: permissions_registry, Document ID: default"
+}

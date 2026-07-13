@@ -9,50 +9,62 @@ All file access in SimpleTort goes through signed URLs so that:
 
 import datetime
 import logging
+import urllib.request
+from functools import lru_cache
 from typing import Optional
 
+import google.auth
+import google.auth.transport.requests
+import google.oauth2.service_account
+from google.auth import iam
 from google.cloud import storage as gcs
 
 from app.config import get_settings
-from app.models.storage import DocumentCategory, UrlAction
+from app.models.storage import UrlAction
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-# Maps DocumentCategory enum values to GCS path templates.
-# {caseId} is replaced at runtime for case-scoped categories.
-CATEGORY_PATHS: dict[str, str] = {
-    DocumentCategory.temp_lead_attachments: "temp-lead-attachments",
-    DocumentCategory.medical_records:       "{caseId}/medical-records",
-    DocumentCategory.proof_of_presence:     "{caseId}/proof-of-presence",
-    DocumentCategory.id_documents:          "{caseId}/id-documents",
-    DocumentCategory.legal_forms:           "{caseId}/legal-forms",
-    DocumentCategory.vcf_documents:         "{caseId}/vcf-documents",
-    DocumentCategory.settlement_docs:       "{caseId}/settlement-docs",
-    DocumentCategory.client_uploads:        "client-uploads",
-}
+MAX_SIGNED_URL_EXPIRY_MINUTES = 15
 
 
-def build_blob_path(
-    category: DocumentCategory,
-    file_name: str,
-    case_id: Optional[str] = None,
-) -> str:
+def _fetch_metadata_email() -> str:
+    """Fetch the default service account email from the GCE metadata server."""
+    url = (
+        "http://metadata.google.internal/computeMetadata/v1"
+        "/instance/service-accounts/default/email"
+    )
+    req = urllib.request.Request(url, headers={"Metadata-Flavor": "Google"})
+    with urllib.request.urlopen(req, timeout=2) as resp:
+        return resp.read().decode().strip()
+
+
+@lru_cache(maxsize=1)
+def _get_signing_credentials() -> google.oauth2.service_account.Credentials:
     """
-    Construct the GCS blob path for a given category and file name.
+    Build IAM-backed signing credentials for Cloud Run environments.
 
-    Raises ValueError if a case-scoped category is used without a caseId.
+    Cloud Run uses Compute Engine tokens (no embedded private key), so we
+    delegate signing to the IAM signBlob API.  The service account must have
+    the 'Service Account Token Creator' role on itself.
     """
-    template = CATEGORY_PATHS[category]
-    if "{caseId}" in template:
-        if not case_id:
-            raise ValueError(
-                "category '{}' requires a caseId".format(category.value)
-            )
-        path = template.format(caseId=case_id)
-    else:
-        path = template
-    return "{}/{}".format(path, file_name)
+    sa_email = settings.gcs_service_account_email or _fetch_metadata_email()
+
+    auth_request = google.auth.transport.requests.Request()
+    credentials, _ = google.auth.default()
+    credentials.refresh(auth_request)
+
+    signer = iam.Signer(
+        request=auth_request,
+        credentials=credentials,
+        service_account_email=sa_email,
+    )
+    return google.oauth2.service_account.Credentials(
+        signer=signer,
+        service_account_email=sa_email,
+        token_uri="https://oauth2.googleapis.com/token",
+        scopes=["https://www.googleapis.com/auth/devstorage.read_write"],
+    )
 
 
 def generate_signed_url(
@@ -61,19 +73,32 @@ def generate_signed_url(
     action: UrlAction,
     content_type: Optional[str] = None,
     expiry_minutes: Optional[int] = None,
-) -> tuple[str, datetime.datetime]:
+    inline: bool = False,
+) -> tuple[str, datetime.datetime, bool]:
     """
     Generate a v4 signed URL for the given blob path.
 
+    TTL is capped at MAX_SIGNED_URL_EXPIRY_MINUTES regardless of the caller-supplied value.
+
     Returns:
-        (signed_url, expires_at)
+        (signed_url, expires_at, ttl_was_capped)
+        ttl_was_capped is True when the requested TTL exceeded the cap.
     """
+    requested_minutes = expiry_minutes
     if expiry_minutes is None:
         expiry_minutes = (
             settings.signed_url_write_expiry_minutes
             if action == UrlAction.write
             else settings.signed_url_read_expiry_minutes
         )
+
+    ttl_was_capped = expiry_minutes > MAX_SIGNED_URL_EXPIRY_MINUTES
+    if ttl_was_capped:
+        logger.warning(
+            "Signed URL TTL capped: requested=%dmin cap=%dmin path=%s",
+            expiry_minutes, MAX_SIGNED_URL_EXPIRY_MINUTES, blob_path,
+        )
+        expiry_minutes = MAX_SIGNED_URL_EXPIRY_MINUTES
 
     expiration = datetime.timedelta(minutes=expiry_minutes)
     http_method = "PUT" if action == UrlAction.write else "GET"
@@ -85,18 +110,21 @@ def generate_signed_url(
         "version": "v4",
         "expiration": expiration,
         "method": http_method,
+        "credentials": _get_signing_credentials(),
     }
     if action == UrlAction.write and content_type:
         kwargs["content_type"] = content_type
+    if action == UrlAction.read and inline:
+        kwargs["response_disposition"] = "inline"
 
     signed_url = blob.generate_signed_url(**kwargs)
     expires_at = datetime.datetime.utcnow() + expiration
 
     logger.info(
-        "Signed URL generated: action=%s path=%s expiry=%dmin",
-        action.value, blob_path, expiry_minutes,
+        "Signed URL generated: action=%s path=%s expiry=%dmin capped=%s",
+        action.value, blob_path, expiry_minutes, ttl_was_capped,
     )
-    return signed_url, expires_at
+    return signed_url, expires_at, ttl_was_capped
 
 
 def update_lifecycle_rules(

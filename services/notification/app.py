@@ -9,6 +9,13 @@ POST /tasks/sms
     Must return 2xx for Cloud Tasks to consider the task done; returns 4xx
     for payload errors (no retry) and 5xx for transient failures (will retry).
 
+POST /internal/reminders/schedule
+    Schedule 48-hour and 7-day document reminder tasks for a case.
+    Called by case-reminder-trigger Cloud Function (Firestore event-driven).
+
+DELETE /internal/reminders/{case_id}
+    Cancel pending document reminder tasks when a client uploads all documents.
+
 POST /webhooks/twilio/status
     Twilio status callback.  Updates the delivery record with the final
     message status (delivered, failed, undelivered) from Twilio.
@@ -40,14 +47,24 @@ from typing import Optional
 import google.auth.transport.requests
 import google.oauth2.id_token
 from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field
+from shared.middlewares import (
+    AuthMiddleware,
+    ErrorHandlerMiddleware,
+    LoggingMiddleware,
+    get_cors_origins,
+)
 
 from config import get_settings
 from logging_config import get_logger, setup_logging
 from services.firestore_client import get_db
 from services.opt_out_service import clear_opt_out, record_opt_out
+from services.email_service import EmailDispatchResult, send_email
+from services.template_service import render_template, TemplateNotFoundError, TemplateDisabledError, MissingVariableError
 from services.sms_service import SmsDispatchResult, send_sms
+from services.tasks_service import cancel_document_reminders, enqueue_document_reminders, enqueue_email
 
 logger = get_logger(__name__)
 
@@ -69,6 +86,25 @@ async def lifespan(app: FastAPI):
     logger.info("notification_service_shutdown")
 
 
+# ── Route → permission map (used by AuthMiddleware) ───────────────────────────
+
+_ROUTE_PERMISSIONS: list[tuple[str, str, str]] = [
+    # Cloud Tasks SMS/Email handlers — called by Cloud Tasks service account
+    ("POST", r"^/tasks/sms$",                              "notifications.send"),
+    ("POST", r"^/tasks/email$",                            "notifications.send"),
+    # Internal email endpoints — called by internal services
+    ("POST", r"^/internal/email/preview$",                 "notifications.read"),
+    ("POST", r"^/internal/email/send$",                    "notifications.send"),
+    ("POST", r"^/internal/email/enqueue$",                 "notifications.send"),
+    # Reminder scheduling — called by case-reminder-trigger Cloud Function
+    ("POST", r"^/internal/reminders/schedule$",            "notifications.send"),
+    ("DELETE", r"^/internal/reminders/[^/]+$",             "notifications.send"),
+    # Twilio webhooks — authenticated via Twilio signature (no RBAC needed)
+    ("POST", r"^/webhooks/twilio/status$",                 "notifications.webhook"),
+    ("POST", r"^/webhooks/twilio/inbound$",                "notifications.webhook"),
+]
+
+
 app = FastAPI(
     title="ZAD Notification Service",
     version="1.0.0",
@@ -76,6 +112,27 @@ app = FastAPI(
     openapi_url="/openapi.json",
     docs_url="/docs",
     lifespan=lifespan,
+)
+
+_settings = get_settings()
+
+app.add_middleware(ErrorHandlerMiddleware)
+app.add_middleware(LoggingMiddleware)
+app.add_middleware(
+    AuthMiddleware,
+    route_permissions=_ROUTE_PERMISSIONS,
+    roles_firestore_project=_settings.gcp_project_id,
+    roles_firestore_database=_settings.roles_firestore_database_id,
+    trusted_service_accounts=[
+        e.strip() for e in _settings.trusted_service_accounts.split(",") if e.strip()
+    ],
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_cors_origins(_settings.environment),
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Authorization", "Content-Type", "x-apigateway-api-userinfo"],
 )
 
 
@@ -87,6 +144,38 @@ class SmsTaskPayload(BaseModel):
     templateId: str = Field(..., description="Firestore SMS template document ID")
     variables: dict = Field(default_factory=dict)
     caseId: Optional[str] = Field(None)
+    requestId: Optional[str] = Field(None)
+
+
+class EmailTaskPayload(BaseModel):
+    """Payload sent by Cloud Tasks for email dispatch."""
+    to: str = Field(..., description="Recipient email address")
+    templateId: str = Field(..., description="Firestore email template document ID")
+    variables: dict = Field(default_factory=dict)
+    caseId: Optional[str] = Field(None)
+    requestId: Optional[str] = Field(None)
+
+
+class ScheduleRemindersPayload(BaseModel):
+    """
+    Payload for POST /internal/reminders/schedule.
+    Sent by intake-form-dispatcher when a case advances to "Pending Client Info".
+    """
+    caseId: str = Field(..., description="Firestore case ID, e.g. ZAD-2024-01-0001")
+    phone: str = Field(..., description="E.164 client phone number")
+    clientName: str = Field(..., description="Client full name for template substitution")
+    missingDocsList: str = Field(
+        ...,
+        description=(
+            "Newline-separated list of outstanding documents, "
+            "e.g. '• Medical records\\n• Authorization form'"
+        ),
+    )
+    portalUrl: str = Field(..., description="Client portal upload URL")
+    deadlineLabel: str = Field(
+        ...,
+        description="Human-readable 48-hour deadline, e.g. 'April 5, 2026 at 5:00 PM'",
+    )
     requestId: Optional[str] = Field(None)
 
 
@@ -204,6 +293,207 @@ async def handle_sms_task(request: Request, payload: SmsTaskPayload):
     }
 
 
+# ── Email task handler ────────────────────────────────────────────────────────
+
+@app.post("/tasks/email", status_code=status.HTTP_200_OK)
+async def handle_email_task(request: Request, payload: EmailTaskPayload):
+    """
+    Cloud Tasks HTTP handler — dispatch a single email.
+
+    Returns 200 whether or not SendGrid succeeded — the outcome is recorded
+    in the delivery record.  A 5xx would cause Cloud Tasks to retry and
+    potentially double-send.
+    """
+    _verify_oidc_token(request)
+
+    logger.info(
+        "email_task_received",
+        template_id=payload.templateId,
+        case_id=payload.caseId,
+        request_id=payload.requestId,
+        to_masked="[REDACTED]",
+    )
+
+    db = get_db()
+
+    result: EmailDispatchResult = await send_email(
+        to=payload.to,
+        template_id=payload.templateId,
+        variables=payload.variables,
+        db=db,
+        case_id=payload.caseId,
+        request_id=payload.requestId,
+    )
+
+    return {
+        "deliveryId": result.delivery_id,
+        "status": result.status,
+        "success": result.success,
+        "messageId": result.message_id,
+    }
+
+
+# ── Direct email dispatch (internal / testing) ────────────────────────────────
+
+class EmailSendPayload(BaseModel):
+    """Payload for POST /internal/email/send — direct dispatch without Cloud Tasks."""
+    to: str = Field(..., description="Recipient email address")
+    templateId: str = Field(..., description="Firestore email template document ID")
+    variables: dict = Field(default_factory=dict)
+    caseId: Optional[str] = Field(None)
+    requestId: Optional[str] = Field(None)
+
+
+class EmailEnqueuePayload(BaseModel):
+    """Payload for POST /internal/email/enqueue — async via Cloud Tasks."""
+    to: str = Field(..., description="Recipient email address")
+    templateId: str = Field(..., description="Firestore email template document ID")
+    variables: dict = Field(default_factory=dict)
+    caseId: Optional[str] = Field(None)
+    requestId: Optional[str] = Field(None)
+    delaySeconds: int = Field(0, description="Schedule delay in seconds (0 = immediate)")
+
+
+class EmailPreviewPayload(BaseModel):
+    """Payload for POST /internal/email/preview — renders template, no sending."""
+    templateId: str = Field(..., description="Firestore email template document ID")
+    variables: dict = Field(default_factory=dict)
+    caseId: Optional[str] = Field(None)
+
+
+@app.post("/internal/email/preview", status_code=status.HTTP_200_OK)
+async def preview_email(request: Request, payload: EmailPreviewPayload):
+    """
+    Render an email template and return the full output — no email is sent.
+
+    Use this to verify:
+    * Template exists in Firestore
+    * Variables are substituted correctly
+    * Subject and HTML body look right
+
+    Returns the rendered subject, plain-text body, and HTML body.
+    """
+    _verify_oidc_token(request)
+
+    logger.info(
+        "email_preview_requested",
+        template_id=payload.templateId,
+        case_id=payload.caseId,
+    )
+
+    try:
+        rendered = await render_template(payload.templateId, payload.variables, get_db())
+    except TemplateNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except TemplateDisabledError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except MissingVariableError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    settings = get_settings()
+    return {
+        "templateId": payload.templateId,
+        "from": f"{settings.sendgrid_from_name} <{settings.sendgrid_from_email}>",
+        "subject": rendered.subject,
+        "htmlBody": rendered.html_body,
+        "smsSafe": rendered.sms_safe,
+        "charCount": len(rendered.sms_safe),
+    }
+
+
+@app.post("/internal/email/send", status_code=status.HTTP_200_OK)
+async def send_email_direct(request: Request, payload: EmailSendPayload):
+    """
+    Send an email directly (synchronous — waits for SendGrid response).
+
+    Use this endpoint for:
+    * Testing / verification without Cloud Tasks
+    * Internal services that need immediate confirmation
+
+    For production high-volume dispatch use ``POST /internal/email/enqueue``
+    which queues via Cloud Tasks and returns instantly.
+
+    Authentication: OIDC Bearer token (skipped in dev).
+    """
+    _verify_oidc_token(request)
+
+    logger.info(
+        "email_send_direct_requested",
+        template_id=payload.templateId,
+        case_id=payload.caseId,
+        request_id=payload.requestId,
+        to_masked="[REDACTED]",
+    )
+
+    result: EmailDispatchResult = await send_email(
+        to=payload.to,
+        template_id=payload.templateId,
+        variables=payload.variables,
+        db=get_db(),
+        case_id=payload.caseId,
+        request_id=payload.requestId,
+    )
+
+    return {
+        "deliveryId": result.delivery_id,
+        "status": result.status,
+        "success": result.success,
+        "messageId": result.message_id,
+        "statusCode": result.status_code,
+        "errorMessage": result.error_message,
+    }
+
+
+@app.post("/internal/email/enqueue", status_code=status.HTTP_200_OK)
+async def enqueue_email_task(request: Request, payload: EmailEnqueuePayload):
+    """
+    Enqueue an email via Cloud Tasks (async — returns immediately).
+
+    Cloud Tasks will call ``POST /tasks/email`` with the payload.
+    Retries automatically on failure (up to queue max-attempts).
+
+    Authentication: OIDC Bearer token (skipped in dev).
+    """
+    _verify_oidc_token(request)
+
+    logger.info(
+        "email_enqueue_requested",
+        template_id=payload.templateId,
+        case_id=payload.caseId,
+        request_id=payload.requestId,
+        delay_seconds=payload.delaySeconds,
+        to_masked="[REDACTED]",
+    )
+
+    try:
+        task_name = enqueue_email(
+            to=payload.to,
+            template_id=payload.templateId,
+            variables=payload.variables,
+            case_id=payload.caseId,
+            request_id=payload.requestId,
+            delay_seconds=payload.delaySeconds,
+        )
+    except Exception as exc:
+        logger.error(
+            "email_enqueue_failed",
+            template_id=payload.templateId,
+            case_id=payload.caseId,
+            error=str(exc),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to enqueue email: {exc}",
+        )
+
+    return {
+        "queued": True,
+        "taskName": task_name,
+        "caseId": payload.caseId,
+        "templateId": payload.templateId,
+    }
+
+
 # ── Twilio status callback ────────────────────────────────────────────────────
 
 @app.post("/webhooks/twilio/status", status_code=status.HTTP_204_NO_CONTENT)
@@ -294,6 +584,105 @@ async def twilio_inbound(request: Request):
         '<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
         media_type="text/xml",
     )
+
+
+# ── Document reminder scheduling ──────────────────────────────────────────────
+
+@app.post("/internal/reminders/schedule", status_code=status.HTTP_200_OK)
+async def schedule_document_reminders(
+    request: Request,
+    payload: ScheduleRemindersPayload,
+):
+    """
+    Schedule 48-hour and 7-day document reminder SMS tasks for a case.
+
+    Called by the ``case-reminder-trigger`` Cloud Function (Firestore event-driven)
+    when a case advances to the "Pending Client Info" status.  Creates two named
+    Cloud Tasks:
+
+    * ``doc-reminder-{caseId}-48hr``  — fires 48 hours from now
+    * ``doc-reminder-{caseId}-7day``  — fires 7 days from now
+
+    Both tasks are idempotent — re-scheduling an already-pending case is safe
+    (the existing task is preserved and its name is returned).
+
+    Authentication: OIDC Bearer token (Cloud Tasks or internal callers).
+    """
+    _verify_oidc_token(request)
+
+    logger.info(
+        "reminder_schedule_requested",
+        case_id=payload.caseId,
+        request_id=payload.requestId,
+        to_masked="[REDACTED]",
+    )
+
+    try:
+        result = await enqueue_document_reminders(
+            case_id=payload.caseId,
+            phone=payload.phone,
+            client_name=payload.clientName,
+            missing_docs_list=payload.missingDocsList,
+            portal_url=payload.portalUrl,
+            deadline_label=payload.deadlineLabel,
+            request_id=payload.requestId,
+            db=get_db(),
+        )
+    except Exception as exc:
+        logger.error(
+            "reminder_schedule_failed",
+            case_id=payload.caseId,
+            error=str(exc),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to schedule reminders: {exc}",
+        )
+
+    logger.info(
+        "reminders_scheduled",
+        case_id=payload.caseId,
+        task_48hr=result.get("task_48hr"),
+        task_7day=result.get("task_7day"),
+    )
+
+    return {
+        "caseId": payload.caseId,
+        "scheduled": True,
+        "task48hr": result.get("task_48hr"),
+        "task7day": result.get("task_7day"),
+    }
+
+
+@app.delete("/internal/reminders/{case_id}", status_code=status.HTTP_200_OK)
+async def cancel_document_reminder_tasks(case_id: str, request: Request):
+    """
+    Cancel pending 48-hour and 7-day document reminder tasks for a case.
+
+    Should be called when the client uploads all required documents so they
+    do not receive reminders after compliance.  Safe to call even if one or
+    both tasks have already fired — missing tasks are silently ignored.
+
+    Authentication: OIDC Bearer token.
+    """
+    _verify_oidc_token(request)
+
+    logger.info("reminder_cancel_requested", case_id=case_id)
+
+    result = await cancel_document_reminders(case_id=case_id, db=get_db())
+
+    logger.info(
+        "reminders_cancel_complete",
+        case_id=case_id,
+        cancelled_48hr=result["cancelled_48hr"],
+        cancelled_7day=result["cancelled_7day"],
+    )
+
+    return {
+        "caseId": case_id,
+        "cancelled48hr": result["cancelled_48hr"],
+        "cancelled7day": result["cancelled_7day"],
+    }
 
 
 # ── Health check ──────────────────────────────────────────────────────────────

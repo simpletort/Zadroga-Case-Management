@@ -72,9 +72,13 @@ class TestAggregationService:
         assert counts["Pending Paralegal Review"] == 5
         assert counts["Settled"] == 2
 
+    @patch("app.services.aggregation_service.get_active_statuses")
     @patch("app.services.aggregation_service.get_firestore_client")
-    def test_bottleneck_excludes_recent_cases(self, mock_db):
+    def test_bottleneck_excludes_recent_cases(self, mock_db, mock_active_statuses):
         from app.services.aggregation_service import get_bottleneck_cases
+
+        # Pin active statuses so the test is independent of firmSettings
+        mock_active_statuses.return_value = ["Pending Paralegal Review"]
 
         now = datetime.now(timezone.utc)
 
@@ -92,16 +96,8 @@ class TestAggregationService:
             "lastStatusChangedAt": now - timedelta(days=45),
         }
 
-        call_count = {"n": 0}
-
-        def side_effect(*args, **kwargs):
-            call_count["n"] += 1
-            if call_count["n"] == 3:
-                return [recent_doc, old_doc]
-            return []
-
         mock_db.return_value.collection.return_value \
-            .where.return_value.stream.side_effect = side_effect
+            .where.return_value.stream.return_value = [recent_doc, old_doc]
 
         results = get_bottleneck_cases(threshold_days=30)
         case_ids = [r["caseId"] for r in results]
@@ -112,11 +108,10 @@ class TestAggregationService:
 
 class TestLeadConversionRoute:
 
-    @patch("app.routes.leads.get_leads_in_period")
+    @patch("app.routes.leads.get_all_cases")
     def test_qualification_rate_calculation(self, mock_leads):
         from fastapi.testclient import TestClient
         from main import app
-        from app.utils.auth import require_min_role
 
         now = datetime.now(timezone.utc)
 
@@ -129,13 +124,12 @@ class TestLeadConversionRoute:
             {"status": "Does Not Qualify",         "createdAt": now},
         ]
 
-        # Override the base auth dependency — all role checks call this
         from app.utils.auth import get_current_user
         app.dependency_overrides[get_current_user] = \
             lambda: {"uid": "test", "role": "junior_partner"}
 
         client = TestClient(app)
-        response = client.get("/reports/lead-conversion?period_days=30")
+        response = client.get("/reports/lead-conversion")
 
         assert response.status_code == 200
         data = response.json()

@@ -24,13 +24,19 @@ class WTCHealthProgramStatus(str, Enum):
 
 
 class CaseStatus(str, Enum):
-    NEW_LEAD     = "New Lead"
-    SCREENED     = "Screened"
-    QUALIFIED    = "Qualified"
-    DISQUALIFIED = "Disqualified"
-    NEEDS_REVIEW = "Needs Review"
-    ACTIVE       = "Active"
-    CLOSED       = "Closed"
+    NEW_LEAD                    = "New Lead"
+    SCREENED                    = "Screened"
+    QUALIFIED                   = "Qualified"
+    DISQUALIFIED                = "Disqualified"
+    NEEDS_REVIEW                = "Needs Review"
+    ACTIVE                      = "Active"
+    CLOSED                      = "Closed"
+    ATTORNEY_REVIEW             = "attorney_review"
+    MANUAL_REVIEW_REQUIRED      = "manual_review_required"
+    SETTLEMENT_PENDING_APPROVAL = "settlement_pending_approval"
+    PENDING_CLIENT_INFO         = "Pending Client Information"
+    VCF_SUBMITTED               = "VCF - Submitted"
+    AWARDED                     = "Awarded"
 
 
 class VCFEligibility(str, Enum):
@@ -84,6 +90,8 @@ class LeadRequest(BaseModel):
     lastName:              str                    = Field(..., min_length=1, max_length=100)
     email:                 EmailStr
     phone:                 str                    = Field(..., examples=["+12125551234"])
+    ssn:                   Optional[str]          = Field(None, description= "Client SSN")
+    dateOfBirth:           Optional[date]         = Field(None, description="Client date of birth (YYYY-MM-DD)")
     address:               Optional[Address]      = None
     exposureLocation:      str                    = Field(..., min_length=1, max_length=500)
     exposureDates:         ExposureDates
@@ -121,6 +129,16 @@ class LeadRequest(BaseModel):
             raise ValueError(f"phone number not valid: {raw!r}")
         return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
 
+    @field_validator("ssn")
+    @classmethod
+    def normalize_ssn_field(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        digits = "".join(c for c in v if c.isdigit())
+        if len(digits) != 9:
+            raise ValueError("ssn must contain exactly 9 digits")
+        return digits
+
     @field_validator("conditions", mode="before")
     @classmethod
     def normalise_conditions(cls, v) -> list[str]:
@@ -141,7 +159,7 @@ class UpdateStatusRequest(BaseModel):
 # ── Response models ───────────────────────────────────────────────────────────
 
 class LeadCreatedResponse(BaseModel):
-    leadId:             str           = Field(..., pattern=r'^ZAD-\d{4}-\d{2}-\d{4}$')
+    leadId:             str           = Field(..., pattern=r'^[A-Z]+-\d{4}-\d{2}-\d{4}$')
     status:             CaseStatus
     vcfScreeningStatus: VCFEligibility
     requestId:          str
@@ -164,25 +182,49 @@ class ErrorResponse(BaseModel):
 
 # ── Firestore document model ──────────────────────────────────────────────────
 
+
+class Assignment(BaseModel):
+    assignedAdmin : Optional[str] = None,
+    assignedAttorney : Optional[str] = None,
+    assignedParalegal : Optional[str] = None,
+    assignmentDate : Optional[datetime] = None
+        
 class CaseDocument(BaseModel):
     """
     Mirrors a Firestore /cases/{caseId} document.
     Created by case_service.create_case(); read back by get_case().
+
+    status / wtcHealthProgramStatus are plain str, not the CaseStatus /
+    WTCHealthProgramStatus enums: once a case leaves the lead-intake stage,
+    case-development advances `status` through its own admin-configurable
+    registry (firmSettings/case_statuses — e.g. "Pending Paralegal Review",
+    "Approved for Filing"), and external intake integrations (e.g.
+    google-forms/apps-script/Code.gs) patch `wtcHealthProgramStatus` directly
+    in Firestore. get_case() must be able to deserialize those values; the
+    enums remain authoritative for lead-intake's own writes (LeadRequest,
+    UpdateStatusRequest).
     """
     caseId:       str
-    status:       CaseStatus    = CaseStatus.NEW_LEAD
+    status:       str    = CaseStatus.NEW_LEAD.value
     vcfEligibility: VCFEligibility = VCFEligibility.PENDING
+
+    # True = still a lead; False = converted to an active case (flipped by update_case_status when status → Active)
+    isLead: bool = True
 
     # Claimant
     firstName:             str
     lastName:              str
     email:                 str
     phone:                 str
+    ssn:                   Optional[str] = None
+    ssn_encrypted:         Optional[str] = None
+    ssn_hash:              Optional[str] = None   # SHA-256 for duplicate detection queries
+    dateOfBirth:           Optional[date]    = None  # optional — not always provided at intake
     address:               Optional[Address] = None
     exposureLocation:      str
     exposureDateStart:     date
     exposureDateEnd:       date
-    wtcHealthProgramStatus: WTCHealthProgramStatus
+    wtcHealthProgramStatus: str
     priorAttorney:         bool
     conditions:            list[str] = Field(default_factory=list)
 
@@ -191,8 +233,11 @@ class CaseDocument(BaseModel):
     referralCode:    Optional[str] = None
     partnerId:       str
 
+    #Assignment
+    assignment: Optional[Assignment] = None
+
     # Workflow
-    assignedTo:          Optional[str]      = None
+    #assignedTo:          Optional[str]      = None
     portalLoginAt:       Optional[datetime] = None
     followupTaskCreated: bool               = False
     followupTaskId:      Optional[str]      = None
@@ -209,8 +254,21 @@ class CaseDocument(BaseModel):
     vcfScreeningDetails: Optional[dict] = None
 
     def to_firestore_dict(self) -> dict:
-        """Serialize to a Firestore-safe plain dict (dates/enums → strings)."""
-        data = self.model_dump()
+        """
+        Serialize to a Firestore-safe plain dict (dates/enums → strings).
+
+        SECURITY: plaintext `ssn` is NEVER written to Firestore.
+        If ssn is present, it is encrypted into `ssn_encrypted` via Cloud KMS CMEK.
+        """
+        # Exclude plaintext ssn from Firestore payload — always.
+        data = self.model_dump(exclude={"ssn"})
+
+        # Encrypt SSN → ssn_encrypted if plaintext was provided
+        if self.ssn:
+            from shared.crypto import encrypt_ssn, compute_ssn_hash
+            data["ssn_encrypted"] = encrypt_ssn(self.ssn)
+            data["ssn_hash"] = compute_ssn_hash(self.ssn)
+
         for key, val in data.items():
             if isinstance(val, (date, datetime)):
                 data[key] = val.isoformat()
@@ -238,6 +296,8 @@ class CaseDocument(BaseModel):
             lastName=lead.lastName,
             email=str(lead.email),
             phone=lead.phone,
+            ssn=lead.ssn,  # plaintext; to_firestore_dict() encrypts before write
+            dateOfBirth=lead.dateOfBirth,
             address=lead.address,
             exposureLocation=lead.exposureLocation,
             exposureDateStart=lead.exposureDates.start,

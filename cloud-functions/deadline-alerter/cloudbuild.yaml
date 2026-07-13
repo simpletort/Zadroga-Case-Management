@@ -1,0 +1,62 @@
+# Cloud Build pipeline for deadline-alerter Cloud Function.
+#
+# Triggered daily by Cloud Scheduler (HTTP trigger).
+# Substitution variables:
+#   _SERVICE_NAME — deadline-alerter
+#   _REPO         — Artifact Registry repo URL
+#   _REGION       — GCP region (e.g. us-central1)
+#   _ENV          — dev | test | prod
+#   _SCHEDULER_SA — Cloud Scheduler service account email
+
+steps:
+  # ── Tests ──────────────────────────────────────────────────────────────
+  - name: "python:3.11-slim"
+    dir: "cloud-functions/deadline-alerter"
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        pip install -r requirements.txt pytest pytest-mock --quiet
+        pytest tests/ -v --tb=short
+
+  # ── Build image ────────────────────────────────────────────────────────
+  - name: "gcr.io/cloud-builders/docker"
+    dir: "cloud-functions/deadline-alerter"
+    args:
+      - build
+      - "-t"
+      - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+      - "-t"
+      - "$_REPO/$_SERVICE_NAME:latest"
+      - "."
+
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"]
+
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "$_REPO/$_SERVICE_NAME:latest"]
+
+  # ── Deploy to Cloud Run ────────────────────────────────────────────────
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - "$_SERVICE_NAME"
+      - "--image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+      - "--region=$_REGION"
+      - "--platform=managed"
+      - "--no-allow-unauthenticated"
+      - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,ENV=$_ENV,FIRESTORE_DATABASE_ID=simpletort-dev,PUBSUB_TOPIC_NOTIFICATIONS=notification-requested,PUBSUB_TOPIC_ENROLLMENT=enrollment-status-changes,ALERT_DAYS=90,60,30"
+      - "--memory=512Mi"
+      - "--cpu=1"
+      - "--timeout=300s"
+      - "--max-instances=1"
+      - "--min-instances=0"
+
+images:
+  - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+  - "$_REPO/$_SERVICE_NAME:latest"
+
+options:
+  logging: CLOUD_LOGGING_ONLY

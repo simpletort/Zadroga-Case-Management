@@ -1,0 +1,149 @@
+# SimpleTort – Lead Qualification Workflow
+# Deployed as a GCP Cloud Workflow resource named: lead-qualification
+#
+# Triggered by: POST /api/v1/workflows/trigger { workflow_type: "lead-qualification" }
+# Arguments:    { lead_id: string, case_id: string }
+#
+# Steps:
+#   1. Fetch lead data from Lead Intake & Screening Service
+#   2. Run VCF eligibility check
+#   3. If qualified → update case status + trigger client-onboarding
+#   4. If not qualified → mark lead as rejected + notify marketing
+#
+# Inter-service calls use service-account OIDC tokens via Cloud Run invoker IAM.
+#
+# Service URLs are injected at deploy time via --env-vars-file=env/{ENV}.yaml
+# See cloud_workflows/env/ for per-environment URL lists.
+
+main:
+  params: [args]
+  steps:
+
+    - init:
+        assign:
+          - lead_id: ${args.lead_id}
+          - case_id: ${args.case_id}
+          - workflow_id: "lead-qualification"
+          - deploy_env: ${sys.get_env("DEPLOY_ENV")}
+          - lead_service_url: ${sys.get_env("LEAD_INTAKE_URL")}
+          - case_dev_url: ${sys.get_env("CASE_DEVELOPMENT_URL")}
+          - orchestrator_url: ${sys.get_env("WORKFLOW_ORCHESTRATOR_URL")}
+          - notification_url: ${sys.get_env("NOTIFICATION_URL")}
+
+    # Fetch configurable step parameters from Firestore via the orchestrator.
+    - fetch_step_config:
+        call: http.get
+        args:
+          url: ${orchestrator_url + "/internal/workflow-step-config/" + workflow_id}
+          auth:
+            type: OIDC
+        result: step_config_response
+
+    - set_config:
+        assign:
+          - config: ${step_config_response.body}
+
+    - fetch_lead:
+        call: http.get
+        args:
+          url: ${lead_service_url + "/api/v1/leads/" + lead_id + "/status"}
+          auth:
+            type: OIDC
+        result: lead_response
+
+    - check_lead_status:
+        switch:
+          - condition: ${lead_response.body.status == "pending_qualification"}
+            next: run_eligibility_check
+          - condition: ${lead_response.body.status == "qualified"}
+            next: already_qualified
+        next: lead_not_actionable
+
+    - run_eligibility_check:
+        call: http.post
+        args:
+          url: ${lead_service_url + "/api/v1/leads/" + lead_id + "/qualify"}
+          auth:
+            type: OIDC
+          body:
+            case_id: ${case_id}
+        result: qualify_response
+
+    - evaluate_qualification:
+        switch:
+          - condition: ${qualify_response.body.qualified == true}
+            next: update_case_qualified
+        next: update_case_rejected
+
+    - update_case_qualified:
+        call: http.put
+        args:
+          url: ${case_dev_url + "/api/v1/cases/" + case_id + "/status"}
+          auth:
+            type: OIDC
+          body:
+            status: "client_onboarding"
+            updated_by: "workflow-orchestrator"
+        result: update_response
+
+    - notify_qualified:
+        call: http.post
+        args:
+          url: ${notification_url + "/api/v1/notifications/email"}
+          auth:
+            type: OIDC
+          body:
+            template: "lead_qualified"
+            case_id: ${case_id}
+            lead_id: ${lead_id}
+        result: notify_response
+
+    - already_qualified:
+        return:
+          status: "already_qualified"
+          case_id: ${case_id}
+          lead_id: ${lead_id}
+
+    - update_case_rejected:
+        call: http.put
+        args:
+          url: ${case_dev_url + "/api/v1/cases/" + case_id + "/status"}
+          auth:
+            type: OIDC
+          body:
+            status: "rejected"
+            rejection_reason: ${qualify_response.body.rejection_reason}
+        result: reject_update_response
+
+    - notify_rejected:
+        call: http.post
+        args:
+          url: ${notification_url + "/api/v1/notifications/email"}
+          auth:
+            type: OIDC
+          body:
+            template: "lead_rejected"
+            case_id: ${case_id}
+            lead_id: ${lead_id}
+            reason: ${qualify_response.body.rejection_reason}
+        result: reject_notify_response
+        next: return_rejected
+
+    - return_rejected:
+        return:
+          status: "rejected"
+          case_id: ${case_id}
+          lead_id: ${lead_id}
+          reason: ${qualify_response.body.rejection_reason}
+
+    - lead_not_actionable:
+        return:
+          status: "skipped"
+          reason: "lead not in pending_qualification state"
+          case_id: ${case_id}
+
+    - return_qualified:
+        return:
+          status: "qualified"
+          case_id: ${case_id}
+          lead_id: ${lead_id}

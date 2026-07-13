@@ -1,0 +1,41 @@
+# SimpleTort – Connectivity Test Workflow
+# Deployed as a GCP Cloud Workflow resource named: connectivity-test
+#
+# A minimal diagnostic workflow. Fetches one lead and one case to verify
+# that OIDC auth and service URL substitution variables are working correctly
+# for the deployed environment.
+#
+# Arguments: { lead_id: string, case_id: string }
+# Returns:   { lead: <lead record>, case: <case status> }
+
+main:
+  params: [args]
+  steps:
+
+    - init:
+        assign:
+          - lead_id: ${args.lead_id}
+          - case_id: ${args.case_id}
+          - lead_service_url: ${sys.get_env("LEAD_INTAKE_URL")}
+          - case_dev_url: ${sys.get_env("CASE_DEVELOPMENT_URL")}
+
+    - fetch_lead:
+        call: http.get
+        args:
+          url: ${lead_service_url + "/api/v1/leads/" + lead_id}
+          auth:
+            type: OIDC
+        result: lead_response
+
+    - fetch_case:
+        call: http.get
+        args:
+          url: ${case_dev_url + "/api/v1/dashboard/cases/" + case_id}
+          auth:
+            type: OIDC
+        result: case_response
+
+    - return_results:
+        return:
+          lead: ${lead_response.body}
+          case: ${case_response.body}

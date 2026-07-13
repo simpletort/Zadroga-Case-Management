@@ -16,6 +16,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     # ── Runtime environment ───────────────────────────────────────────────
     app_env: str = Field("development", alias="APP_ENV")
+    environment: str = Field("production", alias="ENVIRONMENT")
     gcp_project_id: str = Field("simpletort-prod", alias="GCP_PROJECT_ID")
 
     @property
@@ -30,14 +31,41 @@ class Settings(BaseSettings):
     )
 
     # Firestore collection names (suffixed with -dev in non-prod)
+    # Default changed from "sms_templates" to "notificationTemplates" — all
+    # email and SMS templates live in notificationTemplates in Firestore.
+    # Override via FIRESTORE_SMS_TEMPLATES_COLLECTION env var if needed.
     sms_templates_collection: str = Field(
-        "sms_templates", alias="FIRESTORE_SMS_TEMPLATES_COLLECTION"
+        "notificationTemplates", alias="FIRESTORE_SMS_TEMPLATES_COLLECTION"
     )
     opt_outs_collection: str = Field(
         "notification_opt_outs", alias="FIRESTORE_OPT_OUTS_COLLECTION"
     )
     delivery_records_collection: str = Field(
         "sms_delivery_records", alias="FIRESTORE_DELIVERY_RECORDS_COLLECTION"
+    )
+    cases_collection: str = Field(
+        "cases", alias="FIRESTORE_CASES_COLLECTION"
+    )
+
+    # Roles Firestore database (for AuthMiddleware permission lookups)
+    roles_firestore_database_id: str = Field("(default)", alias="ROLES_FIRESTORE_DATABASE_ID")
+
+    # Comma-separated service account emails trusted for service-to-service calls
+    trusted_service_accounts: str = Field("", alias="TRUSTED_SERVICE_ACCOUNTS")
+    email_delivery_records_collection: str = Field(
+        "email_delivery_records", alias="FIRESTORE_EMAIL_DELIVERY_RECORDS_COLLECTION"
+    )
+    notifications_collection: str = Field(
+        "notifications", alias="FIRESTORE_NOTIFICATIONS_COLLECTION"
+    )
+
+    # ── SendGrid ──────────────────────────────────────────────────────────
+    sendgrid_api_key: str = Field("", alias="SENDGRID_API_KEY")
+    sendgrid_from_email: str = Field(
+        "notifications@zadroga.com", alias="SENDGRID_FROM_EMAIL"
+    )
+    sendgrid_from_name: str = Field(
+        "", alias="SENDGRID_FROM_NAME"
     )
 
     # ── Twilio ────────────────────────────────────────────────────────────

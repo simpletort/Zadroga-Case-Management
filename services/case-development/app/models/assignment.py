@@ -11,6 +11,7 @@ class AssignRequest(BaseModel):
 class AssignmentInfo(BaseModel):
     assigned_paralegal: Optional[str] = None
     assigned_paralegal_name: Optional[str] = None
+    assigned_by: Optional[str] = None
     assignment_date: Optional[datetime] = None
 
 

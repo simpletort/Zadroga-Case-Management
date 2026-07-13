@@ -14,7 +14,7 @@ import logging
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Query, Request
 
 from app.models.storage import (
     DocumentCategory,
@@ -27,7 +27,6 @@ from app.models.storage import (
 )
 from app.services.metadata_service import query_case_documents, update_document_metadata
 from app.utils.audit import AuditAction, log_audit_event
-from app.utils.auth import require_min_role
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/storage", tags=["Documents"])
@@ -49,7 +48,6 @@ def list_case_documents(
     uploaded_before: Optional[datetime] = Query(None, description="ISO-8601 — return documents uploaded before this timestamp"),
     page_size: int = Query(20, ge=1, le=100, description="Max documents per page (1–100)"),
     page_token: Optional[str] = Query(None, description="file_id of the last document from the previous page"),
-    user: dict = Depends(require_min_role("documents_read")),
 ):
     """
     Returns documents for a case ordered by uploadedAt DESC.
@@ -72,7 +70,6 @@ def list_case_documents(
 
     log_audit_event(
         action=AuditAction.list_documents,
-        user=user,
         request=request,
         case_id=case_id,
         metadata={
@@ -95,7 +92,6 @@ def patch_document_metadata(
     case_id: str,
     file_id: str,
     request: DocumentMetadataUpdateRequest,
-    user: dict = Depends(require_min_role("documents_update")),
 ):
     """
     Partially updates document metadata.  Only provided fields are written;
@@ -109,7 +105,6 @@ def patch_document_metadata(
 
     log_audit_event(
         action=AuditAction.update_metadata,
-        user=user,
         request=http_request,
         document_id=file_id,
         case_id=case_id,

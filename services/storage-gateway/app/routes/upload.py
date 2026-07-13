@@ -14,7 +14,7 @@ GET /api/v1/storage/upload/{fileId}/status
 
 import logging
 
-from fastapi import APIRouter, Depends, Request, Security
+from fastapi import APIRouter, Request
 
 from app.models.storage import (
     UploadRegistrationRequest,
@@ -23,7 +23,6 @@ from app.models.storage import (
 )
 from app.services.upload_service import get_upload_status, register_upload
 from app.utils.audit import AuditAction, log_audit_event
-from app.utils.auth import require_min_role
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/storage/upload", tags=["Upload"])
@@ -38,7 +37,6 @@ router = APIRouter(prefix="/api/v1/storage/upload", tags=["Upload"])
 def register_file_upload(
     request: Request,
     body: UploadRegistrationRequest,
-    user: dict = Depends(require_min_role("upload_register")),
 ):
     """
     Creates a pending upload record in Firestore and returns a pre-signed
@@ -48,24 +46,26 @@ def register_file_upload(
     After upload, the virus-scanner Cloud Function is triggered automatically
     by the GCS object-finalise event.
     """
+    user = getattr(request.state, "user", {})
+    uploaded_by = user.get("uid", "unknown")
+
     result = register_upload(
         file_name=body.file_name,
-        category=body.category,
+        folder_path=body.folder_path,
         content_type=body.content_type,
-        uploaded_by=user.get("email") or user.get("uid", "unknown"),
+        uploaded_by=uploaded_by,
         case_id=body.case_id,
         size_bytes=body.size_bytes,
     )
 
     log_audit_event(
         action=AuditAction.upload_register,
-        user=user,
         request=request,
         document_id=result["file_id"],
         case_id=body.case_id,
         resource=result["staging_path"],
         metadata={
-            "category": body.category.value,
+            "folder_path": body.folder_path,
             "content_type": body.content_type,
             "size_bytes": body.size_bytes,
         },
@@ -81,7 +81,6 @@ def register_file_upload(
 )
 def get_file_upload_status(
     file_id: str,
-    _user: dict = Depends(require_min_role("upload_status_read")),
 ):
     """
     Returns the current scan_status for a given fileId.

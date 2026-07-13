@@ -1,35 +1,65 @@
 from app.utils.firestore import get_firestore_client
-from app.utils.date_helpers import now_utc, days_ago, to_firestore_timestamp
+from app.utils.date_helpers import now_utc, days_ago, to_firestore_timestamp, parse_dt, start_of_month, months_ago
+from app.models.report import MonthlyRevenueItem
 from typing import List, Dict
 import logging
 from collections import defaultdict
+from dateutil.relativedelta import relativedelta
 
 logger = logging.getLogger(__name__)
+
+# Maps internal Firestore status values to display names used across the UI.
 
 ALL_STATUSES = [
     "New Lead",
     "Pending Client Information",
     "Pending Paralegal Review",
     "Pending Attorney Review",
-    "Ready for Filing",
+    "Pending Senior Review",
+    "Approved for Filing",
     "VCF - Submitted",
     "Awarded",
     "Settled",
+    "Closed",
     "Does Not Qualify",
     "Withdrawn",
+    "Disqualified",
     "On Hold",
 ]
 
-ACTIVE_STATUSES = [
+# Fallback used when firmSettings/case_statuses is absent or has no activeStatuses field.
+DEFAULT_ACTIVE_STATUSES = [
     "New Lead",
     "Pending Client Information",
     "Pending Paralegal Review",
     "Pending Attorney Review",
-    "Ready for Filing",
+    "Pending Senior Review",
+    "Approved for Filing",
     "VCF - Submitted",
     "Awarded",
     "On Hold",
 ]
+
+
+def get_active_statuses(db=None) -> List[str]:
+    """
+    Load active case statuses from ``firmSettings/case_statuses.activeStatuses[]``.
+
+    Falls back to ``DEFAULT_ACTIVE_STATUSES`` when the document is absent,
+    the field is missing, or Firestore is unreachable — so KPI queries always
+    return a result even if the config document has not been seeded yet.
+    """
+    try:
+        _db = db or get_firestore_client()
+        doc = _db.collection("firmSettings").document("case_statuses").get()
+        if doc.exists:
+            statuses = (doc.to_dict() or {}).get("statuses", [])
+            active = [s["value"] for s in statuses if s.get("category") == "active"]
+            if active:
+                return active
+    except Exception as exc:
+        logger.warning("Failed to load activeStatuses from firmSettings/case_statuses: %s", exc)
+    return DEFAULT_ACTIVE_STATUSES
 
 
 def get_cases_by_status() -> List[dict]:
@@ -41,18 +71,34 @@ def get_cases_by_status() -> List[dict]:
     for doc in docs:
         data = doc.to_dict()
         status = data.get("status", "Unknown")
-        last_status_change = data.get("lastStatusChangedAt")
+        last_status_change = parse_dt(data.get("lastStatusChangedAt"))
+        created_at = parse_dt(data.get("createdAt"))
 
-        if last_status_change:
-            days_in_status = (now - last_status_change).days
+        ref = last_status_change or created_at
+        if ref is not None:
+            # Ensure both sides are naive UTC for subtraction safety
+            ref_naive = ref.replace(tzinfo=None) if ref.tzinfo else ref
+            now_naive = now.replace(tzinfo=None)
+            days_in_status = (now_naive - ref_naive).days
         else:
-            created_at = data.get("createdAt")
-            days_in_status = (now - created_at).days if created_at else 0
+            days_in_status = 0
 
         status_buckets[status].append(days_in_status)
 
+    # Build ordered status list from firmSettings/case_statuses, fall back to ALL_STATUSES
+    try:
+        cs_doc = db.collection("firmSettings").document("case_statuses").get()
+        cs_data = cs_doc.to_dict() if cs_doc.exists else {}
+        ordered_statuses = [s["value"] for s in sorted(
+            cs_data.get("statuses", []), key=lambda x: x.get("order", 999)
+        ) if s.get("value")]
+    except Exception:
+        ordered_statuses = []
+    if not ordered_statuses:
+        ordered_statuses = ALL_STATUSES
+
     result = []
-    for status in ALL_STATUSES:
+    for status in ordered_statuses:
         days_list = status_buckets.get(status, [])
         count = len(days_list)
         avg_days = round(sum(days_list) / count, 1) if count > 0 else None
@@ -92,12 +138,309 @@ def get_leads_in_period(days: int) -> List[dict]:
     return get_cases_created_in_period(days)
 
 
+def get_all_cases() -> List[dict]:
+    db = get_firestore_client()
+    return [doc.to_dict() for doc in db.collection("cases").stream()]
+
+
+def get_monthly_revenue(num_months: int = 12) -> List[MonthlyRevenueItem]:
+    """
+    Return per-calendar-month filings, awards, and gross award totals
+    for the last ``num_months`` months (most recent last).
+
+    ``filings``         — cases whose ``createdAt`` falls in that month.
+    ``awards``          — cases whose ``status`` is Awarded or Settled AND
+                          whose ``updatedAt`` falls in that month (proxy for
+                          when the award was recorded; replace with a dedicated
+                          ``awardedAt`` field if one is added to case docs).
+    ``gross_award_total`` — sum of ``gross_award`` from the canonical settlement
+                          subcollection doc (doc.id == data["calculation_id"])
+                          for each awarded case in that month.
+
+    ⚠️  AMBER zone — review this function before merging.  The aggregation
+    makes N+1 Firestore reads (one subcollection read per awarded case in the
+    window).  For small case volumes this is acceptable; revisit with a
+    denormalised field on the case doc if query latency becomes a problem.
+    """
+    db = get_firestore_client()
+    now = now_utc()
+
+    # Build ordered list of (month_start, month_end, label) for the window.
+    # month_start is inclusive, month_end is exclusive (== next month start).
+    buckets = []
+    for i in range(num_months - 1, -1, -1):
+        month_start = start_of_month(now - relativedelta(months=i))
+        month_end   = month_start + relativedelta(months=1)
+        label       = month_start.strftime("%b %Y")   # e.g. "Jul 2025"
+        buckets.append((month_start, month_end, label))
+
+    window_start = to_firestore_timestamp(buckets[0][0])
+    window_end   = to_firestore_timestamp(buckets[-1][1])
+
+    # --- filings: cases created within the window ---
+    filing_counts: Dict[str, int] = defaultdict(int)
+    for doc in (
+        db.collection("cases")
+        .where("createdAt", ">=", window_start)
+        .where("createdAt", "<",  window_end)
+        .stream()
+    ):
+        data = doc.to_dict() or {}
+        dt = parse_dt(data.get("createdAt"))
+        if dt:
+            label = start_of_month(dt).strftime("%b %Y")
+            filing_counts[label] += 1
+
+    # --- awards: Awarded/Settled cases whose updatedAt is in the window ---
+    # Also collect gross_award_total per month from settlement subcollections.
+    award_counts:  Dict[str, int]   = defaultdict(int)
+    award_totals:  Dict[str, float] = defaultdict(float)
+
+    for award_status in ("Awarded", "Settled"):
+        for doc in (
+            db.collection("cases")
+            .where("status",    "==", award_status)
+            .where("updatedAt", ">=", window_start)
+            .where("updatedAt", "<",  window_end)
+            .stream()
+        ):
+            data  = doc.to_dict() or {}
+            dt    = parse_dt(data.get("updatedAt"))
+            if not dt:
+                continue
+            label = start_of_month(dt).strftime("%b %Y")
+            award_counts[label] += 1
+
+            # Look up canonical settlement calculation doc for this case
+            # Single settlement document: cases/{caseId}/settlement/settlement
+            settle_ref = doc.reference.collection("settlement").document("settlement")
+            settle_snap = settle_ref.get()
+            if settle_snap.exists:
+                settle_data = settle_snap.to_dict() or {}
+                calcs = settle_data.get("calculations", {})
+                for calc_id, calc_data in calcs.items():
+                    if not isinstance(calc_data, dict):
+                        continue
+                    try:
+                        award_totals[label] += float(calc_data.get("gross_award", 0))
+                    except (TypeError, ValueError):
+                        logger.warning(
+                            "Non-numeric gross_award on case %s calculation %s",
+                            doc.id, calc_id,
+                        )
+                    break  # only one canonical calc per case
+
+    return [
+        MonthlyRevenueItem(
+            month=label,
+            filings=filing_counts.get(label, 0),
+            awards=award_counts.get(label, 0),
+            gross_award_total=round(award_totals.get(label, 0.0), 2),
+        )
+        for _, _, label in buckets
+    ]
+
+
+VCF_ELIGIBLE_STATUSES = {"VCF - Submitted", "Awarded", "Settled"}
+
+
+def _get_converted_statuses(db=None) -> set:
+    try:
+        _db = db or get_firestore_client()
+        doc = _db.collection("firmSettings").document("case_statuses").get()
+        statuses = (doc.to_dict() or {}).get("statuses", []) if doc.exists else []
+        converted = {s["value"] for s in statuses if s.get("category") in ("active", "closed")}
+        if converted:
+            return converted
+    except Exception as exc:
+        logger.warning("Failed to load converted statuses from firmSettings: %s", exc)
+    return {
+        "New Lead", "Pending Client Information", "Pending Paralegal Review",
+        "Pending Attorney Review", "Pending Senior Review", "Approved for Filing",
+        "VCF - Submitted", "Awarded", "Settled", "Rejected", "On Hold",
+    }
+
+
+FUNNEL_STAGE_DEFS = [
+    ("Initial Contact",  lambda c: True),
+    ("Qualified Lead",   lambda c: c.get("status") not in {"Does Not Qualify", "Withdrawn", "Closed", "Rejected"}),
+    ("Intake Form Sent", None),
+    ("Form Submitted",   None),
+]
+
+
+def get_lead_conversion_analytics() -> dict:
+    db = get_firestore_client()
+    cases = [doc.to_dict() for doc in db.collection("cases").stream()]
+    total = len(cases)
+
+    converted_statuses = _get_converted_statuses(db)
+
+    # --- KPIs ---
+    converted = sum(1 for c in cases if c.get("status") in converted_statuses)
+    conversion_rate = round(converted / total * 100, 1) if total else 0.0
+
+    # --- Best channel ---
+    channel_leads: Dict[str, int] = defaultdict(int)
+    channel_converted: Dict[str, int] = defaultdict(int)
+    for c in cases:
+        src = c.get("marketingSource") or "Unknown"
+        channel_leads[src] += 1
+        if c.get("status") in converted_statuses:
+            channel_converted[src] += 1
+
+    best_channel = None
+    best_rate = -1.0
+    for src, leads in channel_leads.items():
+        rate = channel_converted[src] / leads if leads else 0
+        if rate > best_rate:
+            best_rate = rate
+            best_channel = src
+
+    campaigns = sorted(
+        [
+            {
+                "campaign": src,
+                "total_leads": leads,
+                "converted": channel_converted[src],
+                "conversion_rate": round(channel_converted[src] / leads * 100, 1) if leads else 0.0,
+            }
+            for src, leads in channel_leads.items()
+        ],
+        key=lambda x: x["total_leads"],
+        reverse=True,
+    )
+
+    # --- Monthly volume (all-time, grouped by createdAt month) ---
+    monthly_leads: Dict[str, int] = defaultdict(int)
+    monthly_converted: Dict[str, int] = defaultdict(int)
+    for c in cases:
+        dt = parse_dt(c.get("createdAt"))
+        if not dt:
+            continue
+        label = start_of_month(dt).strftime("%b %Y")
+        monthly_leads[label] += 1
+        if c.get("status") in converted_statuses:
+            monthly_converted[label] += 1
+
+    from datetime import datetime as _dt
+    sorted_months = sorted(monthly_leads.keys(),
+                           key=lambda m: _dt.strptime(m, "%b %Y"))
+    monthly_volume = [
+        {"month": m, "leads": monthly_leads[m], "converted": monthly_converted.get(m, 0)}
+        for m in sorted_months
+    ]
+
+    # --- Funnel ---
+    funnel = []
+    prev_count = None
+    for stage_name, predicate in FUNNEL_STAGE_DEFS:
+        if predicate is None:
+            funnel.append({"stage": stage_name, "count": None, "drop_off_pct": None})
+            continue
+        count = sum(1 for c in cases if predicate(c))
+        drop_off = None
+        if prev_count is not None and prev_count > 0:
+            drop_off = round((1 - count / prev_count) * 100, 1)
+        funnel.append({"stage": stage_name, "count": count, "drop_off_pct": drop_off})
+        prev_count = count
+
+    return {
+        "total_leads": total,
+        "converted": converted,
+        "conversion_rate": conversion_rate,
+        "best_channel": best_channel,
+        "monthly_volume": monthly_volume,
+        "funnel": funnel,
+        "campaigns": campaigns,
+    }
+
+
+def get_expense_summary() -> dict:
+    """
+    Aggregate all case-level expenses from cases/{caseId}/settlement/expenses items[].
+    Returns total_expenses and per-category breakdown with percentages.
+    """
+    db = get_firestore_client()
+    category_totals: Dict[str, float] = defaultdict(float)
+
+    try:
+        for case_doc in db.collection("cases").stream():
+            settle_ref = case_doc.reference.collection("settlement").document("settlement")
+            settle_doc = settle_ref.get()
+            if not settle_doc.exists:
+                continue
+            for item in (settle_doc.to_dict() or {}).get("expenses", {}).get("items", []):
+                category = item.get("category") or "Other"
+                try:
+                    category_totals[category] += float(item.get("amount", 0))
+                except (TypeError, ValueError):
+                    logger.warning("Non-numeric amount in settlement/expenses for case %s", case_doc.id)
+    except Exception as exc:
+        logger.warning("get_expense_summary failed: %s", exc)
+
+    total = round(sum(category_totals.values()), 2)
+    categories = [
+        {
+            "category": cat,
+            "total_amount": round(amt, 2),
+            "percentage": round((amt / total * 100), 1) if total else 0.0,
+        }
+        for cat, amt in sorted(category_totals.items(), key=lambda x: x[1], reverse=True)
+    ]
+    return {"categories": categories, "total_expenses": total}
+
+
+def get_ytd_expenses() -> float:
+    """
+    Sum case expenses for the current calendar year.
+
+    Expenses are stored as an ``items`` array on the document at
+    ``cases/{caseId}/settlement/expenses``.  Each item has ``amount``
+    (float) and ``addedAt`` (Firestore Timestamp).  We iterate all
+    cases, fetch each settlement/expenses doc, and sum items whose
+    ``addedAt`` falls on or after Jan 1 of this year.
+    """
+    db = get_firestore_client()
+    now = now_utc()
+    ytd_start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+    ytd_start_naive = ytd_start.replace(tzinfo=None)
+    total = 0.0
+
+    try:
+        for case_doc in db.collection("cases").stream():
+            settle_ref = (
+                case_doc.reference
+                .collection("settlement")
+                .document("settlement")
+            )
+            settle_doc = settle_ref.get()
+            if not settle_doc.exists:
+                continue
+            items = (settle_doc.to_dict() or {}).get("expenses", {}).get("items", [])
+            for item in items:
+                added_at = parse_dt(item.get("addedAt"))
+                if added_at is None:
+                    continue
+                added_naive = added_at.replace(tzinfo=None) if added_at.tzinfo else added_at
+                if added_naive < ytd_start_naive:
+                    continue
+                try:
+                    total += float(item.get("amount", 0))
+                except (TypeError, ValueError):
+                    logger.warning("Non-numeric amount in settlement/expenses for case %s", case_doc.id)
+    except Exception as exc:
+        logger.warning("get_ytd_expenses failed: %s", exc)
+
+    return round(total, 2)
+
+
 def get_bottleneck_cases(threshold_days: int = 30) -> List[dict]:
     db = get_firestore_client()
     now = now_utc()
     bottlenecks = []
 
-    for status in ACTIVE_STATUSES:
+    for status in get_active_statuses(db):
         docs = (
             db.collection("cases")
             .where("status", "==", status)
@@ -110,8 +453,10 @@ def get_bottleneck_cases(threshold_days: int = 30) -> List[dict]:
                 continue
             days_stuck = (now - last_change).days
             if days_stuck >= threshold_days:
+                display_status = data.get("status", "")
                 bottlenecks.append({
                     **data,
+                    "status": display_status,
                     "caseId": doc.id,
                     "days_stuck": days_stuck,
                 })
@@ -119,35 +464,96 @@ def get_bottleneck_cases(threshold_days: int = 30) -> List[dict]:
     return bottlenecks
 
 
+def _performance_rating(avg_days: float) -> float:
+    """Linear scale: <=30 days → 5.0, >=180 days → 1.0."""
+    if avg_days <= 30:
+        return 5.0
+    if avg_days >= 180:
+        return 1.0
+    return round(5.0 - (avg_days - 30) * (4.0 / 150), 1)
+
+
 def get_staff_case_counts() -> Dict[str, dict]:
     db = get_firestore_client()
-    cutoff = to_firestore_timestamp(days_ago(30))
+    now = now_utc()
+    cutoff_30d = to_firestore_timestamp(days_ago(30))
+    ytd_start = to_firestore_timestamp(now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0))
 
     result: Dict[str, dict] = defaultdict(lambda: {
         "active_cases": 0,
         "cases_completed_period": 0,
-        "overdue_tasks": 0,
+        "cases_handled_ytd": 0,
+        "days_to_close_list": [],
+        "display_name": None,
     })
 
-    for status in ACTIVE_STATUSES:
+    for status in get_active_statuses(db):
         docs = db.collection("cases").where("status", "==", status).stream()
         for doc in docs:
             data = doc.to_dict()
-            uid = data.get("assignedParalegal") or data.get("assignedAttorney")
+            assignment = data.get("assignment", {})
+            uid = assignment.get("assignedParalegal") or assignment.get("assignedAttorney")
             if uid:
                 result[uid]["active_cases"] += 1
+                if not result[uid]["display_name"]:
+                    result[uid]["display_name"] = (
+                        assignment.get("assignedParalegalName")
+                        or assignment.get("assignedAttorneyName")
+                    )
 
-    settled_docs = (
+    # Last-30-day settled cases (cases_completed_period)
+    for doc in (
         db.collection("cases")
         .where("status", "==", "Settled")
-        .where("settledAt", ">=", cutoff)
+        .where("settledAt", ">=", cutoff_30d)
         .stream()
-    )
-    for doc in settled_docs:
+    ):
         data = doc.to_dict()
-        uid = data.get("assignedParalegal") or data.get("assignedAttorney")
+        assignment = data.get("assignment", {})
+        uid = assignment.get("assignedParalegal") or assignment.get("assignedAttorney")
         if uid:
             result[uid]["cases_completed_period"] += 1
+            if not result[uid]["display_name"]:
+                result[uid]["display_name"] = (
+                    assignment.get("assignedParalegalName")
+                    or assignment.get("assignedAttorneyName")
+                )
+
+    # YTD settled cases — also compute avg_days_to_close
+    for doc in (
+        db.collection("cases")
+        .where("status", "==", "Settled")
+        .where("settledAt", ">=", ytd_start)
+        .stream()
+    ):
+        data = doc.to_dict()
+        assignment = data.get("assignment", {})
+        uid = assignment.get("assignedParalegal") or assignment.get("assignedAttorney")
+        if not uid:
+            continue
+        result[uid]["cases_handled_ytd"] += 1
+        if not result[uid]["display_name"]:
+            result[uid]["display_name"] = (
+                assignment.get("assignedParalegalName")
+                or assignment.get("assignedAttorneyName")
+            )
+        settled_at = parse_dt(data.get("settledAt"))
+        created_at = parse_dt(data.get("createdAt"))
+        if settled_at and created_at:
+            s = settled_at.replace(tzinfo=None) if settled_at.tzinfo else settled_at
+            c = created_at.replace(tzinfo=None) if created_at.tzinfo else created_at
+            result[uid]["days_to_close_list"].append((s - c).days)
+
+    # Resolve avg_days_to_close and performance_rating
+    for uid, data in result.items():
+        days_list = data.pop("days_to_close_list", [])
+        if days_list:
+            avg = round(sum(days_list) / len(days_list), 1)
+            data["avg_days_to_close"] = avg
+            data["performance_rating"] = _performance_rating(avg)
+        else:
+            data["avg_days_to_close"] = None
+            data["performance_rating"] = None
 
     return result
 
@@ -159,7 +565,7 @@ def get_overdue_tasks_per_user() -> Dict[str, int]:
 
     overdue = (
         db.collection_group("tasks")
-        .where("status", "==", "Open")
+        .where("status", "in", ["pending", "in_progress", "overdue"])
         .where("dueAt", "<", now_ts)
         .stream()
     )

@@ -61,7 +61,10 @@ class StaffPerformanceItem(BaseModel):
     role: str
     active_cases: int
     cases_completed_period: int
+    cases_handled_ytd: int = 0
+    avg_days_to_close: Optional[float] = None
     avg_days_to_review: Optional[float] = None
+    performance_rating: Optional[float] = None
     overdue_tasks: int
 
 
@@ -69,6 +72,48 @@ class StaffPerformanceResponse(BaseModel):
     generated_at: datetime
     period_days: int
     staff: list[StaffPerformanceItem]
+
+
+class MonthlyLeadVolumeItem(BaseModel):
+    month: str
+    leads: int
+    converted: int
+
+
+class FunnelStageItem(BaseModel):
+    stage: str
+    count: Optional[int] = None
+    drop_off_pct: Optional[float] = None
+
+
+class CampaignItem(BaseModel):
+    campaign: str
+    total_leads: int
+    converted: int
+    conversion_rate: float
+
+
+class LeadConversionAnalyticsResponse(BaseModel):
+    generated_at: datetime
+    total_leads: int
+    converted: int
+    conversion_rate: float
+    best_channel: Optional[str]
+    monthly_volume: list[MonthlyLeadVolumeItem]
+    funnel: list[FunnelStageItem]
+    campaigns: list[CampaignItem] = []
+
+
+class ExpenseCategoryItem(BaseModel):
+    category: str
+    total_amount: float
+    percentage: float
+
+
+class ExpenseSummaryResponse(BaseModel):
+    generated_at: datetime
+    categories: list[ExpenseCategoryItem]
+    total_expenses: float
 
 
 class LeadConversionResponse(BaseModel):
@@ -81,3 +126,17 @@ class LeadConversionResponse(BaseModel):
     conversion_rate: float
     avg_days_lead_to_active: Optional[float] = None
     disqualified: int
+
+
+class MonthlyRevenueItem(BaseModel):
+    month: str                  # e.g. "Jul 2025"
+    filings: int                # cases created in that calendar month
+    awards: int                 # cases moved to Awarded/Settled in that month
+    gross_award_total: float    # sum of gross_award from canonical settlement docs
+
+
+class MonthlyRevenueResponse(BaseModel):
+    generated_at: datetime
+    months: list[MonthlyRevenueItem]
+    ytd_expenses: float = 0.0
+    net_margin: Optional[float] = None

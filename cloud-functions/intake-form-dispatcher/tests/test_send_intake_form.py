@@ -173,7 +173,7 @@ class TestHappyPath:
         _post(app, {"caseId": "ZAD-2026-03-0001"})
         cases_col.document.return_value.update.assert_called()
         update_payload = cases_col.document.return_value.update.call_args[0][0]
-        assert update_payload["status"] == "Pending Client Info"
+        assert update_payload["status"] == "Pending Client Information"
 
     def test_email_sent_true_when_sendgrid_succeeds(self, app, mock_db, mock_form_config, mock_sendgrid):
         _setup_happy_db(mock_db)
@@ -188,13 +188,30 @@ class TestHappyPath:
         assert resp.status_code == 200
         assert resp.get_json()["emailSent"] is False
 
-    def test_pending_client_info_not_re_advanced(self, app, mock_db, mock_form_config, mock_sendgrid):
-        _, cases_col = _setup_happy_db(mock_db)
+    def test_resend_pending_client_information_returns_200(self, app, mock_db, mock_form_config, mock_sendgrid):
+        token_ref, cases_col = _setup_happy_db(mock_db)
         cases_col.document.return_value.get.return_value = \
-            _make_case_snap(data={**CASE_DATA, "status": "Pending Client Info"})
+            _make_case_snap(data={**CASE_DATA, "status": "Pending Client Information"})
+        # Simulate no existing unused token found (stream returns empty)
+        mock_db.collection.return_value.where.return_value.where.return_value \
+            .order_by.return_value.limit.return_value.stream.return_value = iter([])
         resp = _post(app, {"caseId": "ZAD-2026-03-0001"})
         assert resp.status_code == 200
-        cases_col.document.return_value.update.assert_not_called()
+        data = resp.get_json()
+        assert "tokenId" in data
+        assert "previewUrl" in data
+
+    def test_resend_does_not_advance_status(self, app, mock_db, mock_form_config, mock_sendgrid):
+        token_ref, cases_col = _setup_happy_db(mock_db)
+        cases_col.document.return_value.get.return_value = \
+            _make_case_snap(data={**CASE_DATA, "status": "Pending Client Information"})
+        mock_db.collection.return_value.where.return_value.where.return_value \
+            .order_by.return_value.limit.return_value.stream.return_value = iter([])
+        _post(app, {"caseId": "ZAD-2026-03-0001"})
+        # case update should NOT have been called with status change
+        for call in cases_col.document.return_value.update.call_args_list:
+            payload = call[0][0]
+            assert "status" not in payload, "resend must not advance case status"
 
 
 # ── Pre-fill URL builder ───────────────────────────────────────────────────────

@@ -1,0 +1,50 @@
+steps:
+  - name: "python:3.11-slim"
+    dir: "services/task-management"
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        pip install -r requirements.txt
+        pip install -e ../../shared
+        pytest tests/ -v --tb=short
+
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      - build
+      - "-t"
+      - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+      - "-t"
+      - "$_REPO/$_SERVICE_NAME:latest"
+      - "-f"
+      - "services/task-management/Dockerfile"
+      - "."
+
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"]
+
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "$_REPO/$_SERVICE_NAME:latest"]
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - "$_SERVICE_NAME"
+      - "--image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+      - "--region=$_REGION"
+      - "--platform=managed"
+      - "--no-allow-unauthenticated"
+      - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,ENVIRONMENT=$_ENV,FIRESTORE_DATABASE_ID=$_FIRESTORE_DATABASE_ID,TASK_SERVICE_URL=$_TASK_SERVICE_URL,SERVICE_ACCOUNT_EMAIL=$_SERVICE_ACCOUNT_EMAIL,TRUSTED_SERVICE_ACCOUNTS=$_TRUSTED_SERVICE_ACCOUNTS"
+      - "--memory=512Mi"
+      - "--cpu=1"
+      - "--max-instances=10"
+      - "--min-instances=0"
+
+images:
+  - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+  - "$_REPO/$_SERVICE_NAME:latest"
+
+options:
+  logging: CLOUD_LOGGING_ONLY

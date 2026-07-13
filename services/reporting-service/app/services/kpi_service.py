@@ -1,18 +1,35 @@
+import logging
 from datetime import datetime, timezone
 from typing import Optional, Tuple
+
+from app.models.report import KPIMetric, KPIDashboardResponse
 from app.services.aggregation_service import (
     get_cases_by_status,
     get_cases_created_in_period,
     get_cases_settled_in_period,
     get_leads_in_period,
-    ACTIVE_STATUSES,
+    get_active_statuses,
 )
 from app.utils.firestore import get_firestore_client
 from app.utils.date_helpers import now_utc
-from app.models.report import KPIMetric, KPIDashboardResponse
-import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _load_firm_config(doc_id: str) -> dict:
+    """
+    Load a ``firmSettings/{doc_id}`` document from Firestore.
+
+    Returns an empty dict when the document is absent or Firestore is
+    unreachable so callers always receive a safe fallback.
+    """
+    try:
+        db = get_firestore_client()
+        doc = db.collection("firmSettings").document(doc_id).get()
+        return doc.to_dict() if doc.exists else {}
+    except Exception as exc:
+        logger.warning("Failed to load firmSettings/%s: %s", doc_id, exc)
+        return {}
 
 CACHE_DOC_ID = "kpi_dashboard"
 
@@ -26,12 +43,25 @@ def _trend(current: float, previous: float) -> Tuple[Optional[float], Optional[s
 
 
 def compute_kpi_dashboard(period_days: int = 30) -> KPIDashboardResponse:
-    current_leads = get_leads_in_period(period_days)
+    # Load firm config once — used for active statuses, score field, metric labels
+    intake_config    = _load_firm_config("intake")
+    reporting_config = _load_firm_config("reporting")
+
+    # Score field name: firmSettings/intake.scoreFieldName (default: "caseScore")
+    score_field = intake_config.get("scoreFieldName", "caseScore")
+
+    # Metric label for avg score: firmSettings/reporting.metricLabels.avgScore
+    metric_labels   = reporting_config.get("metricLabels", {})
+    avg_score_label = metric_labels.get("avgScore", "Avg Medical Score")
+
+    active_statuses = get_active_statuses()
+
+    current_leads   = get_leads_in_period(period_days)
     current_settled = get_cases_settled_in_period(period_days)
-    statuses = get_cases_by_status()
+    statuses        = get_cases_by_status()
 
     total_active = sum(
-        s["count"] for s in statuses if s["status"] in ACTIVE_STATUSES
+        s["count"] for s in statuses if s["status"] in active_statuses
     )
 
     prior_leads = get_leads_in_period(period_days * 2)
@@ -47,10 +77,10 @@ def compute_kpi_dashboard(period_days: int = 30) -> KPIDashboardResponse:
 
     scored_cases = [
         c for c in current_leads
-        if c.get("qualificationScore") is not None
+        if c.get(score_field) is not None
     ]
     avg_score = (
-        round(sum(c["qualificationScore"] for c in scored_cases) / len(scored_cases), 1)
+        round(sum(c[score_field] for c in scored_cases) / len(scored_cases), 1)
         if scored_cases else 0.0
     )
 
@@ -94,7 +124,7 @@ def compute_kpi_dashboard(period_days: int = 30) -> KPIDashboardResponse:
             unit="%",
         ),
         KPIMetric(
-            label="Avg Medical Score",
+            label=avg_score_label,
             value=avg_score,
             unit="score",
         ),

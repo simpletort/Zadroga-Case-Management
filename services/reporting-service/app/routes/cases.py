@@ -11,7 +11,7 @@ from app.models.report import (
 from app.services.aggregation_service import (
     get_cases_by_status,
     get_bottleneck_cases,
-    ACTIVE_STATUSES,
+    get_active_statuses,
 )
 from app.services.cache_service import get_cache, TTLCache
 from app.utils.auth import require_min_role
@@ -25,7 +25,7 @@ router = APIRouter(prefix="/reports", tags=["Cases"])
 
 FUNNEL_STAGES = [
     "New Lead",
-    "Pending Client Information",
+    "Pending Client Info",
     "Pending Paralegal Review",
     "Pending Attorney Review",
     "Ready for Filing",
@@ -47,7 +47,7 @@ def cases_by_status(
     raw = get_cases_by_status()
     items = [CasesByStatusItem(**row) for row in raw]
     total_active = sum(
-        item.count for item in items if item.status in ACTIVE_STATUSES
+        item.count for item in items if item.status in get_active_statuses()
     )
 
     result = CasesByStatusResponse(
@@ -70,6 +70,11 @@ def case_funnel(
 
     raw = get_cases_by_status()
     status_counts: Dict[str, int] = {row["status"]: row["count"] for row in raw}
+    avg_days_map: Dict[str, float] = {
+        row["status"]: row["avg_days_in_status"]
+        for row in raw
+        if row.get("avg_days_in_status") is not None
+    }
 
     stages = []
     for i, stage in enumerate(FUNNEL_STAGES):
@@ -85,6 +90,7 @@ def case_funnel(
             stage=stage,
             count=count,
             conversion_rate=conversion_rate,
+            avg_days_to_next=avg_days_map.get(stage),
         ))
 
     result = FunnelResponse(generated_at=now_utc(), stages=stages)

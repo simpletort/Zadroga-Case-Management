@@ -8,11 +8,14 @@ class CaseSummary(BaseModel):
     first_name: str
     last_name: str
     status: str
+    case_type: Optional[str] = None                # "WTC" | "VCF"
     vcf_deadline: Optional[datetime] = None
+    days_until_deadline: Optional[int] = None
     doc_completeness_pct: Optional[float] = None   # vcfQualScore proxy (0-100)
     qual_score: Optional[float] = None             # medicalQualScore (0-100)
     last_activity: Optional[datetime] = None       # updatedAt
     assigned_paralegal: Optional[str] = None
+    assigned_paralegal_name: Optional[str] = None
     is_flagged: bool = False                        # local UI toggle, always False from API
 
 

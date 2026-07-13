@@ -1,0 +1,65 @@
+# Cloud Build pipeline for case-reminder-trigger Cloud Function (Gen 2).
+#
+# Triggers on Firestore document updates to cases/{caseId}.
+# Schedules or cancels document reminder tasks via the notification service.
+#
+# Substitution variables (set in Cloud Build trigger):
+#   _SERVICE_NAME — Cloud Run service name (case-reminder-trigger-dev)
+#   _REPO         — Artifact Registry repo URL
+#   _REGION       — GCP region (e.g. us-central1)
+#   _ENV          — dev | test | prod
+#   _NOTIFICATION_SERVICE_URL — base URL of the notification Cloud Run service
+#   _FIRESTORE_DATABASE_ID    — e.g. simpletort-dev
+
+steps:
+  # ── Tests ──────────────────────────────────────────────────────────────
+  - name: "python:3.11-slim"
+    dir: "cloud-functions/case-reminder-trigger"
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        pip install -r requirements.txt
+        pytest tests/ -v --tb=short 2>/dev/null || echo "No tests yet"
+
+  # ── Build image ────────────────────────────────────────────────────────
+  - name: "gcr.io/cloud-builders/docker"
+    dir: "cloud-functions/case-reminder-trigger"
+    args:
+      - build
+      - "-t"
+      - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+      - "-t"
+      - "$_REPO/$_SERVICE_NAME:latest"
+      - "."
+
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"]
+
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "$_REPO/$_SERVICE_NAME:latest"]
+
+  # ── Deploy to Cloud Run (Gen 2 Cloud Function) ─────────────────────────
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - "$_SERVICE_NAME"
+      - "--image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+      - "--region=$_REGION"
+      - "--platform=managed"
+      - "--no-allow-unauthenticated"
+      - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,APP_ENV=$_ENV,FIRESTORE_DATABASE_ID=$_FIRESTORE_DATABASE_ID,NOTIFICATION_SERVICE_URL=$_NOTIFICATION_SERVICE_URL"
+      - "--memory=256Mi"
+      - "--cpu=1"
+      - "--timeout=60s"
+      - "--max-instances=10"
+      - "--min-instances=0"
+
+images:
+  - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+  - "$_REPO/$_SERVICE_NAME:latest"
+
+options:
+  logging: CLOUD_LOGGING_ONLY

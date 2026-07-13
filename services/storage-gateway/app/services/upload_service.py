@@ -23,14 +23,13 @@ from google.cloud import firestore
 
 from app.config import get_settings
 from app.models.storage import (
-    DocumentCategory,
     ProcessingStatus,
     ScanStatus,
     UploadStatusResponse,
     VerificationStatus,
+    UrlAction,
 )
-from app.services.gcs_service import build_blob_path, generate_signed_url
-from app.models.storage import UrlAction
+from app.services.gcs_service import generate_signed_url
 from app.utils.firestore import get_firestore_client
 from app.utils.gcs_client import get_gcs_client
 
@@ -48,47 +47,33 @@ def _staging_path(file_id: str, file_name: str) -> str:
 
 def register_upload(
     file_name: str,
-    category: DocumentCategory,
+    folder_path: str,
     content_type: str,
     uploaded_by: str,
-    case_id: Optional[str] = None,
+    case_id: str,
     size_bytes: Optional[int] = None,
 ) -> dict:
     """
     Register a pending upload:
-      - Validates that case_id is present for case-scoped categories.
+      - Validates folder_path stays within the case directory.
       - Generates a unique fileId.
       - Creates the file_uploads/{fileId} Firestore record.
-      - Creates the cases/{caseId}/documents/{fileId} skeleton record (case-scoped only).
+      - Creates the cases/{caseId}/documents/{fileId} skeleton record.
       - Returns a signed PUT URL pointing to the staging path.
     """
-    # Validate case_id requirement
-    case_scoped_categories = {
-        DocumentCategory.medical_records,
-        DocumentCategory.proof_of_presence,
-        DocumentCategory.id_documents,
-        DocumentCategory.legal_forms,
-        DocumentCategory.vcf_documents,
-        DocumentCategory.settlement_docs,
-    }
-    if category in case_scoped_categories and not case_id:
+    if ".." in folder_path.split("/") or folder_path.startswith("/"):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="case_id is required for category '{}'.".format(category.value),
+            detail="Invalid folder_path: must not escape the case directory.",
         )
+
+    from shared.middlewares.file_validation import validate_file_extension
+    validate_file_extension(file_name)
 
     file_id = str(uuid.uuid4())
     staging_path = _staging_path(file_id, file_name)
+    final_path = "{}/{}/{}".format(case_id, folder_path, file_name) if folder_path else "{}/{}".format(case_id, file_name)
     registered_at = datetime.now(tz=timezone.utc)
-
-    # Build the final (permanent) path — used after a clean scan
-    try:
-        final_path = build_blob_path(category, file_name, case_id)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(e),
-        )
 
     db = get_firestore_client()
 
@@ -97,7 +82,7 @@ def register_upload(
         "fileId": file_id,
         "caseId": case_id,
         "fileName": file_name,
-        "category": category.value,
+        "folderPath": folder_path,
         "mimeType": content_type,
         "sizeBytes": size_bytes,
         "uploadedBy": uploaded_by,
@@ -111,33 +96,32 @@ def register_upload(
         "quarantinePath": None,
     })
 
-    # 2. Create the document skeleton under the case (if case-scoped)
-    if case_id:
-        db.collection("cases").document(case_id).collection("documents").document(file_id).set({
-            "fileName": file_name,
-            "category": category.value,
-            "gcsPath": None,            # populated after clean scan
-            "mimeType": content_type,
-            "sizeBytes": size_bytes,
-            "uploadedBy": uploaded_by,
-            "uploadedAt": registered_at,
-            "processingStatus": ProcessingStatus.pending.value,
-            "verificationStatus": VerificationStatus.unverified.value,
-            "scanStatus": ScanStatus.pending.value,
-            "extractedData": None,
-            "documentAiResults": None,
-            "medicalAiResults": None,
-            "manualOverrides": [],
-        })
+    # 2. Create the document skeleton under the case
+    db.collection("cases").document(case_id).collection("documents").document(file_id).set({
+        "fileName": file_name,
+        "folderPath": folder_path,
+        "gcsPath": None,            # populated after clean scan
+        "mimeType": content_type,
+        "sizeBytes": size_bytes,
+        "uploadedBy": uploaded_by,
+        "uploadedAt": registered_at,
+        "processingStatus": ProcessingStatus.pending.value,
+        "verificationStatus": VerificationStatus.unverified.value,
+        "scanStatus": ScanStatus.pending.value,
+        "extractedData": None,
+        "documentAiResults": None,
+        "medicalAiResults": None,
+        "manualOverrides": [],
+    })
 
     logger.info(
-        "Upload registered: fileId=%s case=%s category=%s staging=%s",
-        file_id, case_id, category.value, staging_path,
+        "Upload registered: fileId=%s case=%s folderPath=%s staging=%s",
+        file_id, case_id, folder_path, staging_path,
     )
 
     # 3. Generate the staging signed URL
     gcs_client = get_gcs_client()
-    signed_url, expires_at = generate_signed_url(
+    signed_url, expires_at, _ = generate_signed_url(
         gcs_client=gcs_client,
         blob_path=staging_path,
         action=UrlAction.write,
@@ -167,9 +151,9 @@ def get_upload_status(file_id: str) -> UploadStatusResponse:
     data = snap.to_dict()
     return UploadStatusResponse(
         file_id=file_id,
-        case_id=data.get("caseId"),
+        case_id=data.get("caseId", ""),
         file_name=data.get("fileName", ""),
-        category=DocumentCategory(data.get("category", "client_uploads")),
+        folder_path=data.get("folderPath", ""),
         scan_status=ScanStatus(data.get("scanStatus", ScanStatus.pending.value)),
         staging_path=data.get("stagingPath", ""),
         final_path=data.get("finalPath") if data.get("scanStatus") == ScanStatus.clean.value else None,

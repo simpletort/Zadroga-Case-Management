@@ -1,136 +1,99 @@
 """
-api/middleware/auth.py — Unified auth: JWT Bearer OR API Key + HMAC.
+api/middleware/auth.py — Auth dependency for lead-intake route handlers.
 
-Priority:
-  1. If X-API-Key header present → API key auth path
-  2. If Authorization: Bearer <token> present → JWT auth path
-  3. Neither → 401
+Three callers reach this service:
 
-This allows marketing partners to use whichever method they were onboarded with.
+1. Staff via API Gateway (Firebase JWT → x-apigateway-api-userinfo header):
+   - API Gateway decodes the JWT and forwards claims as x-apigateway-api-userinfo.
+   - shared AuthMiddleware decodes it and sets:
+       request.state.user    = {uid, role, email}
+       request.state.partner = PartnerContext(auth_method="gateway", ...)
+   - get_partner() returns request.state.partner directly.
+
+2. Staff submitting leads directly via Firebase JWT (Authorization: Bearer <token>):
+   - Shared AuthMiddleware verifies the Firebase JWT (path 3) and sets:
+       request.state.user    = {uid, role, email}
+       request.state.partner = PartnerContext(auth_method="firebase_jwt", ...)
+   - get_partner() returns it, giving staff full access to all lead endpoints.
+   - This is how the internal UI submits leads — same as the API Gateway path
+     but without the gateway in front (direct Cloud Run URL or dev mode).
+
+3. Marketing partners (X-API-Key):
+   - partner_auth middleware verifies the key and writes request.state.partner.
+   - get_partner() returns request.state.partner directly.
+
+Route handlers can call is_staff_caller(partner) to check if the caller is
+staff (True) or a marketing partner (False), e.g. for audit-trail labelling
+or to set marketingSource to the staff member's display name.
 """
 from __future__ import annotations
 
-import time
-from typing import Optional
-
-import httpx
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
 
-from config import get_settings
-from logging_config import get_logger
-from middleware.partner_auth import verify_api_key, PartnerContext
+from middleware.partner_auth import PartnerContext
 
-logger = get_logger(__name__)
-security = HTTPBearer(auto_error=False)  # auto_error=False → we handle it manually
+__all__ = ["PartnerContext", "get_partner", "is_staff_caller"]
 
-# ── JWKS cache ────────────────────────────────────────────────────────────────
+security = HTTPBearer(auto_error=False)
 
-_jwks_cache: dict = {}
-_jwks_fetched_at: float = 0.0
-JWKS_TTL = 3600
-
-
-async def _get_jwks() -> dict:
-    global _jwks_cache, _jwks_fetched_at
-    now = time.monotonic()
-    if _jwks_cache and (now - _jwks_fetched_at) < JWKS_TTL:
-        return _jwks_cache
-
-    settings = get_settings()
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        resp = await client.get(settings.jwks_uri)
-        resp.raise_for_status()
-        _jwks_cache = resp.json()
-        _jwks_fetched_at = now
-        logger.info("jwks_refreshed", uri=settings.jwks_uri)
-        return _jwks_cache
-
-
-# ── JWT verification ──────────────────────────────────────────────────────────
-
-async def _verify_jwt(token: str) -> PartnerContext:
-    settings = get_settings()
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail={
-            "error": "UNAUTHORIZED",
-            "message": "Invalid or expired token",
-            "details": [],
-        },
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-
-    try:
-        unverified_header = jwt.get_unverified_header(token)
-        kid = unverified_header.get("kid")
-        jwks = await _get_jwks()
-
-        matching_key = None
-        for key_data in jwks.get("keys", []):
-            if key_data.get("kid") == kid:
-                matching_key = key_data
-                break
-
-        if not matching_key:
-            logger.warning("jwt_key_not_found", kid=kid)
-            raise credentials_exception
-
-        claims = jwt.decode(
-            token,
-            matching_key,
-            algorithms=["RS256"],
-            audience=settings.jwt_audience,
-            issuer=settings.jwt_issuer,
-            options={"verify_exp": True},
-        )
-
-        partner_id: Optional[str] = claims.get("partner_id") or claims.get("sub")
-        if not partner_id:
-            raise credentials_exception
-
-        return PartnerContext(
-            partner_id=partner_id,
-            auth_method="jwt",
-            raw_claims=claims,
-        )
-
-    except JWTError as exc:
-        logger.warning("jwt_verification_failed", error=str(exc))
-        raise credentials_exception
-
-
-# ── Unified auth dependency ───────────────────────────────────────────────────
 
 async def get_partner(
     request: Request,
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    _credentials: HTTPAuthorizationCredentials | None = Depends(security),
 ) -> PartnerContext:
     """
-    FastAPI dependency: authenticates via API key OR JWT Bearer.
-    Attaches PartnerContext to request.state.partner.
+    FastAPI dependency — resolves the authenticated caller to a PartnerContext.
+
+    Priority:
+      1. request.state.partner already populated by shared AuthMiddleware
+         (covers gateway, firebase_jwt, api_key paths) → return it directly.
+      2. request.state.user populated but partner not set → build PartnerContext
+         from user dict (safety fallback for partial middleware runs).
+      3. Neither set → HTTP 401.
+
+    Staff callers (auth_method = "gateway" or "firebase_jwt") use their Firebase
+    UID as partner_id so all downstream code reading partner.partner_id works
+    without any branching on caller type.
     """
-    api_key = request.headers.get("X-API-Key")
+    # Path 1: shared AuthMiddleware built a full PartnerContext for any auth method
+    partner_ctx: PartnerContext | None = getattr(request.state, "partner", None)
+    if partner_ctx is not None:
+        return partner_ctx
 
-    if api_key:
-        # Path 1: API key authentication
-        ctx = await verify_api_key(request, api_key)
-        request.state.partner = ctx
-        return ctx
+    # Path 2: safety fallback — user set but partner not (shouldn't happen in prod)
+    user: dict | None = getattr(request.state, "user", None)
+    if user is not None:
+        return PartnerContext(
+            partner_id   = user.get("uid", ""),
+            auth_method  = "firebase_jwt",
+            partner_name = user.get("email", ""),
+            raw_claims   = user,
+        )
 
-    if credentials:
-        # Path 2: JWT Bearer authentication
-        ctx = await _verify_jwt(credentials.credentials)
-        request.state.partner = ctx
-        return ctx
-
+    # No auth succeeded
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail={
-            "error": "UNAUTHORIZED",
-            "message": "Provide X-API-Key header or Authorization: Bearer <token>",
+            "error":   "UNAUTHORIZED",
+            "message": (
+                "Not authenticated. "
+                "Staff: provide Authorization: Bearer <firebase-id-token>. "
+                "Partners: provide X-API-Key."
+            ),
             "details": [],
         },
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+
+def is_staff_caller(partner: PartnerContext) -> bool:
+    """
+    Returns True if the caller is an authenticated staff member (Firebase JWT
+    or API Gateway), False if they are a marketing partner (X-API-Key).
+
+    Usage in route handlers:
+        if is_staff_caller(partner):
+            marketing_source = f"staff:{partner.partner_id}"
+    """
+    return partner.auth_method in ("gateway", "firebase_jwt")

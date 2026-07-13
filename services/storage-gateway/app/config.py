@@ -9,8 +9,12 @@ class Settings(BaseSettings):
     gcs_bucket_name: str = "zadroga-case-files-simpletort-prod"
     signed_url_write_expiry_minutes: int = 15
     signed_url_read_expiry_minutes: int = 60
-    env: str = "prod"  # dev | test | prod — injected via ENV trigger variable
+    environment: str = "production"  # production | staging | development
     log_level: str = "INFO"
+
+    # Comma-separated list of Cloud Run service account emails allowed to call
+    # this service via OIDC Bearer token (service-to-service auth).
+    trusted_service_accounts: list[str] = []
 
     # Virus scanning — staging / quarantine prefixes
     gcs_staging_prefix: str = "staging"
@@ -18,6 +22,12 @@ class Settings(BaseSettings):
 
     # Pub/Sub topic for virus-detected notifications
     pubsub_topic_virus_detected: str = "virus-detected"
+
+    # Service account email used for IAM-based signed URL generation on Cloud Run.
+    # Set this to the Cloud Run service identity SA email, e.g.
+    # storage-gateway-sa@simpletort-prod.iam.gserviceaccount.com
+    # Leave blank to auto-discover from the GCE metadata server.
+    gcs_service_account_email: str = ""
 
     # Service identity — injected as SERVICE_NAME=$_SERVICE_NAME by Cloud Build
     # so every audit log entry carries the exact Cloud Run service name.

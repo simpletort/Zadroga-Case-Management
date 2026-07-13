@@ -1,5 +1,39 @@
 # ZAD Module 1 — Lead Intake & Automated Screening
 
+## API Endpoints
+
+### Leads — `/api/v1/leads`
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `POST` | `/api/v1/leads` | Partner JWT | Ingest a new lead. Validates, deduplicates, creates case in Firestore (atomic), runs VCF screening inline, writes staff notification, publishes Pub/Sub events, enqueues 48h follow-up task. Returns `201 { leadId, status, vcfScreeningStatus }`. Idempotent via `X-Request-ID` header. |
+| `GET` | `/api/v1/leads` | Partner JWT | List leads with optional filters (`status`, `vcfEligibility`, `source`, `dateFrom`, `dateTo`, `search`) and cursor-based pagination (`pageSize`, `pageToken`). Returns up to 200 cases per page. |
+| `GET` | `/api/v1/leads/{lead_id}` | Partner JWT | Get full case detail for a single lead by case ID (e.g. `ZAD-2025-03-0001`). |
+| `PATCH` | `/api/v1/leads/{lead_id}/status` | Partner JWT | Update the status of a case. Body: `{ status, updatedBy?, note? }`. |
+| `POST` | `/api/v1/leads/bulk-assign` | Partner JWT | Bulk assign up to 100 leads to a staff UID. Body: `{ caseIds: string[], assignment: string }`. |
+| `GET` | `/api/v1/leads/export/csv` | Partner JWT | Export filtered leads as a CSV file (max 5,000 rows). Filters: `status`, `vcfEligibility`, `dateFrom`, `dateTo`. Rate-limited to 10/min. |
+| `POST` | `/api/v1/leads/internal/tasks/followup` | Cloud Tasks OIDC | Internal — called by Cloud Tasks 48h after lead creation. Creates a `FOLLOWUP_LEAD` task in Firestore and publishes `lead-followup` to trigger a follow-up SMS. |
+
+### Partner Management — `/api/v1/admin/partners`
+
+> Requires `senior_partner` or `system_admin` role.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/v1/admin/partners` | Create a new marketing partner record. |
+| `GET` | `/api/v1/admin/partners` | List all partners with active key counts and usage stats. |
+| `POST` | `/api/v1/admin/partners/{partner_id}/keys` | Generate a new API key for a partner. Returns the raw key once (stored as SHA-256 hash). |
+| `DELETE` | `/api/v1/admin/partners/{partner_id}/keys/{key_id}` | Revoke an API key (sets `active: false`). |
+| `GET` | `/api/v1/admin/partners/{partner_id}/stats` | Get request count, last request timestamp, and active key count for a partner. |
+
+### Health
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/health` | Liveness check — returns `{ status: "ok" }`. |
+
+---
+
 ## Architecture Overview
 
 ```

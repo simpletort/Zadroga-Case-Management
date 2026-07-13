@@ -5,17 +5,19 @@ steps:
     args:
       - "-c"
       - |
+        pip install ../../shared
         pip install -r requirements.txt
         pytest tests/ -v --tb=short
 
   - name: "gcr.io/cloud-builders/docker"
-    dir: "services/storage-gateway"
     args:
       - build
       - "-t"
       - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
       - "-t"
       - "$_REPO/$_SERVICE_NAME:latest"
+      - "-f"
+      - "services/storage-gateway/Dockerfile"
       - "."
 
   - name: "gcr.io/cloud-builders/docker"
@@ -25,17 +27,15 @@ steps:
     args: ["push", "$_REPO/$_SERVICE_NAME:latest"]
 
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
-    entrypoint: bash
+    entrypoint: gcloud
     args:
-      - "-c"
-      - |
-        bash scripts/deploy.sh \
-          $_ENV \
-          $_SERVICE_NAME \
-          $_REPO \
-          $COMMIT_SHA \
-          $_REGION \
-          $PROJECT_ID
+      - run
+      - deploy
+      - "$_SERVICE_NAME-$_ENV"
+      - "--image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+      - "--region=$_REGION"
+      - "--platform=managed"
+      - "--set-env-vars=GCS_SERVICE_ACCOUNT_EMAIL=$_GCS_SA_EMAIL,GCS_BUCKET_NAME=$_GCS_BUCKET_NAME,ENVIRONMENT=$_ENV,GCP_PROJECT_ID=$PROJECT_ID,FIRESTORE_DATABASE_ID=$_FIRESTORE_DATABASE_ID"
 
 images:
   - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
@@ -43,4 +43,3 @@ images:
 
 options:
   logging: CLOUD_LOGGING_ONLY
-  timeout: 1800s   # 30 min — canary window (15 min) + build time

@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import get_settings
-from app.routes import dashboard, cases, staff, leads
+from app.routes import dashboard, cases, staff, leads, expenses
 
 settings = get_settings()
 
@@ -46,10 +46,11 @@ app.add_middleware(
     allow_origins=[
         "https://lookerstudio.google.com",
         "https://staff.simpletort.com",
+        "https://simpletort.web.app",
     ],
     allow_credentials=True,
-    allow_methods=["GET"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_methods=["GET", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "x-apigateway-api-userinfo"],
 )
 
 
@@ -71,3 +72,4 @@ app.include_router(dashboard.router)
 app.include_router(cases.router)
 app.include_router(staff.router)
 app.include_router(leads.router)
+app.include_router(expenses.router)

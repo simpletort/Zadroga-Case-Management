@@ -23,12 +23,11 @@ from google.cloud import firestore
 
 logger = logging.getLogger(__name__)
 
-ADMIN_ROLES = {"admin_staff", "junior_partner", "senior_partner", "system_admin"}
-
 SORT_KEY_MAP = {
     "case_id":              lambda c: c["case_id"] or "",
     "client_name":          lambda c: (c["last_name"] or "") + (c["first_name"] or ""),
     "status":               lambda c: c["status"] or "",
+    "case_type":            lambda c: c["case_type"] or "",
     "vcf_deadline":         lambda c: (
         c["vcf_deadline"].timestamp() if c["vcf_deadline"] else float("inf")
     ),
@@ -39,11 +38,18 @@ SORT_KEY_MAP = {
     ),
 }
 
+# Normalise the case_type query param to the Firestore stored value
+_CASE_TYPE_MAP = {
+    "wtc": "WTC",
+    "vcf": "VCF",
+}
+
 
 def get_dashboard(
     db: firestore.Client,
-    user: dict,
     statuses: Optional[list[str]],
+    case_type: Optional[str],
+    assignees: Optional[list[str]],
     deadline_from: Optional[datetime],
     deadline_to: Optional[datetime],
     completeness_min: Optional[float],
@@ -55,14 +61,14 @@ def get_dashboard(
     page: int,
     page_size: int,
 ) -> dict:
-    user_role = user.get("role", "")
-    user_uid  = user.get("uid", "")
-    is_admin  = user_role in ADMIN_ROLES
+    # Resolve type filter to stored Firestore value ("WTC" | "VCF" | None)
+    # "all" and None both mean no type restriction
+    resolved_type = _CASE_TYPE_MAP.get((case_type or "").lower())
+
+    effective_assignees = assignees if assignees else None
 
     # ── 1. Firestore query ────────────────────────────────────────────────
     query = db.collection("cases")
-    if not is_admin:
-        query = query.where("assignment.assignedParalegal", "==", user_uid)
 
     # Apply single-status equality filter at Firestore level when safe to do so
     # (no range filters that would conflict with a compound inequality query)
@@ -82,31 +88,50 @@ def get_dashboard(
 
     for doc in docs:
         data    = doc.to_dict() or {}
-        lead    = data.get("leadData")    or {}
-        qual    = data.get("qualification") or {}
-        enroll  = data.get("enrollment")  or {}
         assign  = data.get("assignment")  or {}
 
-        vcf_deadline  = enroll.get("vcfRegDeadline")
         last_activity = data.get("updatedAt")
 
-        # Normalise Firestore Timestamps to aware datetime
-        if hasattr(vcf_deadline, "tzinfo") and vcf_deadline.tzinfo is None:
-            vcf_deadline = vcf_deadline.replace(tzinfo=timezone.utc)
-        if hasattr(last_activity, "tzinfo") and last_activity is not None and last_activity.tzinfo is None:
+        if isinstance(last_activity, str):
+            try:
+                last_activity = datetime.fromisoformat(last_activity).replace(tzinfo=timezone.utc)
+            except ValueError:
+                last_activity = None
+        elif hasattr(last_activity, "tzinfo") and last_activity is not None and last_activity.tzinfo is None:
             last_activity = last_activity.replace(tzinfo=timezone.utc)
+
+        vcf_details  = data.get("vcfScreeningDetails") or {}
+        score_raw    = vcf_details.get("score")
+        qual_score   = float(score_raw) if score_raw is not None else None
+
+        enrollment          = data.get("enrollment") or {}
+        vcf_deadline_raw    = enrollment.get("filingDeadline")
+        days_until_deadline = enrollment.get("daysUntilDeadline")
+
+        if isinstance(vcf_deadline_raw, str):
+            try:
+                vcf_deadline = datetime.fromisoformat(vcf_deadline_raw).replace(tzinfo=timezone.utc)
+            except ValueError:
+                vcf_deadline = None
+        elif hasattr(vcf_deadline_raw, "tzinfo") and vcf_deadline_raw is not None and vcf_deadline_raw.tzinfo is None:
+            vcf_deadline = vcf_deadline_raw.replace(tzinfo=timezone.utc)
+        else:
+            vcf_deadline = vcf_deadline_raw
 
         cases.append({
             "case_id":              doc.id,
-            "first_name":           lead.get("firstName", ""),
-            "last_name":            lead.get("lastName", ""),
+            "first_name":           data.get("firstName", ""),
+            "last_name":            data.get("lastName", ""),
             "status":               data.get("status", ""),
+            "case_type":            None,
             "vcf_deadline":         vcf_deadline,
-            "doc_completeness_pct": qual.get("vcfQualScore"),
-            "qual_score":           qual.get("medicalQualScore"),
+            "days_until_deadline":  days_until_deadline,
+            "doc_completeness_pct": None,
+            "qual_score":           qual_score,
             "last_activity":        last_activity,
-            "assigned_paralegal":   assign.get("assignedParalegal"),
-            "is_flagged":           False,
+            "assigned_paralegal":      assign.get("assignedParalegal"),
+            "assigned_paralegal_name": assign.get("assignedParalegalName"),
+            "is_flagged":              False,
         })
 
     # ── 3. Post-filter ────────────────────────────────────────────────────
@@ -115,6 +140,10 @@ def get_dashboard(
         # filtered (redundant in production, but required for test correctness
         # because mocked Firestore .where() calls return all docs unchanged).
         if statuses and c["status"] not in statuses:
+            return False
+        if resolved_type and c["case_type"] != resolved_type:
+            return False
+        if effective_assignees and c["assigned_paralegal"] not in effective_assignees:
             return False
         if deadline_from and c["vcf_deadline"] and c["vcf_deadline"] < deadline_from:
             return False
@@ -169,4 +198,57 @@ def get_dashboard(
             "page_size":   page_size,
             "total_pages": total_pages,
         },
+    }
+
+
+def get_case_detail(db: firestore.Client, case_id: str) -> dict | None:
+    doc = db.collection("cases").document(case_id).get()
+    if not doc.exists:
+        return None
+
+    data   = doc.to_dict() or {}
+    assign = data.get("assignment") or {}
+
+    last_activity = data.get("updatedAt")
+
+    if isinstance(last_activity, str):
+        try:
+            last_activity = datetime.fromisoformat(last_activity).replace(tzinfo=timezone.utc)
+        except ValueError:
+            last_activity = None
+    elif hasattr(last_activity, "tzinfo") and last_activity is not None and last_activity.tzinfo is None:
+        last_activity = last_activity.replace(tzinfo=timezone.utc)
+
+    vcf_details  = data.get("vcfScreeningDetails") or {}
+    score_raw    = vcf_details.get("score")
+    qual_score   = float(score_raw) if score_raw is not None else None
+
+    enrollment          = data.get("enrollment") or {}
+    vcf_deadline_raw    = enrollment.get("filingDeadline")
+    days_until_deadline = enrollment.get("daysUntilDeadline")
+
+    if isinstance(vcf_deadline_raw, str):
+        try:
+            vcf_deadline = datetime.fromisoformat(vcf_deadline_raw).replace(tzinfo=timezone.utc)
+        except ValueError:
+            vcf_deadline = None
+    elif hasattr(vcf_deadline_raw, "tzinfo") and vcf_deadline_raw is not None and vcf_deadline_raw.tzinfo is None:
+        vcf_deadline = vcf_deadline_raw.replace(tzinfo=timezone.utc)
+    else:
+        vcf_deadline = vcf_deadline_raw
+
+    return {
+        "case_id":              doc.id,
+        "first_name":           data.get("firstName", ""),
+        "last_name":            data.get("lastName", ""),
+        "status":               data.get("status", ""),
+        "case_type":            None,
+        "vcf_deadline":         vcf_deadline,
+        "days_until_deadline":  days_until_deadline,
+        "doc_completeness_pct": None,
+        "qual_score":           qual_score,
+        "last_activity":        last_activity,
+        "assigned_paralegal":      assign.get("assignedParalegal"),
+        "assigned_paralegal_name": assign.get("assignedParalegalName"),
+        "is_flagged":              False,
     }

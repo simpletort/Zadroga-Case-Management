@@ -199,6 +199,14 @@ components:
             Phone number in E.164 format or local US format.
             Normalized to E.164 on ingestion. Used for duplicate detection.
           example: "+12125551234"
+        ssn:
+          type: string
+          nullable: true
+          pattern: '^[0-9-]{9,11}$'
+          description: >
+            Optional SSN. Accepts digits with or without dashes; normalized to
+            digits-only before encryption at rest. Never logged.
+          example: "123-45-6789"
         address:
           $ref: '#/components/schemas/Address'
         exposureLocation:
@@ -316,8 +324,15 @@ components:
             - Screened
             - Qualified
             - Disqualified
+            - Needs Review
             - Active
             - Closed
+            - attorney_review
+            - manual_review_required
+            - settlement_pending_approval
+            - Pending Client Information
+            - VCF - Submitted
+            - Awarded
         vcfEligibility:
           type: string
           enum:
@@ -325,6 +340,14 @@ components:
             - eligible
             - ineligible
             - needs_review
+        ssn:
+          type: string
+          nullable: true
+          description: >
+            Optional SSN. Encrypted at rest via Cloud KMS CMEK.
+            Returned as digits-only (9 chars) to authorized staff.
+            Never logged.
+          example: "123456789"
         createdAt:
           type: string
           format: date-time

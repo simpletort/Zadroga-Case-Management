@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, Query
-from app.models.report import KPIDashboardResponse
+from app.models.report import KPIDashboardResponse, MonthlyRevenueResponse
 from app.services.kpi_service import compute_kpi_dashboard
+from app.services.aggregation_service import get_monthly_revenue, get_ytd_expenses
 from app.services.cache_service import get_cache, TTLCache
 from app.utils.auth import require_min_role
+from app.utils.date_helpers import now_utc
 import logging
 
 logger = logging.getLogger(__name__)
@@ -22,5 +24,29 @@ def get_kpi_dashboard(
         return cached
 
     result = compute_kpi_dashboard(period_days=period_days)
+    cache.set(cache_key, result)
+    return result
+
+
+@router.get("/monthly-revenue", response_model=MonthlyRevenueResponse)
+def get_monthly_revenue_endpoint(
+    months: int = Query(default=12, ge=1, le=24),
+    _user: dict = Depends(require_min_role("dashboard")),
+    cache: TTLCache = Depends(get_cache),
+):
+    cache_key = "monthly_revenue_{}".format(months)
+    cached = cache.get(cache_key)
+    if cached:
+        return cached
+
+    monthly = get_monthly_revenue(num_months=months)
+    ytd_gross = sum(m.gross_award_total for m in monthly)
+    ytd_exp = get_ytd_expenses()
+    result = MonthlyRevenueResponse(
+        generated_at=now_utc(),
+        months=monthly,
+        ytd_expenses=ytd_exp,
+        net_margin=round(ytd_gross - ytd_exp, 2) if ytd_gross or ytd_exp else None,
+    )
     cache.set(cache_key, result)
     return result

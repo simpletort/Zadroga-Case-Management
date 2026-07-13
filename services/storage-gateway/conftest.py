@@ -1,6 +1,22 @@
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi.testclient import TestClient
+
+
+@pytest.fixture(autouse=True)
+def mock_gcs_signing_credentials():
+    """Prevent real GCP auth calls during tests."""
+    with patch("app.services.gcs_service._get_signing_credentials", return_value=MagicMock()):
+        yield
+
+
+@pytest.fixture(autouse=True)
+def bypass_auth(monkeypatch):
+    """Bypass AuthMiddleware in all tests — no real tokens or Firestore role lookups."""
+    async def _passthrough(self, request, call_next):
+        request.state.user = {"uid": "test-uid", "role": "admin_staff", "email": "test@simpletort.com"}
+        return await call_next(request)
+    monkeypatch.setattr("shared.middlewares.auth.AuthMiddleware.dispatch", _passthrough)
 
 
 @pytest.fixture(autouse=True)
@@ -17,20 +33,6 @@ def mock_cloud_logger():
         mock_logger = MagicMock()
         mock_fn.return_value = mock_logger
         yield mock_logger
-
-
-@pytest.fixture(autouse=True)
-def mock_firebase():
-    """Prevent real Firebase initialisation during tests."""
-    with patch("firebase_admin.initialize_app"), \
-         patch("firebase_admin._apps", {"[DEFAULT]": MagicMock()}), \
-         patch("firebase_admin.auth.verify_id_token") as mock_verify:
-        mock_verify.return_value = {
-            "uid": "test-uid-001",
-            "email": "paralegal@simpletort.com",
-            "role": "paralegal",
-        }
-        yield mock_verify
 
 
 @pytest.fixture
@@ -50,6 +52,6 @@ def mock_firestore_client():
 
 
 @pytest.fixture
-def client(mock_firebase, mock_gcs_client, mock_firestore_client):
+def client(mock_gcs_client, mock_firestore_client):
     from main import app
     return TestClient(app)

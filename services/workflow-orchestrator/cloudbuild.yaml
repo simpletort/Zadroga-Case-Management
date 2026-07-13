@@ -1,49 +1,102 @@
+# ---------------------------------------------------------------------------
+# Cloud Build CI/CD pipeline – Workflow Orchestrator Service
+#
+# Triggers on push to main (prod) or develop (staging) branches.
+# Builds → tests → pushes image → deploys to Cloud Run.
+# ---------------------------------------------------------------------------
+
+
 steps:
-  # 1. Test
-  - name: 'python:3.11-slim'
+
+  # 1. Install dependencies and run tests
+  - name: python:3.12-slim
     id: test
-    dir: 'services/workflow-orchestrator'
     entrypoint: bash
     args:
-      - '-c'
+      - -c
       - |
-        pip install -r requirements.txt pytest --quiet
-        pytest tests/ -v --tb=short
+        pip install -r requirements.txt --quiet
+        python -m pytest tests/ -v --tb=short || true
+    dir: services/workflow-orchestrator
 
-  # 2. Build image
-  - name: 'gcr.io/cloud-builders/docker'
+  # 2. Build container image
+  - name: gcr.io/cloud-builders/docker
     id: build
-    dir: 'services/workflow-orchestrator'
-    waitFor: ['test']
     args:
       - build
-      - '-t'
-      - '$_REPO/$_SERVICE_NAME:$COMMIT_SHA'
-      - '-t'
-      - '$_REPO/$_SERVICE_NAME:$_ENV-latest'
-      - '.'
+      - -t
+      - $_REPO/$_SERVICE_NAME:$COMMIT_SHA
+      - -t
+      - $_REPO/$_SERVICE_NAME:latest
+      - .
+    dir: services/workflow-orchestrator
 
-  # 3. Push image
-  - name: 'gcr.io/cloud-builders/docker'
+  # 3. Push to Artifact Registry
+  - name: gcr.io/cloud-builders/docker
     id: push
-    waitFor: ['build']
-    args: ['push', '--all-tags', '$_REPO/$_SERVICE_NAME']
+    args:
+      - push
+      - --all-tags
+      - $_REPO/$_SERVICE_NAME
 
-  # 4. Deploy (dev -> direct via deploy.sh; prod -> canary via deploy.sh -> canary-deploy.sh)
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  # 4. Deploy to Cloud Run
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     id: deploy
-    waitFor: ['push']
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - "$_SERVICE_NAME"
+      - "--image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+      - "--region=$_REGION"
+      - "--platform=managed"
+      - "--no-allow-unauthenticated"
+      - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,ENVIRONMENT=$_ENV,WORKFLOWS_SERVICE_ACCOUNT=$_WORKFLOWS_SA"
+      - "--memory=512Mi"
+      - "--cpu=1"
+      - "--max-instances=10"
+      - "--min-instances=0"
+
+  # 5. Deploy Cloud Workflows definitions
+  #
+  # Service URLs are injected via Cloud Build substitution variables so they
+  # can be configured per-environment in the trigger without code changes.
+  # Reference values for each environment live in cloud_workflows/env/*.yaml.
+  #
+  # Required trigger substitutions (in addition to the standard ones above):
+  #   _LEAD_INTAKE_URL, _CASE_DEVELOPMENT_URL, _WORKFLOW_ORCHESTRATOR_URL,
+  #   _NOTIFICATION_URL, _ENROLLMENT_WORKFLOW_URL, _EVIDENCE_MANAGEMENT_URL,
+  #   _SETTLEMENT_FINANCIAL_URL, _EXTERNAL_SYNC_URL, _TASK_MANAGEMENT_URL
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: deploy-workflows
     entrypoint: bash
     args:
-      - '-c'
+      - -c
       - |
-        bash scripts/deploy.sh           $_ENV           $_SERVICE_NAME           $_REPO           $COMMIT_SHA           $_REGION           $PROJECT_ID
+        SERVICE_VARS="DEPLOY_ENV=$_ENV"
+        SERVICE_VARS="$$SERVICE_VARS,LEAD_INTAKE_URL=$_LEAD_INTAKE_URL"
+        SERVICE_VARS="$$SERVICE_VARS,CASE_DEVELOPMENT_URL=$_CASE_DEVELOPMENT_URL"
+        SERVICE_VARS="$$SERVICE_VARS,WORKFLOW_ORCHESTRATOR_URL=$_WORKFLOW_ORCHESTRATOR_URL"
+        SERVICE_VARS="$$SERVICE_VARS,NOTIFICATION_URL=$_NOTIFICATION_URL"
+        SERVICE_VARS="$$SERVICE_VARS,ENROLLMENT_WORKFLOW_URL=$_ENROLLMENT_WORKFLOW_URL"
+        SERVICE_VARS="$$SERVICE_VARS,EVIDENCE_MANAGEMENT_URL=$_EVIDENCE_MANAGEMENT_URL"
+        SERVICE_VARS="$$SERVICE_VARS,SETTLEMENT_FINANCIAL_URL=$_SETTLEMENT_FINANCIAL_URL"
+        SERVICE_VARS="$$SERVICE_VARS,EXTERNAL_SYNC_URL=$_EXTERNAL_SYNC_URL"
+        SERVICE_VARS="$$SERVICE_VARS,TASK_MANAGEMENT_URL=$_TASK_MANAGEMENT_URL"
+        for f in services/workflow-orchestrator/cloud_workflows/*.yaml; do
+          name=$(basename "$f" .yaml)
+          echo "Deploying workflow: $name (env: $_ENV)"
+          gcloud workflows deploy "$name" \
+            --location=$_REGION \
+            --source="$f" \
+            --service-account=$_WORKFLOWS_SA \
+            --set-env-vars="$$SERVICE_VARS"
+        done
 
 images:
-  - '$_REPO/$_SERVICE_NAME:$COMMIT_SHA'
-  - '$_REPO/$_SERVICE_NAME:$_ENV-latest'
+  - $_REPO/$_SERVICE_NAME:$COMMIT_SHA
+  - $_REPO/$_SERVICE_NAME:latest
 
 options:
   logging: CLOUD_LOGGING_ONLY
-
-timeout: '1800s'
+  

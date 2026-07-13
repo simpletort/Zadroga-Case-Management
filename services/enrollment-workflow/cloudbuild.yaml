@@ -1,49 +1,81 @@
+# Cloud Build pipeline for the Enrollment Workflow Service (Module 3).
+#
+# Steps:
+#   1. Run unit tests
+#   2. Build & push Docker image
+#   3. Deploy to Cloud Run
+#
+# Substitution variables (set in Cloud Build trigger):
+#   _SERVICE_NAME — enrollment-workflow
+#   _REPO         — Artifact Registry repo URL
+#   _REGION       — GCP region (e.g. us-central1)
+#   _ENV          — dev | test | prod
+
 steps:
-  # 1. Test
-  - name: 'python:3.11-slim'
+  # ── Tests ──────────────────────────────────────────────────────────────
+  - name: "python:3.11-slim"
     id: test
-    dir: 'services/enrollment-workflow'
+    dir: "services/enrollment-workflow"
     entrypoint: bash
     args:
-      - '-c'
+      - "-c"
       - |
-        pip install -r requirements.txt pytest --quiet
-        pytest tests/ -v --tb=short
+        pip install -r requirements.txt --quiet
+        GCP_PROJECT_ID=test APP_ENV=development pytest tests/ -v --tb=short
 
-  # 2. Build image
-  - name: 'gcr.io/cloud-builders/docker'
+  # ── Build image ────────────────────────────────────────────────────────
+  # Build context is repo root so the shared/ package is accessible.
+  - name: "gcr.io/cloud-builders/docker"
     id: build
-    dir: 'services/enrollment-workflow'
-    waitFor: ['test']
+    waitFor: ["test"]
     args:
       - build
-      - '-t'
-      - '$_REPO/$_SERVICE_NAME:$COMMIT_SHA'
-      - '-t'
-      - '$_REPO/$_SERVICE_NAME:$_ENV-latest'
-      - '.'
+      - "-t"
+      - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+      - "-t"
+      - "$_REPO/$_SERVICE_NAME:$_ENV-latest"
+      - "-f"
+      - "services/enrollment-workflow/Dockerfile"
+      - "."
 
-  # 3. Push image
-  - name: 'gcr.io/cloud-builders/docker'
+  # ── Push image ─────────────────────────────────────────────────────────
+  - name: "gcr.io/cloud-builders/docker"
     id: push
-    waitFor: ['build']
-    args: ['push', '--all-tags', '$_REPO/$_SERVICE_NAME']
+    waitFor: ["build"]
+    args: ["push", "--all-tags", "$_REPO/$_SERVICE_NAME"]
 
-  # 4. Deploy (dev -> direct via deploy.sh; prod -> canary via deploy.sh -> canary-deploy.sh)
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  # ── Deploy to Cloud Run ────────────────────────────────────────────────
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     id: deploy
-    waitFor: ['push']
-    entrypoint: bash
+    waitFor: ["push"]
+    entrypoint: gcloud
     args:
-      - '-c'
-      - |
-        bash scripts/deploy.sh           $_ENV           $_SERVICE_NAME           $_REPO           $COMMIT_SHA           $_REGION           $PROJECT_ID
+      - run
+      - deploy
+      - "$_SERVICE_NAME"
+      - "--image=$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+      - "--region=$_REGION"
+      - "--platform=managed"
+      - "--allow-unauthenticated"
+      - "--service-account=enrollment-workflow-sa@$PROJECT_ID.iam.gserviceaccount.com"
+      - >-
+        --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,APP_ENV=$_ENV,
+        FIRESTORE_DATABASE_ID=simpletort-dev,
+        PUBSUB_TOPIC_ENROLLMENT=enrollment-status-changes,
+        PUBSUB_TOPIC_NOTIFICATIONS=notification-requested,
+        JWT_AUDIENCE=$PROJECT_ID,
+        JWT_ISSUER=https://securetoken.google.com/$PROJECT_ID
+      - "--memory=512Mi"
+      - "--cpu=1"
+      - "--timeout=120s"
+      - "--min-instances=1"
+      - "--max-instances=10"
 
 images:
-  - '$_REPO/$_SERVICE_NAME:$COMMIT_SHA'
-  - '$_REPO/$_SERVICE_NAME:$_ENV-latest'
+  - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
+  - "$_REPO/$_SERVICE_NAME:$_ENV-latest"
 
 options:
   logging: CLOUD_LOGGING_ONLY
 
-timeout: '1800s'
+timeout: "1800s"

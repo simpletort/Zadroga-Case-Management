@@ -11,26 +11,26 @@ Tests the full pipeline:
 
 Usage — with a real case from Firestore:
   python services/notification/tests/e2e_welcome_sms.py \
-    --project simpletort-zadroga-dev \
+    --project <your-gcp-project-id> \
     --database simpletort-dev \
     --case-id ZAD-2025-03-0001
 
   # Override the destination phone (useful if case phone is not verified in Twilio)
   python services/notification/tests/e2e_welcome_sms.py \
-    --project simpletort-zadroga-dev \
+    --project <your-gcp-project-id> \
     --database simpletort-dev \
     --case-id ZAD-2025-03-0001 \
     --to +917275624118
 
   # List available cases to pick one for testing
   python services/notification/tests/e2e_welcome_sms.py \
-    --project simpletort-zadroga-dev \
+    --project <your-gcp-project-id> \
     --database simpletort-dev \
     --list-cases
 
   # Dry run (no SMS sent, just template rendering check)
   python services/notification/tests/e2e_welcome_sms.py \
-    --project simpletort-zadroga-dev \
+    --project <your-gcp-project-id> \
     --database simpletort-dev \
     --case-id ZAD-2025-03-0001 \
     --dry-run
@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
@@ -47,7 +48,7 @@ from datetime import datetime, timezone
 # ── Config ─────────────────────────────────────────────────────────────────────
 
 DEFAULT_SERVICE_URL  = "https://notification-dev-292736139819.us-central1.run.app"
-DEFAULT_PROJECT      = "simpletort-zadroga-dev"
+DEFAULT_PROJECT      = os.environ.get("GCP_PROJECT_ID", "")
 DEFAULT_DATABASE     = "simpletort-dev"
 DEFAULT_COLLECTION   = "notificationTemplates"
 DELIVERY_COLLECTION  = "sms_delivery_records"
@@ -74,17 +75,18 @@ def _get_firestore_client(project: str, database: str):
 
 def _get_token(audience: str) -> str:
     """Get a Google ID token for calling Cloud Run services."""
-    # Method 1: gcloud CLI (most reliable for local dev)
-    try:
-        result = subprocess.run(
-            ["gcloud", "auth", "print-identity-token"],
-            capture_output=True, text=True, check=True,
-        )
-        token = result.stdout.strip()
-        if token:
-            return token
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        pass
+    # Method 1: gcloud CLI — try both "gcloud" and "gcloud.cmd" (Windows)
+    for cmd in (["gcloud", "auth", "print-identity-token"],
+                ["gcloud.cmd", "auth", "print-identity-token"]):
+        try:
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, check=True,
+            )
+            token = result.stdout.strip()
+            if token:
+                return token
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            continue
 
     # Method 2: google-auth library (works on GCP metadata server)
     try:
