@@ -2,6 +2,6 @@
   "firestore": {
     "database": "simpletort-dev",
     "rules":    "firestore/firestore.rules",
-    "indexes":  "../../firestore/firestore.indexes.json"
+    "indexes":  "firestore/firestore.indexes.json"
   }
 }
