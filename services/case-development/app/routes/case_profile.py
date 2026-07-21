@@ -1,6 +1,10 @@
 # Endpoints defined in this module:
 #   PATCH /api/v1/cases/{caseId} — update editable case fields (min: paralegal)
 #
+# Editable fields: phone, email, address, notes, assigned_attorney, first_name, last_name,
+#   date_of_birth, exposure_location, exposure_date_start, exposure_date_end, conditions,
+#   prior_attorney — see app/models/case_profile.py:ALLOWED_FIELDS.
+#
 # Disallowed fields (status, case_id, created_at) are rejected with 400 at the
 # model-validation layer before the service is called.
 # Paralegal role guard: may only edit cases where assignment.assignedParalegal == their uid.
@@ -17,7 +21,11 @@ router = APIRouter(prefix="/api/v1", tags=["Case Profile"])
 @router.patch(
     "/cases/{caseId}",
     response_model=CasePatchResponse,
-    summary="Update editable case fields — phone, email, address, notes, assigned_attorney",
+    summary=(
+        "Update editable case fields — phone, email, address, notes, assigned_attorney, "
+        "first_name, last_name, date_of_birth, exposure_location, exposure_date_start, "
+        "exposure_date_end, conditions, prior_attorney"
+    ),
     status_code=200,
 )
 def patch_case_profile(

@@ -946,6 +946,62 @@ paths:
         403:
           description: Insufficient role (admin only)
 
+  # --- Case Profile Editable-Fields Config (firmSettings) ---
+
+  /api/v1/settings/case-profile-editable-fields:
+    options:
+      operationId: corsPreflightCaseProfileEditableFields
+      security: []
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        204:
+          description: CORS preflight
+    get:
+      summary: "List the case-profile field catalog and which fields are currently editable via PATCH /cases/{caseId} (min role: junior_partner)"
+      operationId: getCaseProfileEditableFields
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Field catalog with enabled state and PHI classification per field
+        401:
+          description: Unauthorized
+    patch:
+      summary: "Set which case-profile fields are currently editable (min role: senior_partner / system_admin — admin only)"
+      operationId: updateCaseProfileEditableFields
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required: [enabled_fields]
+            properties:
+              enabled_fields:
+                type: array
+                items: { type: string }
+                description: >-
+                  Field names to enable for PATCH /cases/{caseId}. Must be a subset of
+                  the fixed catalog (phone, email, address, notes, assigned_attorney,
+                  first_name, last_name, date_of_birth, exposure_location,
+                  exposure_date_start, exposure_date_end, conditions, prior_attorney) —
+                  any other name is rejected with 400.
+      x-google-backend:
+        address: https://case-development-292736139819.us-central1.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      responses:
+        200:
+          description: Editable-fields config updated
+        400:
+          description: enabled_fields contains a name outside the fixed catalog
+        401:
+          description: Unauthorized
+        403:
+          description: Insufficient role (admin only)
+
   # --- Case Status (manual override) ---
 
   /api/v1/cases/{caseId}/status:
@@ -2098,6 +2154,34 @@ paths:
               assigned_attorney:
                 type: string
                 description: UID of the attorney to assign to this case
+              first_name:
+                type: string
+                description: Client first name
+              last_name:
+                type: string
+                description: Client last name
+              date_of_birth:
+                type: string
+                format: date
+                description: Client date of birth (YYYY-MM-DD)
+              exposure_location:
+                type: string
+                description: WTC/VCF exposure location
+              exposure_date_start:
+                type: string
+                format: date
+                description: Start of exposure date range (YYYY-MM-DD)
+              exposure_date_end:
+                type: string
+                format: date
+                description: End of exposure date range (YYYY-MM-DD)
+              conditions:
+                type: array
+                items: { type: string }
+                description: Claimed medical conditions (replaces the full list)
+              prior_attorney:
+                type: boolean
+                description: Whether the client had prior legal representation
       x-google-backend:
         address: https://case-development-292736139819.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
@@ -2105,7 +2189,10 @@ paths:
         200:
           description: Case updated — returns changed field names and audit log ID
         400:
-          description: Request body contains a disallowed field (status, case_id, created_at)
+          description: >-
+            Request body contains a disallowed field (status, case_id, created_at), or a
+            field currently disabled via firmSettings/case_profile_editable_fields (see
+            GET/PATCH /settings/case-profile-editable-fields)
         401:
           description: Unauthorized
         403:

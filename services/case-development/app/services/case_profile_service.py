@@ -6,50 +6,75 @@ PATCH /api/v1/cases/{caseId} — update a subset of editable case fields.
 Role rules:
   - paralegal      : may only edit cases where assignment.assignedParalegal == their uid
   - junior_partner and above: may edit any case
+  - partner (X-API-Key auth, e.g. the intake-form Apps Script dispatcher — see
+    shared/shared/middlewares/auth.py's API-key path, which sets
+    request.state.user.role = "partner"): may edit any case. This grants nothing beyond
+    the fixed FIELD_CATALOG below — same as every other caller — so it can never write
+    status, case_id, created_at, or a field owned by another endpoint.
 
 Disallowed fields (return 400 if present in request body): status, case_id, created_at
   → This is enforced at the model layer (CasePatchRequest) before this service is called.
 
-Allowed fields: phone, email, address, notes, assigned_attorney
+Allowed fields: phone, email, address, notes, assigned_attorney, first_name, last_name,
+                date_of_birth, exposure_location, exposure_date_start, exposure_date_end,
+                conditions, prior_attorney
 
 Firestore mapping (cases/{caseId} document):
-  phone              → client.phone
-  email              → client.email
-  address            → client.address
-  notes              → notes
-  assigned_attorney  → assignment.assignedAttorney
+  phone                → phone
+  email                → email
+  address              → address.{street,city,state,zip}
+  notes                → notes
+  assigned_attorney    → assignment.assignedAttorney
+  first_name           → firstName
+  last_name            → lastName
+  date_of_birth        → dateOfBirth
+  exposure_location    → exposureLocation
+  exposure_date_start  → exposureDateStart
+  exposure_date_end    → exposureDateEnd
+  conditions           → conditions
+  prior_attorney       → priorAttorney
 
 Every successful call writes one audit_logs/{logId} document listing the changed fields.
-PHI rule applies — phone, email, address are PHI fields and must appear in the audit entry.
+PHI rule applies — every editable field on this endpoint is claimant PHI (identity, contact,
+and exposure/medical-screening data) and must appear in the audit entry as such.
 """
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
 from fastapi import HTTPException, status
 from google.cloud import firestore
 
+from app.models.case_profile import FIELD_CATALOG
+from app.services.case_profile_fields_service import get_enabled_field_set
 from app.utils.roles import normalize_role
 
 logger = logging.getLogger(__name__)
 
-# Roles that may edit any case (junior_partner and above).
+# Roles that may edit any case (junior_partner and above), plus "partner" — the role
+# assigned to X-API-Key-authenticated external callers (see module docstring). This does
+# NOT widen what a partner caller can write; the fixed FIELD_CATALOG guard applies
+# identically to every role.
 _PRIVILEGED_ROLES: frozenset[str] = frozenset(
-    {"junior_partner", "senior_partner", "system_admin", "admin_staff"}
+    {"junior_partner", "senior_partner", "system_admin", "admin_staff", "partner"}
 )
 
-# Maps request field name → Firestore dot-path on the cases document.
-# phone and email are top-level fields; address is a top-level map {street,city,state,zip};
-# notes is top-level; assigned_attorney is nested under assignment.
+# Maps request field name → Firestore dot-path on the cases document, derived from the
+# single source of truth in app/models/case_profile.py:FIELD_CATALOG. "address" has no
+# entry — it's expanded to per-subfield dot-paths separately, below.
 _FIELD_TO_FIRESTORE: dict[str, str] = {
-    "phone":             "phone",
-    "email":             "email",
-    "notes":             "notes",
-    "assigned_attorney": "assignment.assignedAttorney",
-    # address sub-fields are expanded separately — see _build_update_payload
+    field: meta["firestore_path"]
+    for field, meta in FIELD_CATALOG.items()
+    if meta["firestore_path"]
 }
+
+# Fields that are claimant PHI (identity, contact, or exposure/medical screening data),
+# derived from FIELD_CATALOG — used for the audit_logs.phiAccessed flag.
+_PHI_FIELDS: frozenset[str] = frozenset(
+    field for field, meta in FIELD_CATALOG.items() if meta["phi"]
+)
 
 
 def _get_case(db: firestore.Client, case_id: str) -> tuple[firestore.DocumentReference, dict]:
@@ -88,6 +113,18 @@ def patch_case(
             detail="Request body must include at least one editable field.",
         )
 
+    # Firm-configurable subset of the fixed catalog (firmSettings/case_profile_editable_fields).
+    # Defaults to the full catalog when unconfigured — see case_profile_fields_service.py.
+    enabled_fields = get_enabled_field_set(db)
+    disabled_requested = set(changed.keys()) - enabled_fields
+    if disabled_requested:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The following fields are not currently editable (disabled by firm settings): {}".format(
+                ", ".join(sorted(disabled_requested))
+            ),
+        )
+
     role = normalize_role(actor_role)
     case_ref, case_data = _get_case(db, case_id)
 
@@ -121,7 +158,10 @@ def patch_case(
         else:
             fs_path = _FIELD_TO_FIRESTORE.get(field)
             if fs_path:
-                update_payload[fs_path] = value
+                # Dates are stored as ISO strings on this document (see lead-intake's
+                # CaseDocument.to_firestore_dict) — match that convention, not a native
+                # Firestore Timestamp.
+                update_payload[fs_path] = value.isoformat() if isinstance(value, date) else value
 
     audit_log_id = str(uuid.uuid4())
     audit_ref    = db.collection("audit_logs").document(audit_log_id)
@@ -136,7 +176,7 @@ def patch_case(
         "changedFields": list(changed.keys()),
         "performedBy":   actor_uid,
         "performedAt":   now,
-        "phiAccessed":   bool({"phone", "email", "address"} & changed.keys()),
+        "phiAccessed":   bool(_PHI_FIELDS & changed.keys()),
     })
     batch.commit()
 

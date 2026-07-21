@@ -39,12 +39,28 @@ def _case_snap(exists=True, assigned_paralegal="para-uid", assigned_attorney="at
     return snap
 
 
-def _make_db(case_snap=None):
+def _settings_snap(enabled_fields=None):
+    """firmSettings/case_profile_editable_fields snapshot.
+    exists=False (default) → patch_case falls back to the full catalog enabled."""
+    snap = MagicMock()
+    if enabled_fields is None:
+        snap.exists = False
+        snap.to_dict.return_value = {}
+    else:
+        snap.exists = True
+        snap.to_dict.return_value = {"enabledFields": enabled_fields}
+    return snap
+
+
+def _make_db(case_snap=None, settings_snap=None):
     db = MagicMock()
     case_ref = MagicMock()
     case_ref.get.return_value = case_snap or _case_snap()
 
     audit_ref = MagicMock()
+
+    settings_ref = MagicMock()
+    settings_ref.get.return_value = settings_snap or _settings_snap()
 
     def _collection(name):
         coll = MagicMock()
@@ -52,6 +68,8 @@ def _make_db(case_snap=None):
             coll.document.return_value = case_ref
         elif name == "audit_logs":
             coll.document.return_value = audit_ref
+        elif name == "firmSettings":
+            coll.document.return_value = settings_ref
         return coll
 
     db.collection.side_effect = _collection
@@ -83,6 +101,37 @@ class TestCasePatchRequestModel:
         req = CasePatchRequest.model_validate({"phone": "555-1234", "notes": "update"})
         assert req.phone == "555-1234"
         assert req.notes == "update"
+
+    def test_claimant_fields_accepted(self):
+        from app.models.case_profile import CasePatchRequest
+        req = CasePatchRequest.model_validate({
+            "first_name": "Jane",
+            "last_name": "Smith",
+            "date_of_birth": "1980-05-12",
+            "exposure_location": "Ground Zero",
+            "exposure_date_start": "2001-09-11",
+            "exposure_date_end": "2001-12-31",
+            "conditions": ["asthma", "GERD"],
+            "prior_attorney": True,
+        })
+        changed = req.changed_fields()
+        assert changed["first_name"] == "Jane"
+        assert changed["last_name"] == "Smith"
+        assert str(changed["date_of_birth"]) == "1980-05-12"
+        assert changed["exposure_location"] == "Ground Zero"
+        assert changed["conditions"] == ["asthma", "GERD"]
+        assert changed["prior_attorney"] is True
+
+    def test_wtc_health_program_status_not_accepted(self):
+        """Not part of ALLOWED_FIELDS/model — extra="allow" lets it through validation,
+        but changed_fields() must never surface it, since it's excluded by design
+        (synced with external integrations, not freely staff-editable)."""
+        from app.models.case_profile import CasePatchRequest
+        req = CasePatchRequest.model_validate({
+            "wtc_health_program_status": "certified",
+            "notes": "x",
+        })
+        assert "wtc_health_program_status" not in req.changed_fields()
 
     def test_changed_fields_only_returns_set_fields(self):
         from app.models.case_profile import CasePatchRequest
@@ -142,6 +191,71 @@ class TestPatchCaseService:
         update_args = batch.update.call_args[0][1]
         assert "assignment.assignedAttorney" in update_args
         assert update_args["assignment.assignedAttorney"] == "atty-new"
+
+    def test_firestore_update_uses_top_level_path_for_first_last_name(self):
+        from app.services.case_profile_service import patch_case
+
+        db, _, _ = _make_db()
+        patch_case(
+            db=db, case_id="ZAD-2026-04-0001",
+            changed={"first_name": "Janet", "last_name": "Doeson"},
+            actor_uid="para-uid", actor_role="paralegal",
+        )
+        batch = db.batch.return_value
+        update_args = batch.update.call_args[0][1]
+        assert update_args["firstName"] == "Janet"
+        assert update_args["lastName"] == "Doeson"
+
+    def test_date_fields_serialised_to_iso_strings(self):
+        """Dates must be written as ISO strings, matching lead-intake's
+        CaseDocument.to_firestore_dict() convention — not a native Firestore Timestamp."""
+        from datetime import date
+        from app.services.case_profile_service import patch_case
+
+        db, _, _ = _make_db()
+        patch_case(
+            db=db, case_id="ZAD-2026-04-0001",
+            changed={
+                "date_of_birth": date(1980, 5, 12),
+                "exposure_date_start": date(2001, 9, 11),
+                "exposure_date_end": date(2001, 12, 31),
+            },
+            actor_uid="para-uid", actor_role="paralegal",
+        )
+        batch = db.batch.return_value
+        update_args = batch.update.call_args[0][1]
+        assert update_args["dateOfBirth"] == "1980-05-12"
+        assert update_args["exposureDateStart"] == "2001-09-11"
+        assert update_args["exposureDateEnd"] == "2001-12-31"
+
+    def test_conditions_and_prior_attorney_mapped(self):
+        from app.services.case_profile_service import patch_case
+
+        db, _, _ = _make_db()
+        patch_case(
+            db=db, case_id="ZAD-2026-04-0001",
+            changed={"conditions": ["asthma"], "prior_attorney": False},
+            actor_uid="para-uid", actor_role="paralegal",
+        )
+        batch = db.batch.return_value
+        update_args = batch.update.call_args[0][1]
+        assert update_args["conditions"] == ["asthma"]
+        assert update_args["priorAttorney"] is False
+
+    def test_audit_phi_accessed_true_for_claimant_fields(self):
+        from app.services.case_profile_service import patch_case
+
+        db, _, audit_ref = _make_db()
+        patch_case(
+            db=db, case_id="ZAD-2026-04-0001",
+            changed={"first_name": "Janet"},
+            actor_uid="para-uid", actor_role="paralegal",
+        )
+        batch = db.batch.return_value
+        audit_data = next(
+            c[0][1] for c in batch.set.call_args_list if c[0][0] is audit_ref
+        )
+        assert audit_data["phiAccessed"] is True
 
     def test_address_expanded_to_dot_paths(self):
         from app.services.case_profile_service import patch_case
@@ -221,6 +335,42 @@ class TestPatchCaseService:
             )
         assert exc_info.value.status_code == 404
 
+    def test_field_disabled_by_firm_settings_raises_400(self):
+        from app.services.case_profile_service import patch_case
+
+        db, _, _ = _make_db(settings_snap=_settings_snap(enabled_fields=["notes"]))
+        with pytest.raises(HTTPException) as exc_info:
+            patch_case(
+                db=db, case_id="ZAD-2026-04-0001",
+                changed={"phone": "555-9999"},
+                actor_uid="para-uid", actor_role="paralegal",
+            )
+        assert exc_info.value.status_code == 400
+        assert "phone" in exc_info.value.detail
+
+    def test_field_enabled_by_firm_settings_succeeds(self):
+        from app.services.case_profile_service import patch_case
+
+        db, _, _ = _make_db(settings_snap=_settings_snap(enabled_fields=["notes", "phone"]))
+        result = patch_case(
+            db=db, case_id="ZAD-2026-04-0001",
+            changed={"phone": "555-9999"},
+            actor_uid="para-uid", actor_role="paralegal",
+        )
+        assert "phone" in result["updated_fields"]
+
+    def test_unconfigured_settings_doc_enables_full_catalog(self):
+        """No firmSettings doc yet → every catalog field stays editable (pre-config behaviour)."""
+        from app.services.case_profile_service import patch_case
+
+        db, _, _ = _make_db()  # default _settings_snap(): exists=False
+        result = patch_case(
+            db=db, case_id="ZAD-2026-04-0001",
+            changed={"date_of_birth": "1980-05-12"},
+            actor_uid="para-uid", actor_role="paralegal",
+        )
+        assert "date_of_birth" in result["updated_fields"]
+
     def test_empty_changed_dict_raises_422(self):
         from app.services.case_profile_service import patch_case
 
@@ -267,6 +417,20 @@ class TestPatchCaseService:
             actor_uid="admin-uid", actor_role="admin_staff",
         )
         assert "phone" in result["updated_fields"]
+
+    def test_partner_role_can_edit_any_case(self):
+        """X-API-Key callers (e.g. the intake-form Apps Script) get request.state.user.role
+        = 'partner' from shared/shared/middlewares/auth.py — must be able to patch any
+        case, same as junior_partner+, but still bound by FIELD_CATALOG like everyone else."""
+        from app.services.case_profile_service import patch_case
+
+        db, _, _ = _make_db(case_snap=_case_snap(assigned_paralegal="other-para"))
+        result = patch_case(
+            db=db, case_id="ZAD-2026-04-0001",
+            changed={"first_name": "Janet"},
+            actor_uid="intake-partner-id", actor_role="partner",
+        )
+        assert "first_name" in result["updated_fields"]
 
     def test_display_role_normalized(self):
         """'Junior Partner' (display format) should work like 'junior_partner'."""

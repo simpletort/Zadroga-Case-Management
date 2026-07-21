@@ -1,7 +1,13 @@
 # SimpleTort — Client Intake Form Setup Guide
 
-This document covers the one-time manual setup of the Google Form and Apps Script
+This document covers the one-time setup of the Google Form and Apps Script
 that power the tokenized, pre-filled intake experience.
+
+`Code.gs` includes a `createIntakeForm()` function that builds the form
+structure, sections, questions, and branching logic automatically. Two things
+remain manual regardless — Apps Script's `FormApp` service cannot create
+file-upload questions or set form branding (header image / theme color); both
+are UI-only, with no scriptable equivalent.
 
 ---
 
@@ -12,31 +18,62 @@ that power the tokenized, pre-filled intake experience.
 - GCP Secret Manager secrets created:
   - `SENDGRID_API_KEY` — SendGrid API key
   - `INTAKE_DRIVE_SYNC_SECRET` — shared secret (generate a random UUID)
+- A partner API key provisioned in Firestore (`partners` collection, `active: true`)
+  for calling case-development's API — see `services/case-development` for the
+  partner-key auth path
 
 ---
 
-## Step 1 — Create the Google Form
+## Step 1 — Create the Sheet and Paste the Script
 
-Open [Google Forms](https://forms.google.com) and create a new blank form titled
-**"SimpleTort Client Intake Form"**.
+1. Create a new blank Google Sheet. Name it "SimpleTort Intake Responses".
+2. Open **Extensions → Apps Script**.
+3. Delete all default content in `Code.gs` and paste the contents of
+   `google-forms/apps-script/Code.gs`.
+4. Open `appsscript.json` via **Project Settings → Show "appsscript.json"
+   manifest file** and replace it with the contents of
+   `google-forms/apps-script/appsscript.json`.
 
-### Form Settings (gear icon)
-| Setting | Value |
-|---------|-------|
-| Collect email addresses | **OFF** (email is pre-filled in a field) |
-| Limit to 1 response | **OFF** (token enforces single-use) |
-| Confirmation message | *Thank you. Your intake form has been received. Our team will review your submission and be in touch within 2–3 business days.* |
+   > The manifest already declares the Drive API in `enabledAdvancedServices` —
+   > Apps Script enables it automatically. **Do NOT also add Drive via the
+   > Services panel** — doing so when it's already in the manifest causes
+   > `"Found a service identifier used more than once: Drive"` on save. If you
+   > already added it via the panel, go to **Services → three-dot menu next to
+   > Drive API → Remove**, then save again.
 
-### Branding
-- **Header image**: upload the firm logo (recommended size 1600 × 400 px)
-- **Color**: set theme accent color to `#1A3C6B`
+5. At the top of `Code.gs`, update these constants:
+
+```javascript
+var PROJECT_ID            = "your-gcp-project-id";
+var INTAKE_DRIVE_SYNC_URL = "https://REGION-PROJECT_ID.cloudfunctions.net/intake-drive-sync/sync";
+var DRIVE_SYNC_SECRET     = "...";  // value of Secret Manager secret INTAKE_DRIVE_SYNC_SECRET
+var ADMIN_EMAIL           = "admin@yourfirm.com";
+var CASE_API_BASE         = "https://your-case-development-cloud-run-url/api/v1";
+var CASE_API_KEY          = "...";  // partner API key (see Prerequisites)
+```
+
+Optionally, set `SENDGRID_API_KEY` if you prefer SendGrid for reminder emails
+(leave blank to use GmailApp).
 
 ---
 
-## Step 2 — Build the Form Sections
+## Step 2 — Run `createIntakeForm()`
 
-Create each section with the exact question titles listed below.
-**Titles must match exactly** — Apps Script and the pre-fill URL use them by name.
+1. In the Apps Script editor, select **`createIntakeForm`** from the function dropdown.
+2. Click **▶ Run**.
+3. Approve the OAuth consent prompts (form creation + Sheet access).
+4. Check the **Execution Log** for the form's edit and public URLs, and a
+   reminder of the manual steps still required (Step 3 below).
+
+This creates a form titled **"SimpleTort Client Intake Form"** with every
+section, question, and branching rule below, links its responses to the
+current Sheet, and installs both triggers (`onIntakeFormSubmit` on form
+submit, `dailyReminderCheck` daily 6am–7am) — so Step 7 from earlier versions
+of this guide is no longer a separate manual step.
+
+**Titles must match exactly** — Apps Script and the pre-fill URL use them by
+name, and `createIntakeForm()` sources them from the same `Q_*` constants
+`onIntakeFormSubmit` reads, so they can't drift.
 
 ### Section 1 — About You
 | Question title | Type | Required | Notes |
@@ -45,7 +82,7 @@ Create each section with the exact question titles listed below.
 | Last Name | Short answer | Yes | Pre-filled via URL |
 | Email Address | Short answer | Yes | Pre-filled via URL |
 | Phone Number | Short answer | Yes | Pre-filled via URL |
-| Intake Token | Short answer | Yes | Pre-filled via URL — add description "**Do not edit this field**" |
+| Intake Token | Short answer | Yes | Pre-filled via URL — help text "Do not edit this field" |
 
 ### Section 2 — WTC Health Program Status
 | Question title | Type | Required |
@@ -54,9 +91,8 @@ Create each section with the exact question titles listed below.
 
 Choices: `Enrolled` / `Applied` / `Not Applied` / `Unknown`
 
-**Branching**: click the three-dot menu on the question → "Go to section based on answer":
-- `Enrolled` → Section 3A (WTC Member Details)
-- `Applied`, `Not Applied`, `Unknown` → Section 3B (Exposure Description)
+Branching: `Enrolled` → Section 3A (WTC Member Details); `Applied`, `Not Applied`,
+`Unknown` → Section 3B (Exposure Description).
 
 ### Section 3A — WTC Member Details *(if enrolled)*
 | Question title | Type | Required |
@@ -64,14 +100,14 @@ Choices: `Enrolled` / `Applied` / `Not Applied` / `Unknown`
 | WTC Member ID | Short answer | No |
 | Medical Conditions (WTC-related) | Paragraph | No |
 
-At end of section: set "After section 3A" → **Go to section 4 (VCF History)**
+At end of section → Section 4 (VCF Claim History)
 
 ### Section 3B — Exposure Description *(if not enrolled)*
 | Question title | Type | Required |
 |----------------|------|----------|
 | Exposure Description | Paragraph | Yes |
 
-At end of section: set "After section 3B" → **Go to section 4 (VCF History)**
+At end of section → Section 4 (VCF Claim History)
 
 ### Section 4 — VCF Claim History
 | Question title | Type | Required |
@@ -80,9 +116,7 @@ At end of section: set "After section 3B" → **Go to section 4 (VCF History)**
 
 Choices: `Yes` / `No`
 
-**Branching**:
-- `Yes` → Section 5A (Prior Claim Details)
-- `No` → Section 5B (placeholder)
+Branching: `Yes` → Section 5A (Prior Claim Details); `No` → Section 5B (placeholder).
 
 ### Section 5A — Prior Claim Details *(if yes)*
 | Question title | Type | Required |
@@ -92,10 +126,10 @@ Choices: `Yes` / `No`
 
 Choices for "Prior VCF Claim Status": `Pending` / `Approved` / `Denied` / `On Appeal`
 
-At end of section: **Go to section 6 (Deceased Claimant)**
+At end of section → Section 6 (Deceased Claimant)
 
 ### Section 5B *(placeholder — no questions)*
-At end of section: **Go to section 6 (Deceased Claimant)**
+At end of section → Section 6 (Deceased Claimant)
 
 ### Section 6 — Deceased Claimant
 | Question title | Type | Required |
@@ -104,35 +138,58 @@ At end of section: **Go to section 6 (Deceased Claimant)**
 
 Choices: `Yes` / `No`
 
-**Branching**:
-- `Yes` → Section 7 (Estate Documents)
-- `No` → Section 8 (Document Uploads)
+Branching: `Yes` → Section 7 (Estate Documents); `No` → Section 8 (Document Uploads).
 
 ### Section 7 — Estate Documents *(if deceased)*
+Created by `createIntakeForm()` as an empty section — see Step 3 for the
+questions that must be added by hand.
+
+At end of section → Section 8 (Document Uploads)
+
+### Section 8 — Document Uploads
+Created by `createIntakeForm()` as an empty section — see Step 3 for the
+questions that must be added by hand.
+
+---
+
+## Step 3 — Manual Steps `createIntakeForm()` Can't Automate
+
+Apps Script's `FormApp` service has no way to create file-upload questions or
+set form branding — both are Forms-UI-only, with no equivalent in `FormApp` or
+the Forms REST API.
+
+### File uploads
+Open the form in the editor and add these questions to the sections
+`createIntakeForm()` already created:
+
+**Section 7 — Estate Documents**
 | Question title | Type | Required |
 |----------------|------|----------|
 | Upload Death Certificate | File upload | No |
 | Upload Letters of Administration | File upload | No |
 
-> **File upload settings**: allow up to 10 files, max 10 MB per file, accept any file type.
-
-At end of section: **Go to section 8 (Document Uploads)**
-
-### Section 8 — Document Uploads
+**Section 8 — Document Uploads**
 | Question title | Type | Required |
 |----------------|------|----------|
 | Upload Medical Records | File upload | No |
 | Upload Proof of Presence | File upload | No |
 | Upload Photo ID | File upload | No |
 
-> **File upload settings**: same as above.
+> **File upload settings** (both sections): allow up to 10 files, max 10 MB
+> per file, accept any file type.
+
+### Branding
+In the form editor (gear icon and paint-roller icon):
+- **Collect email addresses**: confirm **OFF** (already set by `createIntakeForm()`)
+- **Header image**: upload the firm logo (recommended size 1600 × 400 px)
+- **Color**: set theme accent color to `#1A3C6B`
 
 ---
 
-## Step 3 — Sync Entry IDs to Firestore (automated)
+## Step 4 — Sync Entry IDs to Firestore (automated)
 
-After completing Steps 4–5 (Apps Script setup), run the one-click sync function
-instead of extracting entry IDs manually:
+Once Step 3 is done, run the one-click sync function instead of extracting
+entry IDs manually:
 
 1. In the Apps Script editor, select **`syncFormEntryIds`** from the function dropdown
 2. Click **▶ Run**
@@ -162,70 +219,7 @@ Console, no URL copy-pasting, no manual extraction required.
 
 ---
 
-## Step 4 — Link a Google Sheet and Open Apps Script
-
-1. In the form editor, click the **Responses** tab → spreadsheet icon → **Create a new spreadsheet**
-2. Name it "SimpleTort Intake Responses"
-3. Open the linked Sheet → **Extensions → Apps Script**
-4. Delete all default content in `Code.gs`
-5. Paste the contents of `google-forms/apps-script/Code.gs`
-6. Open `appsscript.json` via **Project Settings → Show "appsscript.json" manifest file**
-   and replace with the contents of `google-forms/apps-script/appsscript.json`
-
----
-
-## Step 5 — Update Constants in Code.gs
-
-At the top of `Code.gs`, update these constants:
-
-```javascript
-var PROJECT_ID            = "your-gcp-project-id";
-var INTAKE_DRIVE_SYNC_URL = "https://REGION-PROJECT_ID.cloudfunctions.net/intake-drive-sync/sync";
-var DRIVE_SYNC_SECRET     = "...";  // value of Secret Manager secret INTAKE_DRIVE_SYNC_SECRET
-var ADMIN_EMAIL           = "admin@yourfirm.com";
-```
-
-Optionally, set `SENDGRID_API_KEY` if you prefer SendGrid for reminder emails
-(leave blank to use GmailApp).
-
----
-
-## Step 6 — Drive Advanced Service (already declared in manifest)
-
-The `appsscript.json` you pasted in Step 5 already declares the Drive API
-in `enabledAdvancedServices` — Apps Script enables it automatically from the manifest.
-
-> ⚠️ **Do NOT add Drive via the Services panel.** Adding it manually when it is
-> already in the manifest causes this error on save:
-> `"Found a service identifier used more than once: Drive"`
->
-> If you already added it via the panel, go to **Services → three-dot menu next
-> to Drive API → Remove** to resolve the conflict, then save again.
-
----
-
-## Step 7 — Install the Triggers
-
-1. In Apps Script, click **Triggers** (clock icon in left panel) → **+ Add Trigger**
-
-**Trigger 1 — Form submission:**
-| Setting | Value |
-|---------|-------|
-| Function | `onIntakeFormSubmit` |
-| Event source | From spreadsheet |
-| Event type | On form submit |
-
-**Trigger 2 — Daily reminder:**
-| Setting | Value |
-|---------|-------|
-| Function | `dailyReminderCheck` |
-| Event source | Time-driven |
-| Time-based trigger type | Day timer |
-| Time of day | 6am to 7am |
-
----
-
-## Step 8 — Grant IAM Permissions
+## Step 5 — Grant IAM Permissions
 
 The Apps Script runs as your Google account. Grant that account access to Firestore:
 
@@ -245,7 +239,7 @@ intake-drive-sync@YOUR_PROJECT_ID.iam.gserviceaccount.com
 
 ---
 
-## Step 9 — Test End-to-End
+## Step 6 — Test End-to-End
 
 ### Send a test intake form link
 ```bash
@@ -273,7 +267,11 @@ Fill in the remaining fields, upload test documents, and submit.
 
 Check:
 - `intake_tokens/{tokenId}.used == true` in Firestore
-- `cases/{caseId}.status == "Pending Paralegal Review"` in Firestore
+- `cases/{caseId}.status == "Pending Paralegal Review"` in Firestore (via case-development's
+  `PATCH /cases/{caseId}/status` — not written directly)
+- Case profile fields (name/email/phone/exposure location/conditions) updated on
+  `cases/{caseId}` via case-development's `PATCH /cases/{caseId}`, with a matching
+  `audit_logs` entry
 - `cases/{caseId}/documents` subcollection has records for each uploaded file
 - GCS bucket contains objects at `{caseId}/medical-records/` etc.
 
@@ -291,5 +289,7 @@ Check:
 | `emailSent: false` | Missing/invalid `SENDGRID_API_KEY` | Check Secret Manager binding in Cloud Run |
 | Token not found in Apps Script logs | `PROJECT_ID` constant incorrect | Update `Code.gs` PROJECT_ID |
 | Drive file download fails | Service account not shared on Drive folder | Share folder with Cloud Run SA |
-| `Firestore PATCH returned 403` | Apps Script account lacks Firestore IAM role | Re-run Step 8 |
-| Pre-fill URL has wrong values | Entry IDs set incorrectly | Re-extract entry IDs (Step 3) |
+| Case profile/status update fails (logged, admin alert sent) | `CASE_API_BASE`/`CASE_API_KEY` incorrect, or partner key inactive/missing in Firestore `partners` | Check the constants and the `partners/{id}` doc's `active`/`apiKeys[]` fields |
+| `Firestore PATCH returned 403` (intake_tokens writes) | Apps Script account lacks Firestore IAM role | Re-run Step 5 |
+| Pre-fill URL has wrong values | Entry IDs set incorrectly | Re-run `syncFormEntryIds()` (Step 4) |
+| `createIntakeForm()` throws "must be run from a Google Sheet's bound Apps Script project" | Run from a standalone script, not one bound to a Sheet | Follow Step 1 — paste the code into a Sheet's Apps Script project first |
