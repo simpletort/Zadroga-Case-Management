@@ -10,7 +10,7 @@ _DOC_ID     = "document_checklists"
 # Defaults applied when firmSettings/document_checklists has not been configured
 # yet, or is missing the "default" key.
 _DEFAULTS = {
-    "default": ["medical-records", "proof-of-presence", "id-documents"],
+    "default": ["medical records", "proof of presence", "id documents"],
 }
 
 

@@ -15,7 +15,7 @@ class TestMetadataRoute:
         snap.exists = exists
         snap.to_dict.return_value = data or {
             "fileName": "records_2024.pdf",
-            "category": "medical_records",
+            "category": "medical records",
             "gcsPath": "ZAD-2024-01-0001/medical-records/records_2024.pdf",
             "mimeType": "application/pdf",
             "sizeBytes": 204800,
@@ -48,7 +48,7 @@ class TestMetadataRoute:
         assert body["file_id"] == "doc-abc123"
         assert body["case_id"] == "ZAD-2024-01-0001"
         assert body["file_name"] == "records_2024.pdf"
-        assert body["category"] == "medical_records"
+        assert body["category"] == "medical records"
         assert body["processing_status"] == "Completed"
         assert body["verification_status"] == "AI Verified"
 
@@ -108,6 +108,6 @@ class TestCreateFileMetadata:
         mock_ref.set.assert_called_once()
         written = mock_ref.set.call_args[0][0]
         assert written["fileName"] == "medical_report.pdf"
-        assert written["category"] == "medical_records"
+        assert written["category"] == "medical records"
         assert written["processingStatus"] == "Pending"
         assert written["verificationStatus"] == "Unverified"

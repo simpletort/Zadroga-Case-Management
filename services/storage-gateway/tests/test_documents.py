@@ -19,7 +19,7 @@ def _make_doc(file_id: str, data: Optional[dict] = None):
     doc.exists = True
     doc.to_dict.return_value = data or {
         "fileName": "{}.pdf".format(file_id),
-        "category": "medical_records",
+        "category": "medical records",
         "gcsPath": "ZAD-2024-01-0001/medical-records/{}.pdf".format(file_id),
         "mimeType": "application/pdf",
         "sizeBytes": 204800,
@@ -95,11 +95,11 @@ class TestListCaseDocuments:
         with patch("app.services.metadata_service.get_firestore_client") as mock_db_fn:
             mock_db_fn.return_value = _db_from_col(mock_col)
             resp = client.get(
-                self.URL, params={"category": "medical_records"}            )
+                self.URL, params={"category": "medical records"}            )
 
         assert resp.status_code == 200
         # where() was called with the category filter
-        mock_query.where.assert_any_call("category", "==", "medical_records")
+        mock_query.where.assert_any_call("category", "==", "medical records")
 
     def test_filters_by_processing_status(self, client):
         mock_col, mock_query = _make_col_mock([])
@@ -200,7 +200,7 @@ class TestListCaseDocuments:
     def test_response_includes_scan_status_and_extracted_data(self, client):
         doc_data = {
             "fileName": "report.pdf",
-            "category": "medical_records",
+            "category": "medical records",
             "gcsPath": "ZAD-2024-01-0001/medical-records/report.pdf",
             "mimeType": "application/pdf",
             "sizeBytes": 1024,
@@ -235,7 +235,7 @@ class TestPatchDocumentMetadata:
         snap.exists = True
         snap.to_dict.return_value = data or {
             "fileName": "report.pdf",
-            "category": "medical_records",
+            "category": "medical records",
             "gcsPath": "ZAD-2024-01-0001/medical-records/report.pdf",
             "mimeType": "application/pdf",
             "sizeBytes": 1024,
@@ -383,7 +383,7 @@ class TestQueryCaseDocumentsService:
                 category=DocumentCategory.vcf_documents,
             )
 
-        mock_query.where.assert_any_call("category", "==", "vcf_documents")
+        mock_query.where.assert_any_call("category", "==", "vcf documents")
 
     def test_detects_has_more_when_one_extra_returned(self):
         from app.services.metadata_service import query_case_documents
@@ -453,7 +453,7 @@ class TestUpdateDocumentMetadataService:
         snap.exists = exists
         snap.to_dict.return_value = snap_data or {
             "fileName": "doc.pdf",
-            "category": "legal_forms",
+            "category": "legal forms",
             "gcsPath": "ZAD-2024-01-0001/legal-forms/doc.pdf",
             "mimeType": "application/pdf",
             "sizeBytes": 512,
@@ -542,7 +542,7 @@ class TestUpdateDocumentMetadataService:
 
         updated_data = {
             "fileName": "doc.pdf",
-            "category": "legal_forms",
+            "category": "legal forms",
             "gcsPath": "ZAD-2024-01-0001/legal-forms/doc.pdf",
             "mimeType": "application/pdf",
             "sizeBytes": 512,

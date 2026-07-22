@@ -23,6 +23,7 @@ from google.cloud import firestore
 
 from app.config import get_settings
 from app.models.storage import (
+    DocumentCategory,
     ProcessingStatus,
     ScanStatus,
     UploadStatusResponse,
@@ -96,10 +97,15 @@ def register_upload(
         "quarantinePath": None,
     })
 
+    # Derive category from folder_path if it matches a known DocumentCategory value
+    _category_values = {c.value for c in DocumentCategory}
+    derived_category = folder_path if folder_path in _category_values else None
+
     # 2. Create the document skeleton under the case
     db.collection("cases").document(case_id).collection("documents").document(file_id).set({
         "fileName": file_name,
         "folderPath": folder_path,
+        "category": derived_category,
         "gcsPath": None,            # populated after clean scan
         "mimeType": content_type,
         "sizeBytes": size_bytes,

@@ -93,7 +93,7 @@ def run_preflight(db: firestore.Client, case_id: str) -> dict:
     for category in required_categories:
         present = category in uploaded_categories
         checks.append({
-            "name":   "document_{}".format(category.replace("-", "_")),
+            "name":   "document_{}".format(category.replace(" ", "_")),
             "passed": present,
             "detail": None if present else "No clean upload found for category '{}'.".format(category),
         })

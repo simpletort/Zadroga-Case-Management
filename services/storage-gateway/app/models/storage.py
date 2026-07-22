@@ -5,14 +5,14 @@ from pydantic import BaseModel, Field
 
 
 class DocumentCategory(str, Enum):
-    temp_lead_attachments = "temp_lead_attachments"
-    medical_records = "medical_records"
-    proof_of_presence = "proof_of_presence"
-    id_documents = "id_documents"
-    legal_forms = "legal_forms"
-    vcf_documents = "vcf_documents"
-    settlement_docs = "settlement_docs"
-    client_uploads = "client_uploads"
+    temp_lead_attachments = "temp lead attachments"
+    medical_records = "medical records"
+    proof_of_presence = "proof of presence"
+    id_documents = "id documents"
+    legal_forms = "legal forms"
+    vcf_documents = "vcf documents"
+    settlement_docs = "settlement docs"
+    client_uploads = "client uploads"
 
 
 class UrlAction(str, Enum):
