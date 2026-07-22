@@ -49,9 +49,9 @@ def _doc_snap(category: str, scan_status: str = "clean"):
 
 def _all_clean_docs():
     return [
-        _doc_snap("medical_records"),
-        _doc_snap("proof_of_presence"),
-        _doc_snap("id_documents"),
+        _doc_snap("medical records"),
+        _doc_snap("proof of presence"),
+        _doc_snap("id documents"),
     ]
 
 
@@ -125,25 +125,25 @@ class TestRunPreflight:
     def test_missing_medical_records_fails(self):
         from app.services.review_service import run_preflight
 
-        docs = [_doc_snap("proof_of_presence"), _doc_snap("id_documents")]
+        docs = [_doc_snap("proof of presence"), _doc_snap("id documents")]
         result = run_preflight(self._db(docs=docs), "ZAD-2026-04-0001")
 
-        med_check = next(c for c in result["checks"] if c["name"] == "document_medical_records")
+        med_check = next(c for c in result["checks"] if c["name"] == "document_medical records")
         assert med_check["passed"] is False
         assert result["all_passed"] is False
 
     def test_infected_document_not_counted(self):
         from app.services.review_service import run_preflight
 
-        # medical_records exists but is infected — should not count
+        # medical records exists but is infected — should not count
         docs = [
-            _doc_snap("medical_records", scan_status="infected"),
-            _doc_snap("proof_of_presence"),
-            _doc_snap("id_documents"),
+            _doc_snap("medical records", scan_status="infected"),
+            _doc_snap("proof of presence"),
+            _doc_snap("id documents"),
         ]
         result = run_preflight(self._db(docs=docs), "ZAD-2026-04-0001")
 
-        med_check = next(c for c in result["checks"] if c["name"] == "document_medical_records")
+        med_check = next(c for c in result["checks"] if c["name"] == "document_medical records")
         assert med_check["passed"] is False
 
     def test_questionnaire_incomplete_fails(self):
@@ -217,7 +217,7 @@ class TestRunPreflight:
     def test_returns_all_check_names(self):
         from app.services.review_service import run_preflight
 
-        default_categories = ["medical_records", "proof_of_presence", "id_documents"]
+        default_categories = ["medical records", "proof of presence", "id documents"]
         with patch(
             "app.services.review_service.get_required_document_categories",
             return_value=default_categories,
@@ -259,7 +259,7 @@ class TestDocumentChecklistResolution:
 
         with patch(
             "app.services.review_service.get_required_document_categories",
-            return_value=["medical_records", "proof_of_presence", "id_documents"],
+            return_value=["medical records", "proof of presence", "id documents"],
         ) as mock_get:
             result = run_preflight(self._db(), "ZAD-2026-04-0001")
 
@@ -270,12 +270,12 @@ class TestDocumentChecklistResolution:
         """A case_type with a configured override uses the override list, not the default."""
         from app.services.review_service import run_preflight
 
-        override_categories = ["medical_records", "proof_of_presence", "id_documents", "employment_records"]
+        override_categories = ["medical records", "proof of presence", "id documents", "employment records"]
         docs = [
-            _doc_snap("medical_records"),
-            _doc_snap("proof_of_presence"),
-            _doc_snap("id_documents"),
-        ]  # missing "employment_records" -> should fail if override is applied
+            _doc_snap("medical records"),
+            _doc_snap("proof of presence"),
+            _doc_snap("id documents"),
+        ]  # missing "employment records" -> should fail if override is applied
 
         with patch(
             "app.services.review_service.get_required_document_categories",
@@ -286,7 +286,7 @@ class TestDocumentChecklistResolution:
         mock_get.assert_called_once_with(mock_get.call_args[0][0], "wtc")
         assert result["all_passed"] is False
         names = {c["name"]: c["passed"] for c in result["checks"]}
-        assert names["document_employment_records"] is False
+        assert names["document_employment records"] is False
 
     def test_missing_doc_falls_back_to_default(self):
         """No firmSettings/document_checklists doc exists -> built-in default categories."""
@@ -299,7 +299,7 @@ class TestDocumentChecklistResolution:
 
         result = get_required_document_categories(db, "wtc")
 
-        assert result == ["medical_records", "proof_of_presence", "id_documents"]
+        assert result == ["medical records", "proof of presence", "id documents"]
 
     def test_case_type_with_no_matching_override_falls_back_to_default(self):
         """A case_type present on the case but absent from overrides resolves to the default list."""
@@ -309,14 +309,14 @@ class TestDocumentChecklistResolution:
         doc = MagicMock()
         doc.exists = True
         doc.to_dict.return_value = {
-            "default": ["medical_records", "proof_of_presence", "id_documents"],
-            "overrides": {"wtc": ["medical_records", "proof_of_presence", "id_documents", "employment_records"]},
+            "default": ["medical records", "proof of presence", "id documents"],
+            "overrides": {"wtc": ["medical records", "proof of presence", "id documents", "employment records"]},
         }
         db.collection.return_value.document.return_value.get.return_value = doc
 
         result = get_required_document_categories(db, "vcf")
 
-        assert result == ["medical_records", "proof_of_presence", "id_documents"]
+        assert result == ["medical records", "proof of presence", "id documents"]
 
 
 # ── submit_for_review unit tests ───────────────────────────────────────────
