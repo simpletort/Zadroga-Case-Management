@@ -128,7 +128,7 @@ class TestRunPreflight:
         docs = [_doc_snap("proof of presence"), _doc_snap("id documents")]
         result = run_preflight(self._db(docs=docs), "ZAD-2026-04-0001")
 
-        med_check = next(c for c in result["checks"] if c["name"] == "document_medical records")
+        med_check = next(c for c in result["checks"] if c["name"] == "document_medical_records")
         assert med_check["passed"] is False
         assert result["all_passed"] is False
 
@@ -143,7 +143,7 @@ class TestRunPreflight:
         ]
         result = run_preflight(self._db(docs=docs), "ZAD-2026-04-0001")
 
-        med_check = next(c for c in result["checks"] if c["name"] == "document_medical records")
+        med_check = next(c for c in result["checks"] if c["name"] == "document_medical_records")
         assert med_check["passed"] is False
 
     def test_questionnaire_incomplete_fails(self):
@@ -229,7 +229,7 @@ class TestRunPreflight:
         assert "questionnaire_complete" in names
         assert "ai_summary_generated" in names
         for cat in default_categories:
-            assert "document_{}".format(cat.replace("-", "_")) in names
+            assert "document_{}".format(cat.replace(" ", "_")) in names
 
 
 # ── Document checklist resolution tests ─────────────────────────────────────
@@ -286,7 +286,7 @@ class TestDocumentChecklistResolution:
         mock_get.assert_called_once_with(mock_get.call_args[0][0], "wtc")
         assert result["all_passed"] is False
         names = {c["name"]: c["passed"] for c in result["checks"]}
-        assert names["document_employment records"] is False
+        assert names["document_employment_records"] is False
 
     def test_missing_doc_falls_back_to_default(self):
         """No firmSettings/document_checklists doc exists -> built-in default categories."""
