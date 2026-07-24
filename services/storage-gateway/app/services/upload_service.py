@@ -98,8 +98,8 @@ def register_upload(
     })
 
     # Derive category from folder_path if it matches a known DocumentCategory value
-    _category_values = {c.value for c in DocumentCategory}
-    derived_category = folder_path if folder_path in _category_values else None
+    _category_values = {c.value: c.value for c in DocumentCategory}
+    derived_category = _category_values.get(folder_path.lower()) if folder_path else None
 
     # 2. Create the document skeleton under the case
     db.collection("cases").document(case_id).collection("documents").document(file_id).set({
