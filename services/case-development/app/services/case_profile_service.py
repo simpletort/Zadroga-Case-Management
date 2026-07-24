@@ -146,7 +146,7 @@ def patch_case(
 
     # Build the Firestore update payload using dot-path keys.
     now = datetime.now(tz=timezone.utc)
-    update_payload: dict[str, Any] = {"updatedAt": now}
+    update_payload: dict[str, Any] = {"updatedAt": now, "questionnaireComplete": True}
     for field, value in changed.items():
         if field == "address" and value is not None:
             # address is a top-level Firestore map {street, city, state, zip}.
