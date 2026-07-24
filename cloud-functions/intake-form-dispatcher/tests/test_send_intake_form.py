@@ -88,8 +88,26 @@ class TestValidation:
         resp = _post(app, {})
         assert resp.status_code == 400
 
-    def test_invalid_case_id_format_returns_400(self, app, mock_form_config):
-        resp = _post(app, {"caseId": "INVALID-123"})
+    def test_non_standard_case_id_format_is_accepted(self, app, mock_db, mock_form_config):
+        """caseId no longer requires the ZAD-YYYY-MM-XXXX shape — only that it's
+        safe to use as a Firestore document ID (see _case_id_is_safe)."""
+        _setup_happy_db(mock_db)
+        with patch("main._send_intake_email", return_value=True):
+            resp = _post(app, {"caseId": "INVALID-123"})
+        assert resp.status_code == 200
+
+    def test_case_id_with_slash_returns_400(self, app, mock_form_config):
+        """A '/' would be reinterpreted as a Firestore path separator by
+        db.collection('cases').document(case_id) — must still be rejected."""
+        resp = _post(app, {"caseId": "ZAD-2026/../other"})
+        assert resp.status_code == 400
+
+    def test_case_id_dot_returns_400(self, app, mock_form_config):
+        resp = _post(app, {"caseId": "."})
+        assert resp.status_code == 400
+
+    def test_case_id_reserved_pattern_returns_400(self, app, mock_form_config):
+        resp = _post(app, {"caseId": "__reserved__"})
         assert resp.status_code == 400
 
     def test_get_method_returns_405(self, app):

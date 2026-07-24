@@ -9,7 +9,8 @@ Body:     { "caseId": "ZAD-2026-03-0001" }
 Response: { "tokenId": "...", "previewUrl": "...", "emailSent": true }
 
 Flow:
-  1. Validate request body — caseId present and matches ZAD-YYYY-MM-XXXX
+  1. Validate request body — caseId present and safe to use as a Firestore
+     document ID (no format requirement beyond that — see _case_id_is_safe)
   2. Fetch case document from Firestore — confirm it exists and is in a
      status that allows intake dispatch ("New Lead" or "Pending Client Info")
   3. Load form field mapping from Firestore config/intake_form (cached per instance)
@@ -46,7 +47,6 @@ Environment variables (set via Cloud Run --set-env-vars / Secret Manager):
 
 import logging
 import os
-import re
 import sys
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -79,7 +79,6 @@ FROM_EMAIL = os.environ.get("FROM_EMAIL", "noreply@simpletort.com")
 ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@simpletort.com")
 TOKEN_EXPIRY_DAYS = int(os.environ.get("TOKEN_EXPIRY_DAYS", "30"))
 
-CASE_ID_RE = re.compile(r"^ZAD-\d{4}-\d{2}-\d{4}$")
 ALLOWED_STATUSES = {"New Lead", "Pending Client Information"}
 RESEND_STATUSES = {"Pending Client Information"}
 
@@ -93,6 +92,30 @@ def _get_db() -> firestore.Client:
     if _db is None:
         _db = firestore.Client(project=PROJECT_ID, database=FIRESTORE_DB)
     return _db
+
+
+def _case_id_is_safe(case_id: str) -> bool:
+    """
+    Minimal Firestore document-ID safety check — deliberately NOT a case-ID
+    format check (no ZAD-YYYY-MM-XXXX requirement).
+
+    case_id is passed straight into db.collection("cases").document(case_id)
+    below. Firestore's .document() splits its argument on "/", so an embedded
+    slash would silently target a different document path instead of cleanly
+    404ing. Also rejects the couple of literal values Firestore itself
+    disallows as a document ID.
+    """
+    if not case_id:
+        return False
+    if "/" in case_id:
+        return False
+    if case_id in (".", ".."):
+        return False
+    if case_id.startswith("__") and case_id.endswith("__"):
+        return False
+    if len(case_id.encode("utf-8")) > 1500:
+        return False
+    return True
 
 
 def _get_form_config() -> dict:
@@ -261,9 +284,9 @@ def send_intake_form(request: flask.Request) -> flask.Response:
         )
 
     case_id: str = body.get("caseId", "").strip()
-    if not case_id or not CASE_ID_RE.match(case_id):
+    if not _case_id_is_safe(case_id):
         return flask.make_response(
-            flask.jsonify({"error": "caseId is required and must match ZAD-YYYY-MM-XXXX"}),
+            flask.jsonify({"error": "caseId is required and must not contain '/'."}),
             400,
             cors_headers,
         )
