@@ -6,10 +6,12 @@
 #   3. Deploy to Cloud Run
 #
 # Substitution variables (set in Cloud Build trigger):
-#   _SERVICE_NAME — enrollment-workflow
-#   _REPO         — Artifact Registry repo URL
-#   _REGION       — GCP region (e.g. us-central1)
-#   _ENV          — dev | test | prod
+#   _SERVICE_NAME           — enrollment-workflow
+#   _REPO                   — Artifact Registry repo URL
+#   _REGION                 — GCP region (e.g. us-central1)
+#   _ENV                    — dev | test | prod
+#   _SERVICE_ACCOUNT_EMAIL  — Cloud Run runtime service account
+#                             (e.g. enrollment-workflow-sa@PROJECT_ID.iam.gserviceaccount.com)
 
 steps:
   # ── Tests ──────────────────────────────────────────────────────────────
@@ -57,7 +59,7 @@ steps:
       - "--region=$_REGION"
       - "--platform=managed"
       - "--allow-unauthenticated"
-      - "--service-account=enrollment-workflow-sa@$PROJECT_ID.iam.gserviceaccount.com"
+      - "--service-account=$_SERVICE_ACCOUNT_EMAIL"
       - >-
         --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,APP_ENV=$_ENV,
         FIRESTORE_DATABASE_ID=simpletort-dev,
@@ -70,6 +72,9 @@ steps:
       - "--timeout=120s"
       - "--min-instances=1"
       - "--max-instances=10"
+
+substitutions:
+  _SERVICE_ACCOUNT_EMAIL: ""   # set in trigger — e.g. enrollment-workflow-sa@PROJECT_ID.iam.gserviceaccount.com
 
 images:
   - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
