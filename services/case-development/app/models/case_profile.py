@@ -33,7 +33,8 @@ FIELD_CATALOG: dict[str, dict[str, Any]] = {
     "exposure_date_start": {"firestore_path": "exposureDateStart",            "phi": True},
     "exposure_date_end":   {"firestore_path": "exposureDateEnd",              "phi": True},
     "conditions":          {"firestore_path": "conditions",                   "phi": True},
-    "prior_attorney":      {"firestore_path": "priorAttorney",                "phi": True},
+    "prior_attorney":          {"firestore_path": "priorAttorney",            "phi": True},
+    "questionnaire_complete":  {"firestore_path": "questionnaireComplete",    "phi": False},
 }
 
 # Only these top-level case fields may be modified via PATCH /cases/{caseId}.
@@ -62,6 +63,7 @@ class CasePatchRequest(BaseModel):
     exposure_date_end: date | None = None
     conditions: list[str] | None = None
     prior_attorney: bool | None = None
+    questionnaire_complete: bool | None = None
 
     model_config = {"extra": "allow"}
 
