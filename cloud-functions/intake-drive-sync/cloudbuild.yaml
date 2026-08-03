@@ -6,11 +6,13 @@
 #   3. Deploy to Cloud Run (HTTP trigger, called by Apps Script)
 #
 # Substitution variables (set in Cloud Build trigger):
-#   _SERVICE_NAME  — Cloud Run service / image name (e.g. intake-drive-sync)
-#   _REPO          — Artifact Registry repo URL
-#   _REGION        — GCP region (e.g. us-central1)
-#   _ENV           — dev | test | prod
-#   _BUCKET        — GCS bucket name (e.g. zadroga-case-files-PROJECT_ID)
+#   _SERVICE_NAME           — Cloud Run service / image name (e.g. intake-drive-sync)
+#   _REPO                   — Artifact Registry repo URL
+#   _REGION                 — GCP region (e.g. us-central1)
+#   _ENV                    — dev | test | prod
+#   _BUCKET                 — GCS bucket name (e.g. zadroga-case-files-PROJECT_ID)
+#   _SERVICE_ACCOUNT_EMAIL  — Cloud Run runtime service account
+#                             (e.g. intake-drive-sync-sa@PROJECT_ID.iam.gserviceaccount.com)
 
 steps:
   # ── Tests ──────────────────────────────────────────────────────────────
@@ -51,6 +53,7 @@ steps:
       - "--region=$_REGION"
       - "--platform=managed"
       - "--no-allow-unauthenticated"
+      - "--service-account=$_SERVICE_ACCOUNT_EMAIL"
       - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,GCS_BUCKET_NAME=$_BUCKET,ENV=$_ENV"
       - "--set-secrets=DRIVE_SYNC_SECRET=INTAKE_DRIVE_SYNC_SECRET:latest"
       - "--memory=512Mi"
@@ -58,6 +61,9 @@ steps:
       - "--timeout=300s"
       - "--max-instances=5"
       - "--min-instances=0"
+
+substitutions:
+  _SERVICE_ACCOUNT_EMAIL: ""   # set in trigger — e.g. intake-drive-sync-sa@PROJECT_ID.iam.gserviceaccount.com
 
 images:
   - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
