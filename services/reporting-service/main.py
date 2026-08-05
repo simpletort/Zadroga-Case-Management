@@ -11,6 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from shared.middlewares.cors import get_cors_origins
 from app.config import get_settings
 from app.routes import dashboard, cases, staff, leads, expenses
 
@@ -43,11 +44,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://lookerstudio.google.com",
-        "https://staff.simpletort.com",
-        "https://simpletort.web.app",
-    ],
+    allow_origins=get_cors_origins(settings.environment) + ["https://lookerstudio.google.com"],
     allow_credentials=True,
     allow_methods=["GET", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "x-apigateway-api-userinfo"],
