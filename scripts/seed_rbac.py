@@ -138,6 +138,8 @@ ROLES = [
             "storage.documents.read", "storage.documents.write",
             "storage.hold.write",
             "storage.lifecycle.read", "storage.lifecycle.write",
+            "cases.status.update", "staff.read", "staff.write", 
+            "communications.read", "communications.write",
         ],
     },
 ]
