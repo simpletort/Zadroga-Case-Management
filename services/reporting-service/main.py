@@ -47,6 +47,7 @@ app.add_middleware(
         "https://lookerstudio.google.com",
         "https://staff.simpletort.com",
         "https://simpletort.web.app",
+        "http://localhost:5173",
     ],
     allow_credentials=True,
     allow_methods=["GET", "OPTIONS"],
