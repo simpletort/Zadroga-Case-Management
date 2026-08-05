@@ -1,35 +1,29 @@
 steps:
-  # ── 1. Test ─────────────────────────────────────────────────────────────────
   - name: "python:3.11-slim"
     dir: "services/reporting-service"
     entrypoint: bash
     args:
       - "-c"
       - |
-        pip install ../../shared
         pip install -r requirements.txt
         pytest tests/ -v --tb=short
 
-  # ── 2. Build (context = repo root so Dockerfile can COPY shared/) ───────────
   - name: "gcr.io/cloud-builders/docker"
+    dir: "services/reporting-service"
     args:
       - build
       - "-t"
       - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
       - "-t"
       - "$_REPO/$_SERVICE_NAME:latest"
-      - "-f"
-      - "services/reporting-service/Dockerfile"
       - "."
 
-  # ── 3. Push ──────────────────────────────────────────────────────────────────
   - name: "gcr.io/cloud-builders/docker"
     args: ["push", "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"]
 
   - name: "gcr.io/cloud-builders/docker"
     args: ["push", "$_REPO/$_SERVICE_NAME:latest"]
 
-  # ── 4. Deploy ────────────────────────────────────────────────────────────────
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     entrypoint: gcloud
     args:

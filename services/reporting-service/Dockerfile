@@ -2,16 +2,10 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install shared package first (available because build context is repo root)
-COPY shared/ ./shared/
-RUN pip install --no-cache-dir ./shared/
-
-# Install service dependencies
-COPY services/reporting-service/requirements.txt .
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy service source
-COPY services/reporting-service/ .
+COPY . .
 
 RUN adduser --disabled-password --gecos "" appuser
 USER appuser
