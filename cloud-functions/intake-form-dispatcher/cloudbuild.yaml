@@ -14,6 +14,8 @@
 #   _ADMIN_EMAIL            — admin alert address
 #   _FIRESTORE_DATABASE_ID  — Firestore database ID (default: (default))
 #   _TOKEN_EXPIRY_DAYS      — intake token validity in days (default: 30)
+#   _SERVICE_ACCOUNT_EMAIL  — Cloud Run runtime service account
+#                             (e.g. intake-form-dispatcher-sa@PROJECT_ID.iam.gserviceaccount.com)
 #
 # Google Form field mapping (formBaseUrl + fieldMappings) is stored in Firestore
 # at config/intake_form and is editable at runtime via Firebase Console — no
@@ -58,6 +60,7 @@ steps:
       - "--region=$_REGION"
       - "--platform=managed"
       - "--no-allow-unauthenticated"
+      - "--service-account=$_SERVICE_ACCOUNT_EMAIL"
       - "--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,ENV=$_ENV,FROM_EMAIL=$_FROM_EMAIL,ADMIN_EMAIL=$_ADMIN_EMAIL,FIRESTORE_DATABASE_ID=$_FIRESTORE_DATABASE_ID,TOKEN_EXPIRY_DAYS=$_TOKEN_EXPIRY_DAYS"
       - "--set-secrets=SENDGRID_API_KEY=SENDGRID_API_KEY:latest"
       - "--memory=256Mi"
@@ -65,6 +68,9 @@ steps:
       - "--timeout=60s"
       - "--max-instances=10"
       - "--min-instances=0"
+
+substitutions:
+  _SERVICE_ACCOUNT_EMAIL: ""   # set in trigger — e.g. intake-form-dispatcher-sa@PROJECT_ID.iam.gserviceaccount.com
 
 images:
   - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
