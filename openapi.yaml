@@ -24,7 +24,7 @@ paths:
       operationId: healthCheck
       security: []
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app/health
+        address: https://case-development-jeqnic7cvq-uc.a.run.app/health
         path_translation: CONSTANT_ADDRESS
       responses:
         200:
@@ -32,7 +32,7 @@ paths:
 
   # ============================================================
   # CASE DEVELOPMENT SERVICE
-  # Cloud Run: https://case-development-292736139819.us-central1.run.app
+  # Cloud Run: https://case-development-jeqnic7cvq-uc.a.run.app
   # Min role required per endpoint is enforced by the service itself (RBAC).
   # ============================================================
 
@@ -43,7 +43,7 @@ paths:
       operationId: corsPreflightDashboardCases
       security: []
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -66,7 +66,7 @@ paths:
         - { name: page, in: query, type: integer }
         - { name: page_size, in: query, type: integer }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -81,7 +81,7 @@ paths:
       parameters:
         - { name: caseId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -92,7 +92,7 @@ paths:
       parameters:
         - { name: caseId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -111,7 +111,7 @@ paths:
       parameters:
         - { name: caseId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -122,7 +122,7 @@ paths:
       parameters:
         - { name: caseId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -139,7 +139,7 @@ paths:
       parameters:
         - { name: caseId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -150,7 +150,7 @@ paths:
       parameters:
         - { name: caseId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -163,7 +163,7 @@ paths:
       operationId: corsPreflightParalegalWorkload
       security: []
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -172,7 +172,7 @@ paths:
       summary: "Workload distribution across all paralegals (min role: paralegal)"
       operationId: getParalegalWorkload
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -187,7 +187,7 @@ paths:
       operationId: corsPreflightAttorneyReviewQueue
       security: []
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -199,7 +199,7 @@ paths:
         - { name: page, in: query, type: integer }
         - { name: page_size, in: query, type: integer }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -216,7 +216,7 @@ paths:
       parameters:
         - { name: caseId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -227,7 +227,7 @@ paths:
       parameters:
         - { name: caseId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -242,7 +242,7 @@ paths:
       operationId: corsPreflightBulkApprove
       security: []
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -251,7 +251,7 @@ paths:
       summary: "Bulk approve multiple cases for filing (min role: junior_partner)"
       operationId: bulkApproveCases
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -302,7 +302,7 @@ paths:
       parameters:
         - { name: caseId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -336,7 +336,7 @@ paths:
                 type: string
                 description: "Required when reason is 'other'; optional otherwise."
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -363,7 +363,7 @@ paths:
       operationId: corsPreflightEscalationQueue
       security: []
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -379,7 +379,7 @@ paths:
         - { name: page, in: query, type: integer, default: 1 }
         - { name: page_size, in: query, type: integer, default: 20 }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -426,7 +426,7 @@ paths:
       parameters:
         - { name: caseId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -464,7 +464,7 @@ paths:
                 type: string
                 description: "Required when decision is 'reject' or 'return_to_paralegal'."
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -497,7 +497,7 @@ paths:
       parameters:
         - { name: caseId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -511,7 +511,7 @@ paths:
         - { name: page, in: query, type: integer }
         - { name: page_size, in: query, type: integer }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -524,7 +524,7 @@ paths:
       parameters:
         - { name: caseId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         201:
@@ -541,7 +541,7 @@ paths:
       parameters:
         - { name: caseId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -552,7 +552,7 @@ paths:
       parameters:
         - { name: caseId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -567,7 +567,7 @@ paths:
       parameters:
         - { name: caseId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -578,7 +578,7 @@ paths:
       parameters:
         - { name: caseId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -593,7 +593,7 @@ paths:
       operationId: corsPreflightCaseSearch
       security: []
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -621,7 +621,7 @@ paths:
         - { name: page, in: query, type: integer }
         - { name: page_size, in: query, type: integer }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -634,7 +634,7 @@ paths:
       operationId: corsPreflightCaseSearchExport
       security: []
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -660,7 +660,7 @@ paths:
         - { name: sort_by, in: query, type: string }
         - { name: sort_dir, in: query, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -673,7 +673,7 @@ paths:
       operationId: corsPreflightSearchPresets
       security: []
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -682,7 +682,7 @@ paths:
       summary: "List saved filter presets for current user (min role: paralegal)"
       operationId: listSearchPresets
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -693,7 +693,7 @@ paths:
       summary: "Save a new filter preset (min role: paralegal)"
       operationId: createSearchPreset
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         201:
@@ -708,7 +708,7 @@ paths:
       parameters:
         - { name: preset_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -719,7 +719,7 @@ paths:
       parameters:
         - { name: preset_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -732,7 +732,7 @@ paths:
       parameters:
         - { name: preset_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -749,7 +749,7 @@ paths:
       parameters:
         - { name: caseId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -760,7 +760,7 @@ paths:
       parameters:
         - { name: caseId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -777,7 +777,7 @@ paths:
       parameters:
         - { name: caseId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -788,7 +788,7 @@ paths:
       parameters:
         - { name: caseId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -803,7 +803,7 @@ paths:
       operationId: corsPreflightCaseStatusRegistry
       security: []
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -812,7 +812,7 @@ paths:
       summary: "List all available case statuses from firmSettings (min role: paralegal)"
       operationId: listCaseStatuses
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -836,7 +836,7 @@ paths:
               order:    { type: integer, description: "Sort order in UI dropdown" }
               color:    { type: string, description: "Hex color for UI badge, e.g. '#22C55E'" }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         201:
@@ -853,7 +853,7 @@ paths:
       parameters:
         - { name: value, in: path, required: true, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -874,7 +874,7 @@ paths:
               order:    { type: integer }
               color:    { type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -889,7 +889,7 @@ paths:
       parameters:
         - { name: value, in: path, required: true, type: string, description: "URL-encoded status value" }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -906,7 +906,7 @@ paths:
       operationId: corsPreflightFeatureFlags
       security: []
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -915,7 +915,7 @@ paths:
       summary: "Get current firm-wide feature flags from firmSettings (min role: junior_partner)"
       operationId: getFeatureFlags
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -936,7 +936,7 @@ paths:
                 type: boolean
                 description: "When false, the AI-summary pre-flight check on submit-for-review passes unconditionally."
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -953,7 +953,7 @@ paths:
       operationId: corsPreflightCaseProfileEditableFields
       security: []
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -962,7 +962,7 @@ paths:
       summary: "List the case-profile field catalog and which fields are currently editable via PATCH /cases/{caseId} (min role: junior_partner)"
       operationId: getCaseProfileEditableFields
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -990,7 +990,7 @@ paths:
                   exposure_date_start, exposure_date_end, conditions, prior_attorney) —
                   any other name is rejected with 400.
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -1011,7 +1011,7 @@ paths:
       parameters:
         - { name: caseId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -1035,7 +1035,7 @@ paths:
                 type: string
                 description: Optional reason or context for the status change
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -1054,7 +1054,7 @@ paths:
       operationId: corsPreflightAuditDecisions
       security: []
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -1071,7 +1071,7 @@ paths:
         - { name: page, in: query, type: integer }
         - { name: page_size, in: query, type: integer }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -1086,7 +1086,7 @@ paths:
       parameters:
         - { name: caseId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -1097,7 +1097,7 @@ paths:
       parameters:
         - { name: caseId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -1110,7 +1110,7 @@ paths:
       operationId: corsPreflightAuditDecisionMetrics
       security: []
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -1124,7 +1124,7 @@ paths:
         - { name: date_from, in: query, type: string }
         - { name: date_to, in: query, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -1137,7 +1137,7 @@ paths:
       operationId: corsPreflightAuditDecisionReport
       security: []
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -1146,7 +1146,7 @@ paths:
       summary: "Compliance audit export — all decisions chronological (min role: senior_partner)"
       operationId: exportAuditDecisions
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -1165,7 +1165,7 @@ paths:
       parameters:
         - { name: caseId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -1178,7 +1178,7 @@ paths:
         - { name: page, in: query, type: integer }
         - { name: page_size, in: query, type: integer }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -1203,7 +1203,7 @@ paths:
                 type: string
                 minLength: 1
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         201:
@@ -1235,7 +1235,7 @@ paths:
         - { name: caseId, in: path, required: true, type: string }
         - { name: updateId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -1257,7 +1257,7 @@ paths:
                 type: string
                 minLength: 1
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -1275,7 +1275,7 @@ paths:
         - { name: caseId, in: path, required: true, type: string }
         - { name: updateId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -2117,7 +2117,7 @@ paths:
       parameters:
         - { name: caseId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -2183,7 +2183,7 @@ paths:
                 type: boolean
                 description: Whether the client had prior legal representation
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -2207,7 +2207,7 @@ paths:
   #     operationId: corsPreflightCases
   #     security: []
   #     x-google-backend:
-  #       address: https://case-development-292736139819.us-central1.run.app
+  #       address: https://case-development-jeqnic7cvq-uc.a.run.app
   #       path_translation: APPEND_PATH_TO_ADDRESS
   #     responses:
   #       204:
@@ -2216,7 +2216,7 @@ paths:
   #     summary: "Create a new case (min role: admin_staff)"
   #     operationId: createCase
   #     x-google-backend:
-  #       address: https://case-development-292736139819.us-central1.run.app
+  #       address: https://case-development-jeqnic7cvq-uc.a.run.app
   #       path_translation: APPEND_PATH_TO_ADDRESS
   #     responses:
   #       201:
@@ -2231,7 +2231,7 @@ paths:
   #     parameters:
   #       - { name: caseId, in: path, required: true, type: string }
   #     x-google-backend:
-  #       address: https://case-development-292736139819.us-central1.run.app
+  #       address: https://case-development-jeqnic7cvq-uc.a.run.app
   #       path_translation: APPEND_PATH_TO_ADDRESS
   #     responses:
   #       204:
@@ -2242,7 +2242,7 @@ paths:
   #     parameters:
   #       - { name: caseId, in: path, required: true, type: string }
   #     x-google-backend:
-  #       address: https://case-development-292736139819.us-central1.run.app
+  #       address: https://case-development-jeqnic7cvq-uc.a.run.app
   #       path_translation: APPEND_PATH_TO_ADDRESS
   #     responses:
   #       200:
@@ -2257,7 +2257,7 @@ paths:
   #     parameters:
   #       - { name: caseId, in: path, required: true, type: string }
   #     x-google-backend:
-  #       address: https://case-development-292736139819.us-central1.run.app
+  #       address: https://case-development-jeqnic7cvq-uc.a.run.app
   #       path_translation: APPEND_PATH_TO_ADDRESS
   #     responses:
   #       200:
@@ -2272,7 +2272,7 @@ paths:
   #     parameters:
   #       - { name: caseId, in: path, required: true, type: string }
   #     x-google-backend:
-  #       address: https://case-development-292736139819.us-central1.run.app
+  #       address: https://case-development-jeqnic7cvq-uc.a.run.app
   #       path_translation: APPEND_PATH_TO_ADDRESS
   #     responses:
   #       204:
@@ -2283,7 +2283,7 @@ paths:
   #     parameters:
   #       - { name: caseId, in: path, required: true, type: string }
   #     x-google-backend:
-  #       address: https://case-development-292736139819.us-central1.run.app
+  #       address: https://case-development-jeqnic7cvq-uc.a.run.app
   #       path_translation: APPEND_PATH_TO_ADDRESS
   #     responses:
   #       200:
@@ -2299,7 +2299,7 @@ paths:
   #       - { name: caseId, in: path, required: true, type: string }
   #       - { name: documentId, in: path, required: true, type: string }
   #     x-google-backend:
-  #       address: https://case-development-292736139819.us-central1.run.app
+  #       address: https://case-development-jeqnic7cvq-uc.a.run.app
   #       path_translation: APPEND_PATH_TO_ADDRESS
   #     responses:
   #       204:
@@ -2311,7 +2311,7 @@ paths:
   #       - { name: caseId, in: path, required: true, type: string }
   #       - { name: documentId, in: path, required: true, type: string }
   #     x-google-backend:
-  #       address: https://case-development-292736139819.us-central1.run.app
+  #       address: https://case-development-jeqnic7cvq-uc.a.run.app
   #       path_translation: APPEND_PATH_TO_ADDRESS
   #     responses:
   #       200:
@@ -2326,7 +2326,7 @@ paths:
       parameters:
         - { name: caseId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -2340,7 +2340,7 @@ paths:
         - { name: page, in: query, type: integer, default: 1 }
         - { name: page_size, in: query, type: integer, default: 20 }
       x-google-backend:
-        address: https://case-development-292736139819.us-central1.run.app
+        address: https://case-development-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -2374,7 +2374,7 @@ paths:
   #     parameters:
   #       - { name: caseId, in: path, required: true, type: string }
   #     x-google-backend:
-  #       address: https://case-development-292736139819.us-central1.run.app
+  #       address: https://case-development-jeqnic7cvq-uc.a.run.app
   #                https://enrollment-workflow-292736139819.us-central1.run.app
   #       path_translation: APPEND_PATH_TO_ADDRESS
   #     responses:
@@ -2386,7 +2386,7 @@ paths:
   #     parameters:
   #       - { name: caseId, in: path, required: true, type: string }
   #     x-google-backend:
-  #       address: https://case-development-292736139819.us-central1.run.app
+  #       address: https://case-development-jeqnic7cvq-uc.a.run.app
   #       path_translation: APPEND_PATH_TO_ADDRESS
   #     responses:
   #       200:
@@ -2399,7 +2399,7 @@ paths:
   #     parameters:
   #       - { name: caseId, in: path, required: true, type: string }
   #     x-google-backend:
-  #       address: https://case-development-292736139819.us-central1.run.app
+  #       address: https://case-development-jeqnic7cvq-uc.a.run.app
   #       path_translation: APPEND_PATH_TO_ADDRESS
   #     responses:
   #       200:
@@ -2414,7 +2414,7 @@ paths:
   #     parameters:
   #       - { name: caseId, in: path, required: true, type: string }
   #     x-google-backend:
-  #       address: https://case-development-292736139819.us-central1.run.app
+  #       address: https://case-development-jeqnic7cvq-uc.a.run.app
   #       path_translation: APPEND_PATH_TO_ADDRESS
   #     responses:
   #       204:
@@ -2425,7 +2425,7 @@ paths:
   #     parameters:
   #       - { name: caseId, in: path, required: true, type: string }
   #     x-google-backend:
-  #       address: https://case-development-292736139819.us-central1.run.app
+  #       address: https://case-development-jeqnic7cvq-uc.a.run.app
   #       path_translation: APPEND_PATH_TO_ADDRESS
   #     responses:
   #       200:
@@ -2438,7 +2438,7 @@ paths:
   #     parameters:
   #       - { name: caseId, in: path, required: true, type: string }
   #     x-google-backend:
-  #       address: https://case-development-292736139819.us-central1.run.app
+  #       address: https://case-development-jeqnic7cvq-uc.a.run.app
   #       path_translation: APPEND_PATH_TO_ADDRESS
   #     responses:
   #       200:
@@ -2981,7 +2981,7 @@ paths:
 
   # ============================================================
   # REPORTING SERVICE
-  # Cloud Run: https://reporting-kpi-292736139819.us-central1.run.app
+  # Cloud Run: https://reporting-kpi-jeqnic7cvq-uc.a.run.app
   # ============================================================
 
   /reports/dashboard:
@@ -2989,7 +2989,7 @@ paths:
       operationId: corsPreflightReportsDashboard
       security: []
       x-google-backend:
-        address: https://reporting-kpi-292736139819.us-central1.run.app
+        address: https://reporting-kpi-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -3000,9 +3000,9 @@ paths:
       parameters:
         - { name: period_days, in: query, type: integer }
       x-google-backend:
-        address: https://reporting-kpi-292736139819.us-central1.run.app
+        address: https://reporting-kpi-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
-        jwt_audience: https://reporting-kpi-292736139819.us-central1.run.app
+        jwt_audience: https://reporting-kpi-jeqnic7cvq-uc.a.run.app
       responses:
         200:
           description: Dashboard KPIs
@@ -3014,7 +3014,7 @@ paths:
       operationId: corsPreflightReportsMonthlyRevenue
       security: []
       x-google-backend:
-        address: https://reporting-kpi-292736139819.us-central1.run.app
+        address: https://reporting-kpi-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -3025,9 +3025,9 @@ paths:
       parameters:
         - { name: months, in: query, type: integer }
       x-google-backend:
-        address: https://reporting-kpi-292736139819.us-central1.run.app
+        address: https://reporting-kpi-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
-        jwt_audience: https://reporting-kpi-292736139819.us-central1.run.app
+        jwt_audience: https://reporting-kpi-jeqnic7cvq-uc.a.run.app
       responses:
         200:
           description: Monthly revenue breakdown
@@ -3039,7 +3039,7 @@ paths:
       operationId: corsPreflightReportsCasesByStatus
       security: []
       x-google-backend:
-        address: https://reporting-kpi-292736139819.us-central1.run.app
+        address: https://reporting-kpi-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -3048,9 +3048,9 @@ paths:
       summary: Cases grouped by status with active count
       operationId: getReportsCasesByStatus
       x-google-backend:
-        address: https://reporting-kpi-292736139819.us-central1.run.app
+        address: https://reporting-kpi-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
-        jwt_audience: https://reporting-kpi-292736139819.us-central1.run.app
+        jwt_audience: https://reporting-kpi-jeqnic7cvq-uc.a.run.app
       responses:
         200:
           description: Cases by status
@@ -3062,7 +3062,7 @@ paths:
       operationId: corsPreflightReportsFunnel
       security: []
       x-google-backend:
-        address: https://reporting-kpi-292736139819.us-central1.run.app
+        address: https://reporting-kpi-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -3071,9 +3071,9 @@ paths:
       summary: Funnel analysis with conversion rates across case stages
       operationId: getReportsFunnel
       x-google-backend:
-        address: https://reporting-kpi-292736139819.us-central1.run.app
+        address: https://reporting-kpi-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
-        jwt_audience: https://reporting-kpi-292736139819.us-central1.run.app
+        jwt_audience: https://reporting-kpi-jeqnic7cvq-uc.a.run.app
       responses:
         200:
           description: Funnel analysis
@@ -3085,7 +3085,7 @@ paths:
       operationId: corsPreflightReportsBottlenecks
       security: []
       x-google-backend:
-        address: https://reporting-kpi-292736139819.us-central1.run.app
+        address: https://reporting-kpi-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -3096,9 +3096,9 @@ paths:
       parameters:
         - { name: threshold_days, in: query, type: integer }
       x-google-backend:
-        address: https://reporting-kpi-292736139819.us-central1.run.app
+        address: https://reporting-kpi-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
-        jwt_audience: https://reporting-kpi-292736139819.us-central1.run.app
+        jwt_audience: https://reporting-kpi-jeqnic7cvq-uc.a.run.app
       responses:
         200:
           description: Bottleneck analysis
@@ -3110,7 +3110,7 @@ paths:
       operationId: corsPreflightReportsStaffPerformance
       security: []
       x-google-backend:
-        address: https://reporting-kpi-292736139819.us-central1.run.app
+        address: https://reporting-kpi-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -3121,9 +3121,9 @@ paths:
       parameters:
         - { name: period_days, in: query, type: integer }
       x-google-backend:
-        address: https://reporting-kpi-292736139819.us-central1.run.app
+        address: https://reporting-kpi-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
-        jwt_audience: https://reporting-kpi-292736139819.us-central1.run.app
+        jwt_audience: https://reporting-kpi-jeqnic7cvq-uc.a.run.app
       responses:
         200:
           description: Staff performance metrics
@@ -3135,7 +3135,7 @@ paths:
       operationId: corsPreflightReportsExpenseSummary
       security: []
       x-google-backend:
-        address: https://reporting-kpi-292736139819.us-central1.run.app
+        address: https://reporting-kpi-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -3144,9 +3144,9 @@ paths:
       summary: Expense breakdown by category (all-time, case-level expenses)
       operationId: getReportsExpenseSummary
       x-google-backend:
-        address: https://reporting-kpi-292736139819.us-central1.run.app
+        address: https://reporting-kpi-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
-        jwt_audience: https://reporting-kpi-292736139819.us-central1.run.app
+        jwt_audience: https://reporting-kpi-jeqnic7cvq-uc.a.run.app
       responses:
         200:
           description: Expense summary by category
@@ -3158,7 +3158,7 @@ paths:
       operationId: corsPreflightReportsLeadConversionAnalytics
       security: []
       x-google-backend:
-        address: https://reporting-kpi-292736139819.us-central1.run.app
+        address: https://reporting-kpi-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -3167,9 +3167,9 @@ paths:
       summary: Lead conversion analytics — KPIs, monthly volume, funnel drop-off
       operationId: getReportsLeadConversionAnalytics
       x-google-backend:
-        address: https://reporting-kpi-292736139819.us-central1.run.app
+        address: https://reporting-kpi-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
-        jwt_audience: https://reporting-kpi-292736139819.us-central1.run.app
+        jwt_audience: https://reporting-kpi-jeqnic7cvq-uc.a.run.app
       responses:
         200:
           description: Lead conversion analytics
@@ -3181,7 +3181,7 @@ paths:
       operationId: corsPreflightReportsLeadConversion
       security: []
       x-google-backend:
-        address: https://reporting-kpi-292736139819.us-central1.run.app
+        address: https://reporting-kpi-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -3190,9 +3190,9 @@ paths:
       summary: Lead conversion metrics — qualification rate, conversion rate, avg intake duration
       operationId: getReportsLeadConversion
       x-google-backend:
-        address: https://reporting-kpi-292736139819.us-central1.run.app
+        address: https://reporting-kpi-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
-        jwt_audience: https://reporting-kpi-292736139819.us-central1.run.app
+        jwt_audience: https://reporting-kpi-jeqnic7cvq-uc.a.run.app
       responses:
         200:
           description: Lead conversion metrics
@@ -3956,7 +3956,7 @@ paths:
 
   # ============================================================
   # STORAGE GATEWAY SERVICE
-  # Cloud Run: https://storage-gateway-dev-292736139819.us-central1.run.app
+  # Cloud Run: https://storage-gateway-beta-jeqnic7cvq-uc.a.run.app
   # ============================================================
 
   # --- Signed URLs ---
@@ -3966,7 +3966,7 @@ paths:
       operationId: corsPreflightStorageSignedUrl
       security: []
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-beta-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -3981,7 +3981,7 @@ paths:
         - { name: action, in: query, type: string }
         - { name: content_type, in: query, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-beta-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -3998,7 +3998,7 @@ paths:
       parameters:
         - { name: file_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-beta-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4010,7 +4010,7 @@ paths:
         - { name: file_id, in: path, required: true, type: string }
         - { name: case_id, in: query, required: true, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-beta-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4029,7 +4029,7 @@ paths:
       parameters:
         - { name: case_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-beta-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4048,7 +4048,7 @@ paths:
         - { name: page_size, in: query, type: integer }
         - { name: page_token, in: query, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-beta-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4064,7 +4064,7 @@ paths:
         - { name: case_id, in: path, required: true, type: string }
         - { name: file_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-beta-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4076,7 +4076,7 @@ paths:
         - { name: case_id, in: path, required: true, type: string }
         - { name: file_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-beta-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4091,7 +4091,7 @@ paths:
       operationId: corsPreflightStorageUploadRegister
       security: []
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-beta-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4100,7 +4100,7 @@ paths:
       summary: Register a file upload and receive a staging signed URL
       operationId: registerStorageUpload
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-beta-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         201:
@@ -4115,7 +4115,7 @@ paths:
       parameters:
         - { name: file_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-beta-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4126,7 +4126,7 @@ paths:
       parameters:
         - { name: file_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-beta-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4143,7 +4143,7 @@ paths:
       operationId: corsPreflightStorageLifecycle
       security: []
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-beta-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4152,7 +4152,7 @@ paths:
       summary: "Read current bucket lifecycle rules and soft-delete policy (min role: system_admin)"
       operationId: getStorageLifecycle
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-beta-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4165,7 +4165,7 @@ paths:
       summary: "Update bucket lifecycle rules (min role: system_admin)"
       operationId: updateStorageLifecycle
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-beta-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4180,7 +4180,7 @@ paths:
       operationId: corsPreflightStorageLifecycleApplyDefault
       security: []
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-beta-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4189,7 +4189,7 @@ paths:
       summary: "Apply default Zadroga lifecycle policy to bucket (min role: system_admin)"
       operationId: applyDefaultStorageLifecycle
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-beta-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4204,7 +4204,7 @@ paths:
       operationId: corsPreflightStorageLifecycleSoftDelete
       security: []
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-beta-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4213,7 +4213,7 @@ paths:
       summary: "Configure soft-delete retention policy (min role: system_admin)"
       operationId: updateStorageSoftDelete
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-beta-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4230,7 +4230,7 @@ paths:
       parameters:
         - { name: case_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-beta-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4241,7 +4241,7 @@ paths:
       parameters:
         - { name: case_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-beta-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4260,7 +4260,7 @@ paths:
       parameters:
         - { name: case_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-beta-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4272,7 +4272,7 @@ paths:
         - { name: case_id, in: path, required: true, type: string }
         - { name: path, in: query, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-beta-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4289,7 +4289,7 @@ paths:
       parameters:
         - { name: case_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-beta-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4300,7 +4300,7 @@ paths:
       parameters:
         - { name: case_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-beta-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         201:
@@ -4315,7 +4315,7 @@ paths:
       parameters:
         - { name: case_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-beta-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4326,7 +4326,7 @@ paths:
       parameters:
         - { name: case_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://storage-gateway-dev-292736139819.us-central1.run.app
+        address: https://storage-gateway-beta-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4338,7 +4338,7 @@ paths:
 
   # ============================================================
   # TASK MANAGEMENT SERVICE
-  # Cloud Run: https://task-management-292736139819.us-central1.run.app
+  # Cloud Run: https://task-management-jeqnic7cvq-uc.a.run.app
   # Min role required per endpoint is enforced by the service itself (RBAC).
   # ============================================================
 
@@ -4349,7 +4349,7 @@ paths:
       operationId: corsPreflightTasks
       security: []
       x-google-backend:
-        address: https://task-management-292736139819.us-central1.run.app
+        address: https://task-management-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4358,7 +4358,7 @@ paths:
       summary: "Create a new task on a case (min role: admin_staff)"
       operationId: createTask
       x-google-backend:
-        address: https://task-management-292736139819.us-central1.run.app
+        address: https://task-management-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         201:
@@ -4375,7 +4375,7 @@ paths:
       parameters:
         - { name: taskId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://task-management-292736139819.us-central1.run.app
+        address: https://task-management-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4387,7 +4387,7 @@ paths:
         - { name: taskId, in: path, required: true, type: string }
         - { name: caseId, in: query, type: string }
       x-google-backend:
-        address: https://task-management-292736139819.us-central1.run.app
+        address: https://task-management-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4403,7 +4403,7 @@ paths:
         - { name: taskId, in: path, required: true, type: string }
         - { name: caseId, in: query, required: true, type: string }
       x-google-backend:
-        address: https://task-management-292736139819.us-central1.run.app
+        address: https://task-management-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4421,7 +4421,7 @@ paths:
         - { name: taskId, in: path, required: true, type: string }
         - { name: caseId, in: query, required: true, type: string }
       x-google-backend:
-        address: https://task-management-292736139819.us-central1.run.app
+        address: https://task-management-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4442,7 +4442,7 @@ paths:
       parameters:
         - { name: taskId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://task-management-292736139819.us-central1.run.app
+        address: https://task-management-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4454,7 +4454,7 @@ paths:
         - { name: taskId, in: path, required: true, type: string }
         - { name: caseId, in: query, required: true, type: string }
       x-google-backend:
-        address: https://task-management-292736139819.us-central1.run.app
+        address: https://task-management-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4471,7 +4471,7 @@ paths:
       parameters:
         - { name: taskId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://task-management-292736139819.us-central1.run.app
+        address: https://task-management-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4483,7 +4483,7 @@ paths:
         - { name: taskId, in: path, required: true, type: string }
         - { name: caseId, in: query, required: true, type: string }
       x-google-backend:
-        address: https://task-management-292736139819.us-central1.run.app
+        address: https://task-management-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4502,7 +4502,7 @@ paths:
       parameters:
         - { name: taskId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://task-management-292736139819.us-central1.run.app
+        address: https://task-management-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4514,7 +4514,7 @@ paths:
         - { name: taskId, in: path, required: true, type: string }
         - { name: caseId, in: query, required: true, type: string }
       x-google-backend:
-        address: https://task-management-292736139819.us-central1.run.app
+        address: https://task-management-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4535,7 +4535,7 @@ paths:
       parameters:
         - { name: taskId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://task-management-292736139819.us-central1.run.app
+        address: https://task-management-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4547,7 +4547,7 @@ paths:
         - { name: taskId, in: path, required: true, type: string }
         - { name: caseId, in: query, required: true, type: string }
       x-google-backend:
-        address: https://task-management-292736139819.us-central1.run.app
+        address: https://task-management-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4568,7 +4568,7 @@ paths:
       parameters:
         - { name: caseId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://task-management-292736139819.us-central1.run.app
+        address: https://task-management-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4582,7 +4582,7 @@ paths:
         - { name: priority, in: query, type: string }
         - { name: limit, in: query, type: integer }
       x-google-backend:
-        address: https://task-management-292736139819.us-central1.run.app
+        address: https://task-management-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4601,7 +4601,7 @@ paths:
       parameters:
         - { name: userId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://task-management-292736139819.us-central1.run.app
+        address: https://task-management-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4615,7 +4615,7 @@ paths:
         - { name: overdue_only, in: query, type: boolean }
         - { name: limit, in: query, type: integer }
       x-google-backend:
-        address: https://task-management-292736139819.us-central1.run.app
+        address: https://task-management-jeqnic7cvq-uc.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4627,7 +4627,7 @@ paths:
 
   # ============================================================
   # AUTH-RBAC-CR SERVICE
-  # Cloud Run: https://auth-rbac-dev-292736139819.us-central1.run.app
+  # Cloud Run: https://auth-rbac-beta-jeqnic7cvq-ue.a.run.app
   # Public endpoints (register, session, password-reset) have security: []
   # because callers have no Firebase token yet.
   # ============================================================
@@ -4639,7 +4639,7 @@ paths:
       operationId: corsPreflightAuthRegister
       security: []
       x-google-backend:
-        address: https://auth-rbac-dev-292736139819.us-central1.run.app
+        address: https://auth-rbac-beta-jeqnic7cvq-ue.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4649,7 +4649,7 @@ paths:
       operationId: authRegister
       security: []
       x-google-backend:
-        address: https://auth-rbac-dev-292736139819.us-central1.run.app
+        address: https://auth-rbac-beta-jeqnic7cvq-ue.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         201:
@@ -4664,7 +4664,7 @@ paths:
       operationId: corsPreflightAuthSession
       security: []
       x-google-backend:
-        address: https://auth-rbac-dev-292736139819.us-central1.run.app
+        address: https://auth-rbac-beta-jeqnic7cvq-ue.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4674,7 +4674,7 @@ paths:
       operationId: authCreateSession
       security: []
       x-google-backend:
-        address: https://auth-rbac-dev-292736139819.us-central1.run.app
+        address: https://auth-rbac-beta-jeqnic7cvq-ue.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4687,7 +4687,7 @@ paths:
       operationId: corsPreflightAuthLogout
       security: []
       x-google-backend:
-        address: https://auth-rbac-dev-292736139819.us-central1.run.app
+        address: https://auth-rbac-beta-jeqnic7cvq-ue.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4696,7 +4696,7 @@ paths:
       summary: Revoke all refresh tokens and clear session cookies
       operationId: authLogout
       x-google-backend:
-        address: https://auth-rbac-dev-292736139819.us-central1.run.app
+        address: https://auth-rbac-beta-jeqnic7cvq-ue.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4709,7 +4709,7 @@ paths:
       operationId: corsPreflightAuthPasswordReset
       security: []
       x-google-backend:
-        address: https://auth-rbac-dev-292736139819.us-central1.run.app
+        address: https://auth-rbac-beta-jeqnic7cvq-ue.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4719,7 +4719,7 @@ paths:
       operationId: authPasswordReset
       security: []
       x-google-backend:
-        address: https://auth-rbac-dev-292736139819.us-central1.run.app
+        address: https://auth-rbac-beta-jeqnic7cvq-ue.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4732,7 +4732,7 @@ paths:
       operationId: corsPreflightAuthInvite
       security: []
       x-google-backend:
-        address: https://auth-rbac-dev-292736139819.us-central1.run.app
+        address: https://auth-rbac-beta-jeqnic7cvq-ue.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4741,7 +4741,7 @@ paths:
       summary: Generate a 7-day portal invite link (requires staff.invite or system.admin)
       operationId: authCreateInvite
       x-google-backend:
-        address: https://auth-rbac-dev-292736139819.us-central1.run.app
+        address: https://auth-rbac-beta-jeqnic7cvq-ue.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4758,7 +4758,7 @@ paths:
       operationId: corsPreflightUsers
       security: []
       x-google-backend:
-        address: https://auth-rbac-dev-292736139819.us-central1.run.app
+        address: https://auth-rbac-beta-jeqnic7cvq-ue.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4773,7 +4773,7 @@ paths:
         - { name: page_size, in: query, type: integer }
         - { name: cursor, in: query, type: string }
       x-google-backend:
-        address: https://auth-rbac-dev-292736139819.us-central1.run.app
+        address: https://auth-rbac-beta-jeqnic7cvq-ue.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4786,7 +4786,7 @@ paths:
       summary: Create a staff or client user (requires staff.manage)
       operationId: createUser
       x-google-backend:
-        address: https://auth-rbac-dev-292736139819.us-central1.run.app
+        address: https://auth-rbac-beta-jeqnic7cvq-ue.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         201:
@@ -4805,7 +4805,7 @@ paths:
       parameters:
         - { name: uid, in: path, required: true, type: string }
       x-google-backend:
-        address: https://auth-rbac-dev-292736139819.us-central1.run.app
+        address: https://auth-rbac-beta-jeqnic7cvq-ue.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4816,7 +4816,7 @@ paths:
       parameters:
         - { name: uid, in: path, required: true, type: string }
       x-google-backend:
-        address: https://auth-rbac-dev-292736139819.us-central1.run.app
+        address: https://auth-rbac-beta-jeqnic7cvq-ue.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4833,7 +4833,7 @@ paths:
       parameters:
         - { name: uid, in: path, required: true, type: string }
       x-google-backend:
-        address: https://auth-rbac-dev-292736139819.us-central1.run.app
+        address: https://auth-rbac-beta-jeqnic7cvq-ue.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4852,7 +4852,7 @@ paths:
       parameters:
         - { name: uid, in: path, required: true, type: string }
       x-google-backend:
-        address: https://auth-rbac-dev-292736139819.us-central1.run.app
+        address: https://auth-rbac-beta-jeqnic7cvq-ue.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4871,7 +4871,7 @@ paths:
       operationId: corsPreflightRoles
       security: []
       x-google-backend:
-        address: https://auth-rbac-dev-292736139819.us-central1.run.app
+        address: https://auth-rbac-beta-jeqnic7cvq-ue.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4880,7 +4880,7 @@ paths:
       summary: List all roles from Firestore (requires staff.manage)
       operationId: listRoles
       x-google-backend:
-        address: https://auth-rbac-dev-292736139819.us-central1.run.app
+        address: https://auth-rbac-beta-jeqnic7cvq-ue.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4893,7 +4893,7 @@ paths:
       summary: Create a new role; all permission IDs must exist in the registry (system.admin only)
       operationId: createRole
       x-google-backend:
-        address: https://auth-rbac-dev-292736139819.us-central1.run.app
+        address: https://auth-rbac-beta-jeqnic7cvq-ue.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         201:
@@ -4914,7 +4914,7 @@ paths:
       parameters:
         - { name: roleId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://auth-rbac-dev-292736139819.us-central1.run.app
+        address: https://auth-rbac-beta-jeqnic7cvq-ue.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4925,7 +4925,7 @@ paths:
       parameters:
         - { name: roleId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://auth-rbac-dev-292736139819.us-central1.run.app
+        address: https://auth-rbac-beta-jeqnic7cvq-ue.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4944,7 +4944,7 @@ paths:
       parameters:
         - { name: roleId, in: path, required: true, type: string }
       x-google-backend:
-        address: https://auth-rbac-dev-292736139819.us-central1.run.app
+        address: https://auth-rbac-beta-jeqnic7cvq-ue.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4965,7 +4965,7 @@ paths:
       operationId: corsPreflightPermissions
       security: []
       x-google-backend:
-        address: https://auth-rbac-dev-292736139819.us-central1.run.app
+        address: https://auth-rbac-beta-jeqnic7cvq-ue.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -4977,7 +4977,7 @@ paths:
         - { name: search, in: query, type: string }
         - { name: category, in: query, type: string }
       x-google-backend:
-        address: https://auth-rbac-dev-292736139819.us-central1.run.app
+        address: https://auth-rbac-beta-jeqnic7cvq-ue.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -4992,7 +4992,7 @@ paths:
       summary: Replace the entire permissions registry document (system.admin only)
       operationId: updatePermissionsRegistry
       x-google-backend:
-        address: https://auth-rbac-dev-292736139819.us-central1.run.app
+        address: https://auth-rbac-beta-jeqnic7cvq-ue.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -5009,7 +5009,7 @@ paths:
       operationId: corsPreflightPermissionsSeed
       security: []
       x-google-backend:
-        address: https://auth-rbac-dev-292736139819.us-central1.run.app
+        address: https://auth-rbac-beta-jeqnic7cvq-ue.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -5018,7 +5018,7 @@ paths:
       summary: Auto-populate the registry from all role documents; preserves existing metadata (system.admin only)
       operationId: seedPermissionsRegistry
       x-google-backend:
-        address: https://auth-rbac-dev-292736139819.us-central1.run.app
+        address: https://auth-rbac-beta-jeqnic7cvq-ue.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -5037,7 +5037,7 @@ paths:
       operationId: corsPreflightAuditLog
       security: []
       x-google-backend:
-        address: https://auth-rbac-dev-292736139819.us-central1.run.app
+        address: https://auth-rbac-beta-jeqnic7cvq-ue.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -5049,7 +5049,7 @@ paths:
         - { name: uid, in: query, type: string }
         - { name: limit, in: query, type: integer }
       x-google-backend:
-        address: https://auth-rbac-dev-292736139819.us-central1.run.app
+        address: https://auth-rbac-beta-jeqnic7cvq-ue.a.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
