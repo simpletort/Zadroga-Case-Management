@@ -27,7 +27,7 @@ class _NoopMiddleware:
         await self.app(scope, receive, send)
 
 
-def _get_cors_origins_stub(environment: str) -> list[str]:
+def _get_cors_origins_stub(environment: str, gcp_project_id: str) -> list[str]:
     return ["http://localhost:3000"]
 
 

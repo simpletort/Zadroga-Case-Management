@@ -3,7 +3,17 @@ tests/conftest.py — Shared pytest fixtures.
 """
 from __future__ import annotations
 import os
+import sys
+from unittest.mock import MagicMock
+
 import pytest
+
+# get_cors_origins() now fetches from GCP Secret Manager at import time (see
+# shared/shared/middlewares/cors.py). Stub it so tests don't make a real
+# network call / hang without live GCP credentials.
+_cors_stub_mod = MagicMock()
+_cors_stub_mod.get_cors_origins = lambda environment, gcp_project_id: ["http://localhost:3000"]
+sys.modules.setdefault("shared.middlewares.cors", _cors_stub_mod)
 
 # Set test env vars before any imports
 os.environ.setdefault("GCP_PROJECT_ID", "test-project")

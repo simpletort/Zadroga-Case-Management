@@ -55,7 +55,7 @@ _ROUTE_PERMISSIONS: list[tuple[str, str, str]] = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=get_cors_origins(settings.environment),
+    allow_origins=get_cors_origins(settings.environment, settings.gcp_project_id),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["Authorization", "Content-Type", "x-apigateway-api-userinfo"],

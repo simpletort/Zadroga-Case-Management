@@ -27,11 +27,15 @@ def update_case_status(
 
     batch = db.batch()
 
-    batch.update(case_ref, {
+    status_fields: dict = {
         "status":              new_status,
         "updatedAt":           now,
         "lastStatusChangedAt": now,
-    })
+    }
+    if new_status == "Settled":
+        status_fields["settledAt"] = now
+
+    batch.update(case_ref, status_fields)
 
     timeline_ref = case_ref.collection("timeline").document()
     batch.set(timeline_ref, {

@@ -24,6 +24,13 @@ import pytest
 # (In CI the PYTHONPATH is set; locally this covers running pytest from /tests)
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+# get_cors_origins() now fetches from GCP Secret Manager at import time (see
+# shared/shared/middlewares/cors.py). Stub it so tests don't make a real
+# network call / hang without live GCP credentials.
+_cors_stub_mod = MagicMock()
+_cors_stub_mod.get_cors_origins = lambda environment, gcp_project_id: ["http://localhost:3000"]
+sys.modules.setdefault("shared.middlewares.cors", _cors_stub_mod)
+
 
 # ── Env-var defaults so Settings() doesn't fail on missing required fields ────
 os.environ.setdefault("TWILIO_ACCOUNT_SID", "ACtest00000000000000000000000000000")
