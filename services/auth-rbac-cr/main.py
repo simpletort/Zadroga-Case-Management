@@ -86,15 +86,9 @@ app = FastAPI(
 )
 
 # Middleware stack — added in innermost-first order; last added = outermost.
-# https://simpletort.web.app is only in get_cors_origins()'s dev list, not
-# prod — appended here (scoped to this service only) so the frontend's
-# auth/user/role/permission/audit-log calls stop failing CORS in production
-# without touching the shared origin list that case-development, notification,
-# lead-intake, task-management, settlement-financial, and storage-gateway
-# also depend on. See commit a4a236a for the same fix on settlement-financial.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=get_cors_origins(settings.environment) + ["https://simpletort.web.app"],
+    allow_origins=get_cors_origins(settings.environment, settings.gcp_project_id),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "x-apigateway-api-userinfo"],

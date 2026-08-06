@@ -129,7 +129,7 @@ app.add_middleware(
 )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=get_cors_origins(_settings.environment),
+    allow_origins=get_cors_origins(_settings.environment, _settings.gcp_project_id),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Authorization", "Content-Type", "x-apigateway-api-userinfo"],

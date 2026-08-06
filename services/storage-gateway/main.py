@@ -84,7 +84,7 @@ app = FastAPI(
 # Middleware stack — added in innermost-first order; last added = outermost.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=get_cors_origins(settings.environment),
+    allow_origins=get_cors_origins(settings.environment, settings.gcp_project_id),
     allow_credentials=True,
     allow_methods=["GET", "PUT", "POST", "PATCH"],
     allow_headers=["Authorization", "Content-Type", "x-apigateway-api-userinfo"],

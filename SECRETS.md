@@ -24,6 +24,7 @@ they disagree with this doc.
 | `TWILIO_AUTH_TOKEN` | `services/notification` (`cloudbuild.yaml`, `infrastructure/notification-setup.sh`) | `TWILIO_AUTH_TOKEN` | Twilio auth token — actively wired in notification service's Cloud Build deploy step |
 | `teams-build-webhook` (overridable via `_TEAMS_SECRET` substitution) | `cloud-functions/build-notifier` | `TEAMS_WEBHOOK_URL` | MS Teams incoming webhook URL for build notifications |
 | `INTAKE_DRIVE_SYNC_SECRET` | `cloud-functions/intake-drive-sync` | `DRIVE_SYNC_SECRET` | Shared secret used to authenticate calls from the Apps Script Google Drive sync trigger |
+| `cors-allowed-origins` | `shared/shared/middlewares/cors.py`, used by every service that adds `CORSMiddleware` (reporting-service, auth-rbac-cr, settlement-financial, case-development, task-management, storage-gateway, lead-intake, notification, enrollment-workflow) | Not an env var — fetched directly at startup via `secretmanager.access_secret_version` in `get_cors_origins()` | JSON-encoded `{"production": [...], "dev_extras": [...]}` CORS allow-list. Fetch failure intentionally aborts service startup (fail-closed) rather than falling back to a stale list. |
 
 ## Dynamically-named secrets (one Secret Manager entry per record, not a fixed name)
 
@@ -54,3 +55,4 @@ they disagree with this doc.
 5. `teams-build-webhook`
 6. `INTAKE_DRIVE_SYNC_SECRET`
 7. `partner-hmac-secret-<partner_id>` — one per marketing partner, created on partner onboarding
+8. `cors-allowed-origins` — CORS allow-list shared by every CORS-enabled service

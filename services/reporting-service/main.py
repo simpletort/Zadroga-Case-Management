@@ -44,7 +44,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=get_cors_origins(settings.environment) + ["https://lookerstudio.google.com"],
+    allow_origins=get_cors_origins(settings.environment, settings.gcp_project_id),
     allow_credentials=True,
     allow_methods=["GET", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "x-apigateway-api-userinfo"],

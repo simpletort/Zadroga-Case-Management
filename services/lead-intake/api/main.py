@@ -171,7 +171,7 @@ app.add_middleware(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins     = get_cors_origins(settings.app_env),
+    allow_origins     = get_cors_origins(settings.app_env, settings.gcp_project_id),
     allow_credentials = True,
     allow_methods     = ["*"],
     allow_headers     = ["*"],
