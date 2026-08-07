@@ -304,19 +304,21 @@ class PartnerContext:
 # Module-level singletons
 # ---------------------------------------------------------------------------
 
-_roles_cache: TTLCache = TTLCache(maxsize=20, ttl=300)   # 5-min per role
-_firestore_client = None
+_roles_cache: TTLCache = TTLCache(maxsize=100, ttl=300)  # 5-min per (project, database, role)
+_firestore_clients: dict[tuple[str, str], Any] = {}
 _firebase_jwks_cache:  dict  = {}
 _firebase_jwks_fetched: float = 0.0
 _JWKS_TTL = 3600  # 1 hour
 
 
 def _get_firestore_client(project: str, database: str):
-    global _firestore_client
-    if _firestore_client is None:
+    key = (project, database)
+    client = _firestore_clients.get(key)
+    if client is None:
         from google.cloud import firestore
-        _firestore_client = firestore.AsyncClient(project=project, database=database)
-    return _firestore_client
+        client = firestore.AsyncClient(project=project, database=database)
+        _firestore_clients[key] = client
+    return client
 
 
 # ---------------------------------------------------------------------------
@@ -647,16 +649,20 @@ async def _get_role_permissions(
     firestore_project: str,
     firestore_database: str,
 ) -> list[str]:
-    if role in _roles_cache:
-        return _roles_cache[role]
+    cache_key = (firestore_project, firestore_database, role)
+    if cache_key in _roles_cache:
+        return _roles_cache[cache_key]
     db = _get_firestore_client(firestore_project, firestore_database)
     doc = await db.collection("roles").document(role).get()
     if not doc.exists:
-        logger.warning("Role document 'roles/%s' not found in Firestore", role)
+        logger.warning(
+            "Role document 'roles/%s' not found in Firestore project=%s database=%s",
+            role, firestore_project, firestore_database,
+        )
         permissions: list[str] = []
     else:
         permissions = (doc.to_dict() or {}).get("permissions", [])
-    _roles_cache[role] = permissions
+    _roles_cache[cache_key] = permissions
     return permissions
 
 
