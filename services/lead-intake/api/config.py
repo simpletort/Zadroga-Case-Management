@@ -45,8 +45,9 @@ class Settings(BaseSettings):
     firebase_project_id: str
 
     # ── Firestore ─────────────────────────────────────────────────────────────
-    # FIX: removed duplicate `firestore_database_id` field with wrong default
-    # "(default)". Only `firestore_database` is used throughout the codebase.
+    # Set via FIRESTORE_DATABASE env var (cloudbuild.yaml → $_FIRESTORE_DATABASE_ID
+    # substitution, overridable per environment in the Cloud Build trigger).
+    # Only `firestore_database` is used throughout the codebase.
     firestore_database:                str = "simpletort-dev"
     firestore_cases_collection:        str = "cases"
     firestore_counters_collection:     str = "counters"

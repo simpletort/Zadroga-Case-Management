@@ -12,7 +12,6 @@ _ENV_FILE = f".env.{_ENV}" if _ENV != "production" else ".env.production"
 class Settings(BaseSettings):
     gcp_project_id: str = "simpletort-prod"
     firestore_database_id: str = "simpletort-dev"
-    roles_firestore_database_id: str = "simpletort-dev"
     environment: str = "production"
     log_level: str = "INFO"
     # Comma-separated service account emails allowed to call this service via OIDC

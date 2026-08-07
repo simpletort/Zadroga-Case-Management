@@ -114,7 +114,7 @@ app.add_middleware(
     AuthMiddleware,
     route_permissions=_ROUTE_PERMISSIONS,
     roles_firestore_project=settings.gcp_project_id,
-    roles_firestore_database=settings.roles_firestore_database_id,
+    roles_firestore_database=settings.firestore_database_id,
     trusted_service_accounts=[
         e.strip() for e in settings.trusted_service_accounts.split(",") if e.strip()
     ],
