@@ -5064,6 +5064,6 @@ securityDefinitions:
     authorizationUrl: ""
     flow: implicit
     type: oauth2
-    x-google-issuer: "https://securetoken.google.com/simpletort-zadroga-dev"
+    x-google-issuer: "https://securetoken.google.com/simpletort-beta"
     x-google-jwks_uri: "https://www.googleapis.com/service_accounts/v1/metadata/x509/securetoken@system.gserviceaccount.com"
-    x-google-audiences: "simpletort-zadroga-dev"
+    x-google-audiences: "simpletort-beta"

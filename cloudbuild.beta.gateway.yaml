@@ -1,0 +1,99 @@
+steps:
+  # ------------------------------------------------------------------
+  # Step 1 — Fetch the current API config name and compute the next one.
+  # E.g. "my-config-v1-37"  →  "my-config-v1-38"
+  # ------------------------------------------------------------------
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: compute-config-name
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        # Fetch the most-recently-created config for this gateway
+        CURRENT=$$(gcloud api-gateway api-configs list \
+          --api="$_GATEWAY_API_ID" \
+          --project="$PROJECT_ID" \
+          --format="value(name)" \
+          | sed 's|.*/||' \
+          | sort -t'-' -k4 -n \
+          | tail -1)   # pick the highest numeric suffix
+
+        echo "Current config: $$CURRENT"
+
+        if [ -z "$$CURRENT" ]; then
+          # No existing config — start at v1-1
+          NEW_CONFIG="${_CONFIG_BASE}-1"
+        else
+          # Extract the trailing integer, increment it
+          PREFIX=$$(echo "$$CURRENT" | sed 's/-[0-9]*$$//')
+          NUM=$$(echo "$$CURRENT" | grep -o '[0-9]*$$')
+          NEW_NUM=$$((NUM + 1))
+          NEW_CONFIG="$${PREFIX}-$${NEW_NUM}"
+        fi
+
+        echo "New config: $$NEW_CONFIG"
+        echo "$$NEW_CONFIG" > /workspace/new_config_name
+
+  # ------------------------------------------------------------------
+  # Step 2 — Create the new API config from openapi.beta.yaml
+  # ------------------------------------------------------------------
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: create-api-config
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        NEW_CONFIG=$$(cat /workspace/new_config_name)
+        echo "Creating API config: $$NEW_CONFIG"
+
+        gcloud api-gateway api-configs create "$$NEW_CONFIG" \
+          --api="$_GATEWAY_API_ID" \
+          --openapi-spec="openapi.beta.yaml" \
+          --project="$PROJECT_ID" \
+          --backend-auth-service-account="$_GATEWAY_SA"
+
+  # ------------------------------------------------------------------
+  # Step 3 — Update the gateway to use the new config
+  # ------------------------------------------------------------------
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: update-gateway
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        NEW_CONFIG=$$(cat /workspace/new_config_name)
+        echo "Updating gateway $_GATEWAY_ID to use config $$NEW_CONFIG"
+
+        gcloud api-gateway gateways update "$_GATEWAY_ID" \
+          --api="$_GATEWAY_API_ID" \
+          --api-config="$$NEW_CONFIG" \
+          --location="$_REGION" \
+          --project="$PROJECT_ID"
+
+  # ------------------------------------------------------------------
+  # Step 4 — Print a summary
+  # ------------------------------------------------------------------
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: summary
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        NEW_CONFIG=$$(cat /workspace/new_config_name)
+        echo "================================================================"
+        echo "Beta gateway deploy complete"
+        echo "  API:    $_GATEWAY_API_ID"
+        echo "  Config: $$NEW_CONFIG"
+        echo "  Gateway: $_GATEWAY_ID  (region: $_REGION)"
+        echo "================================================================"
+
+# All substitution variables must be set in the Cloud Build trigger console
+# (use this beta gateway's own trigger, pointing at the beta API/Gateway IDs):
+#   _GATEWAY_API_ID  — API Gateway API ID (e.g. my-api-id-beta)
+#   _GATEWAY_ID      — Gateway name (e.g. simpletort-beta-gateway)
+#   _REGION          — GCP region (e.g. us-central1)
+#   _CONFIG_BASE     — Config name prefix (e.g. my-config-beta-v1)
+#   _GATEWAY_SA      — Service account email for backend auth
+
+options:
+  logging: CLOUD_LOGGING_ONLY
