@@ -1294,7 +1294,7 @@ paths:
 
   # ============================================================
   # LEAD INTAKE SERVICE
-  # Cloud Run: https://lead-intake-292736139819.us-central1.run.app
+  # Cloud Run: https://lead-intake-446776793298.us-central1.run.app
   # External partner endpoints use Partner JWT (not Firebase JWT).
   # Internal task handler uses Cloud Tasks OIDC — gateway passes through,
   # backend enforces its own auth.
@@ -1308,7 +1308,7 @@ paths:
       operationId: corsPreflightLeads
       security: []
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -1317,7 +1317,7 @@ paths:
       summary: Ingest a new lead from a marketing partner
       operationId: createLead
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         201:
@@ -1341,7 +1341,7 @@ paths:
         - { name: pageSize, in: query, type: integer }
         - { name: pageToken, in: query, type: string }
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -1354,7 +1354,7 @@ paths:
       operationId: corsPreflightLeadsBulkAssign
       security: []
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -1363,7 +1363,7 @@ paths:
       summary: "Bulk assign up to 100 leads to a staff member (min role: admin_staff)"
       operationId: bulkAssignLeads
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -1378,7 +1378,7 @@ paths:
       operationId: corsPreflightLeadsExportCsv
       security: []
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -1392,7 +1392,7 @@ paths:
         - { name: dateFrom, in: query, type: string }
         - { name: dateTo, in: query, type: string }
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -1406,7 +1406,7 @@ paths:
       operationId: leadFollowupTask
       security: []
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app/api/v1/leads/internal/tasks/followup
+        address: https://lead-intake-446776793298.us-central1.run.app/api/v1/leads/internal/tasks/followup
         path_translation: CONSTANT_ADDRESS
       responses:
         200:
@@ -1419,7 +1419,7 @@ paths:
       parameters:
         - { name: lead_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -1430,7 +1430,7 @@ paths:
       parameters:
         - { name: lead_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -1447,7 +1447,7 @@ paths:
       parameters:
         - { name: lead_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -1458,7 +1458,7 @@ paths:
       parameters:
         - { name: lead_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -1475,7 +1475,7 @@ paths:
       operationId: corsPreflightAdminPartners
       security: []
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -1484,7 +1484,7 @@ paths:
       summary: "Create a new marketing partner (min role: senior_partner)"
       operationId: createPartner
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         201:
@@ -1497,7 +1497,7 @@ paths:
       summary: "List all partners with usage stats (min role: senior_partner)"
       operationId: listPartners
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -1512,7 +1512,7 @@ paths:
       parameters:
         - { name: partner_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -1523,7 +1523,7 @@ paths:
       parameters:
         - { name: partner_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         201:
@@ -1541,7 +1541,7 @@ paths:
         - { name: partner_id, in: path, required: true, type: string }
         - { name: key_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -1553,7 +1553,7 @@ paths:
         - { name: partner_id, in: path, required: true, type: string }
         - { name: key_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -1570,7 +1570,7 @@ paths:
       parameters:
         - { name: partner_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -1581,7 +1581,7 @@ paths:
       parameters:
         - { name: partner_id, in: path, required: true, type: string }
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -1598,7 +1598,7 @@ paths:
       operationId: corsPreflightAdminCaseIdPrefix
       security: []
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -1607,7 +1607,7 @@ paths:
       summary: "Get the current firm-wide case ID prefix (min role: senior_partner)"
       operationId: getCaseIdPrefix
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -1637,7 +1637,7 @@ paths:
                 maxLength: 10
                 description: "Uppercase letters only, 1-10 chars (e.g. ZAD, CASE, TORT)"
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -1654,7 +1654,7 @@ paths:
       operationId: corsPreflightAdminMaxFileSize
       security: []
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -1663,7 +1663,7 @@ paths:
       summary: "Get the firm-wide maximum file upload size (min role: senior_partner)"
       operationId: getMaxFileSize
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -1690,7 +1690,7 @@ paths:
                 maximum: 500
                 description: "Maximum allowed file size in megabytes (1–500)"
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -1707,7 +1707,7 @@ paths:
       operationId: corsPreflightAdminDocumentChecklists
       security: []
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -1716,7 +1716,7 @@ paths:
       summary: "Get the current document checklist configuration (min role: senior_partner)"
       operationId: getDocumentChecklists
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -1753,7 +1753,7 @@ paths:
                     type: string
                 description: "Map of case_type -> required document categories. Overrides the default for matching cases."
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -1770,7 +1770,7 @@ paths:
       operationId: corsPreflightScreeningRules
       security: []
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
@@ -1779,7 +1779,7 @@ paths:
       summary: "List all screening rules (min role: senior_partner)"
       operationId: listScreeningRules
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -1847,7 +1847,7 @@ paths:
                 minimum: 0
                 default: 0
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         201:
@@ -1866,7 +1866,7 @@ paths:
       operationId: corsPreflightScreeningRule
       security: []
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       parameters:
         - name: rule_id
@@ -1885,7 +1885,7 @@ paths:
           required: true
           type: string
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -1945,7 +1945,7 @@ paths:
               order:
                 type: integer
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         200:
@@ -1967,7 +1967,7 @@ paths:
           required: true
           type: string
       x-google-backend:
-        address: https://lead-intake-292736139819.us-central1.run.app
+        address: https://lead-intake-446776793298.us-central1.run.app
         path_translation: APPEND_PATH_TO_ADDRESS
       responses:
         204:
