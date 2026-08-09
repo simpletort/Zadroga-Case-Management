@@ -7,15 +7,28 @@ Creates / updates the three firmSettings documents read by reporting-service:
     firmSettings/reporting  — metricLabels{}
 
 Run once per environment:
-    python scripts/seed_reporting_settings.py
+    python scripts/seed_reporting_settings.py --project <your-gcp-project-id>
+
+Options
+-------
+  --project PROJECT   GCP project ID (default: $GCP_PROJECT_ID)
+  --database DB       Firestore database ID (default: simpletort-dev)
 """
+import argparse
 import os
+import sys
 from google.cloud import firestore
 
-db = firestore.Client(
-    project=os.environ["GCP_PROJECT_ID"],
-    database=os.environ.get("FIRESTORE_DATABASE_ID", "simpletort-dev"),
-)
+parser = argparse.ArgumentParser(description="Seed reporting-service firmSettings documents into Firestore.")
+parser.add_argument("--project",  default=os.environ.get("GCP_PROJECT_ID"), help="GCP project ID")
+parser.add_argument("--database", default="simpletort-dev",                 help="Firestore database ID")
+args = parser.parse_args()
+
+if not args.project:
+    print("ERROR: --project is required (or set GCP_PROJECT_ID).")
+    sys.exit(1)
+
+db = firestore.Client(project=args.project, database=args.database)
 
 documents = [
     {

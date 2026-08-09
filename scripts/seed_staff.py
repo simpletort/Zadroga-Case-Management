@@ -43,6 +43,24 @@ USERS = [
         "role":         "system_admin",
         "display_name": "Test_System_Admin",
     },
+    {
+        "email":        "paralegal1@test.com",
+        "password":     "Paralegal@1234",
+        "role":         "paralegal",
+        "display_name": "Test_Paralegal_1",
+    },
+    {
+        "email":        "paralegal2@test.com",
+        "password":     "Paralegal@1234",
+        "role":         "paralegal",
+        "display_name": "Test_Paralegal_2",
+    },
+    {
+        "email":        "seniorpartner@test.com",
+        "password":     "SeniorPartner@1234",
+        "role":         "senior_partner",
+        "display_name": "Test_Senior_Partner",
+    },
 ]
 
 # roleId -> displayName, mirrors ROLES in scripts/seed_rbac.py (roles collection

@@ -15,18 +15,23 @@ ApiKeyEntry shape (this service has no partner-management API of its own yet,
 so this script writes the document directly).
 
 Run once per environment:
-    GCP_PROJECT_ID=simpletort-zadroga-dev \
-    FIRESTORE_DATABASE_ID=simpletort-dev \
-    python scripts/seed_case_profile_partner.py [--partner-id ID] [--label LABEL]
+    python scripts/seed_case_profile_partner.py --project <your-gcp-project-id> \
+        [--database DB] [--partner-id ID] [--label LABEL]
 
 Re-running with the same --partner-id appends a new key to that partner's
 apiKeys[] rather than replacing the document, so existing keys (and whatever
 is currently using them) keep working.
+
+Options
+-------
+  --project PROJECT   GCP project ID (default: $GCP_PROJECT_ID)
+  --database DB       Firestore database ID (default: simpletort-dev)
 """
 import argparse
 import hashlib
 import os
 import secrets
+import sys
 from datetime import datetime, timezone
 
 from google.cloud import firestore
@@ -34,13 +39,17 @@ from google.cloud import firestore
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--project",    default=os.environ.get("GCP_PROJECT_ID"), help="GCP project ID")
+    parser.add_argument("--database",   default="simpletort-dev",                 help="Firestore database ID")
     parser.add_argument("--partner-id", default="intake_form_dispatcher")
     parser.add_argument("--label", default="google-forms-intake-dispatcher")
     args = parser.parse_args()
 
-    project  = os.environ["GCP_PROJECT_ID"]
-    database = os.environ.get("FIRESTORE_DATABASE_ID", "simpletort-dev")
-    db = firestore.Client(project=project, database=database)
+    if not args.project:
+        print("ERROR: --project is required (or set GCP_PROJECT_ID).")
+        sys.exit(1)
+
+    db = firestore.Client(project=args.project, database=args.database)
 
     raw_key  = "zad_case_" + secrets.token_urlsafe(32)
     key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
