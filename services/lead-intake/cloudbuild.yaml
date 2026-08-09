@@ -68,7 +68,9 @@ substitutions:
     292736139819-compute@developer.gserviceaccount.com
   _SSN_KMS_KEY_NAME: >-
     projects/simpletort-zadroga-dev/locations/us/keyRings/simpletort-phi/cryptoKeys/ssn-cmek
-  _FIRESTORE_DATABASE_ID: simpletort-dev   # override per environment in the trigger (e.g. simpletort-beta)
+  # _FIRESTORE_DATABASE_ID is set per environment on the Cloud Build trigger
+  # (e.g. simpletort-dev / simpletort-beta / simpletort-prod) — no default here,
+  # same as _REGION / _ENV / _SERVICE_NAME / _REPO / _FIREBASE_PROJECT_ID below.
 
 images:
   - "$_REPO/$_SERVICE_NAME:$COMMIT_SHA"
