@@ -103,13 +103,10 @@ _ROUTE_PERMISSIONS: list[tuple[str, str, str]] = [
     ("DELETE", r"^/api/v1/cases/[^/]+/updates/[^/]+$",       "cases.delete"),
 ]
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=get_cors_origins(settings.environment, settings.gcp_project_id),
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PATCH", "DELETE"],
-    allow_headers=["Authorization", "Content-Type", "x-apigateway-api-userinfo"],
-)
+# CORSMiddleware must be added last so it wraps everything else, including
+# error responses returned directly by AuthMiddleware (401/403) — otherwise
+# those responses skip CORS entirely and browsers report a CORS failure
+# instead of the real auth error.
 app.add_middleware(
     AuthMiddleware,
     route_permissions=_ROUTE_PERMISSIONS,
@@ -121,6 +118,13 @@ app.add_middleware(
 )
 app.add_middleware(LoggingMiddleware)
 app.add_middleware(ErrorHandlerMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_cors_origins(settings.environment, settings.gcp_project_id),
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
+    allow_headers=["Authorization", "Content-Type", "x-apigateway-api-userinfo"],
+)
 
 
 @app.get("/health", include_in_schema=False)
