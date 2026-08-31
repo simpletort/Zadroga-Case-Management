@@ -45,6 +45,10 @@ class AuditAction(str, Enum):
     # ── Upload flow ──────────────────────────────────────────────────────────
     upload_register = "upload_register"    # POST /upload/register
 
+    # ── System (case-less) upload flow ──────────────────────────────────────
+    system_upload_register = "system_upload_register"    # POST /system-upload/register
+    system_upload_read_url = "system_upload_read_url"    # GET /system-upload/{fileId}/read-url
+
     # ── Download / read ──────────────────────────────────────────────────────
     signed_url_read = "signed_url_read"    # GET /signed-url?action=read  → download
     signed_url_write = "signed_url_write"  # GET /signed-url?action=write → direct upload

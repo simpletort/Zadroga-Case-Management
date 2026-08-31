@@ -5,6 +5,7 @@
     "permissions": [
       { "id": "cases.read",           "displayName": "Read Cases",                 "category": "cases",           "description": "View case records and details" },
       { "id": "cases.write",          "displayName": "Write Cases",                "category": "cases",           "description": "Create and edit case records" },
+      { "id": "cases.bulk.write",     "displayName": "Bulk Import Cases",          "category": "cases",           "description": "Upload and process bulk lead imports from spreadsheets" },
       { "id": "cases.status.update",  "displayName": "Update Case Status",         "category": "cases",           "description": "Transition a case to a new status" },
       { "id": "cases.approve",        "displayName": "Approve Cases",              "category": "cases",           "description": "Give attorney sign-off for filing" },
       { "id": "cases.delete",         "displayName": "Delete Cases",               "category": "cases",           "description": "Permanently remove a case record" },

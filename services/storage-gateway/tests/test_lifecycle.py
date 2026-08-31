@@ -115,14 +115,32 @@ class TestUpdateLifecycle:
 # ── POST /lifecycle/apply-default ─────────────────────────────────────────────
 
 class TestApplyDefaultLifecycle:
-    def test_applies_exactly_four_rules(self, client, mock_gcs_client):
+    def test_applies_exactly_five_rules(self, client, mock_gcs_client):
+        """Was 4; a 5th rule (system-uploads/ 2-day delete) was added for
+        bulk-import spreadsheet staging — see DEFAULT_LIFECYCLE_RULES."""
         with patch("app.routes.lifecycle.update_lifecycle_rules") as mock_update:
             resp = client.post("/api/v1/storage/lifecycle/apply-default")
 
         assert resp.status_code == 200
         body = resp.json()
-        assert body["rules_applied"] == 4
+        assert body["rules_applied"] == 5
         mock_update.assert_called_once()
+
+    def test_default_rules_include_system_uploads_delete(self, client, mock_gcs_client):
+        captured = {}
+        def _capture(gcs_client, rules):
+            captured["rules"] = rules
+
+        with patch("app.routes.lifecycle.update_lifecycle_rules", side_effect=_capture):
+            client.post("/api/v1/storage/lifecycle/apply-default")
+
+        rules = captured["rules"]
+        system_uploads_rule = next(
+            r for r in rules
+            if r["condition"].get("matchesPrefix") == ["system-uploads/"]
+        )
+        assert system_uploads_rule["action"]["type"] == "Delete"
+        assert system_uploads_rule["condition"]["age"] == 2
 
     def test_default_rules_include_staging_delete(self, client, mock_gcs_client):
         captured = {}

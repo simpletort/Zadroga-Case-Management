@@ -67,8 +67,15 @@ _ROUTE_PERMISSIONS: list[tuple[str, str, str]] = [
     # Leads — export
     ("GET",    r"^/api/v1/leads/export/csv$",                        "cases.read"),
 
+    # Leads — bulk import (Excel with column mapping)
+    ("POST",   r"^/api/v1/leads/bulk-import$",                       "cases.bulk.write"),
+    ("GET",    r"^/api/v1/leads/bulk-import/[^/]+$",                 "cases.read"),
+    ("GET",    r"^/api/v1/leads/bulk-import/[^/]+/results$",         "cases.read"),
+
     # Internal Cloud Tasks webhook (OIDC; skipped in development)
     ("POST",   r"^/api/v1/leads/internal/tasks/followup$",           "tasks.internal"),
+    ("POST",   r"^/api/v1/leads/internal/tasks/bulk-import-scan-check$", "tasks.internal"),
+    ("POST",   r"^/api/v1/leads/internal/tasks/bulk-import$",        "tasks.internal"),
 
     # Admin — partner management (senior_partner / system_admin only)
     ("POST",   r"^/api/v1/admin/partners$",                          "staff.write"),

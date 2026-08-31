@@ -85,6 +85,17 @@ class Settings(BaseSettings):
     cloud_tasks_sa_email:     str = ""   # SA used to sign Cloud Tasks OIDC tokens
     followup_delay_hours:     int = 48
 
+    # ── Cloud Tasks (bulk lead import) ────────────────────────────────────────
+    # Separate queue so bulk-import traffic doesn't compete with the
+    # follow-up queue's rate limits.
+    cloud_tasks_bulk_import_queue:      str = "lead-bulk-import-queue"
+    bulk_import_scan_poll_delay_seconds: int = 5
+    bulk_import_scan_poll_max_attempts:  int = 24   # ~2 minutes at 5s intervals
+    bulk_import_chunk_size:              int = 25
+
+    # ── Storage Gateway (bulk-import file staging + virus scan) ──────────────
+    storage_gateway_url: str = ""   # storage-gateway's Cloud Run URL
+
     # ── Pub/Sub topics ────────────────────────────────────────────────────────
     # lead-created  → notification service sends welcome_sms
     # lead-screened → audit trail + staff Firestore notification (no SMS)

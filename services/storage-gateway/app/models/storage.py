@@ -180,6 +180,29 @@ class UploadStatusResponse(BaseModel):
     registered_at: datetime
 
 
+# ── System (case-less) upload models ───────────────────────────────────────
+# For files that need virus scanning before a case exists (e.g. bulk-import
+# spreadsheets). Same staging/scan pipeline as case-scoped uploads, but the
+# final GCS path is "system-uploads/{context}/{fileId}/{fileName}" instead
+# of case-scoped, and no cases/{caseId}/documents/{fileId} doc is written.
+
+class SystemUploadRegistrationRequest(BaseModel):
+    file_name: str = Field(..., description="Original file name including extension")
+    content_type: str = Field(..., description="MIME type of the file")
+    size_bytes: Optional[int] = Field(None, ge=1)
+    context: str = Field(
+        "bulk_lead_import",
+        description="GCS path segment identifying the caller/purpose, e.g. 'bulk_lead_import'",
+    )
+
+
+class SystemFileReadUrlResponse(BaseModel):
+    signed_url: str = Field(..., description="Pre-signed GCS URL for direct download")
+    blob_path: str = Field(..., description="Full GCS object path within the bucket")
+    bucket: str
+    expires_at: datetime
+
+
 # ── File Browser models ────────────────────────────────────────────────────
 
 class BrowseItem(BaseModel):

@@ -33,6 +33,16 @@ async function getAuthHeaders() {
     'Content-Type': 'application/json',
   }
 }
+
+// Multipart/form-data requests must NOT set Content-Type manually — the
+// browser needs to add its own boundary parameter, which fetch() only does
+// when Content-Type is left unset.
+async function getMultipartAuthHeaders() {
+  const user = getAuth().currentUser
+  if (!user) throw new Error('Not authenticated')
+  const token = await user.getIdToken()
+  return { 'Authorization': `Bearer ${token}` }
+}
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -232,5 +242,38 @@ export async function bulkAssignLeads(caseIds, assignTo) {
     method: 'POST', headers,
     body: JSON.stringify({ caseIds, assignTo }),
   })
+  return resp.json()
+}
+
+// ── Bulk import (Excel with column mapping) ──────────────────────────────────
+
+export async function createBulkImportJob(file, mapping) {
+  const headers = await getMultipartAuthHeaders()
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('mapping', JSON.stringify(mapping))
+
+  const resp = await fetch(`${LEAD_INTAKE_URL}/api/v1/leads/bulk-import`, {
+    method: 'POST', headers, body: formData,
+  })
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => ({}))
+    throw new Error(body?.message || `Bulk import failed (${resp.status})`)
+  }
+  return resp.json()
+}
+
+export async function getBulkImportJobStatus(jobId) {
+  const headers = await getAuthHeaders()
+  const resp = await fetch(`${LEAD_INTAKE_URL}/api/v1/leads/bulk-import/${jobId}`, { headers })
+  return resp.json()
+}
+
+export async function getBulkImportJobResults(jobId, { pageSize = 100, pageToken, outcome } = {}) {
+  const headers = await getAuthHeaders()
+  const params = new URLSearchParams({ pageSize: String(pageSize) })
+  if (pageToken) params.set('pageToken', pageToken)
+  if (outcome) params.set('outcome', outcome)
+  const resp = await fetch(`${LEAD_INTAKE_URL}/api/v1/leads/bulk-import/${jobId}/results?${params}`, { headers })
   return resp.json()
 }

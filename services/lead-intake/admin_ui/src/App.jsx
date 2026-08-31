@@ -24,9 +24,12 @@ import {
   assignCase,
   exportToCsv,
 } from './services/firebaseService'
+import BulkImportPage from './BulkImportPage'
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
-const C = {
+// Exported (along with the primitives below) so BulkImportPage.jsx can reuse
+// the same visual language instead of duplicating it.
+export const C = {
   bg: '#0a0c0f', surface: '#111418', card: '#161b22',
   border: '#21262d', borderHover: '#30363d',
   text: '#e6edf3', textMuted: '#8b949e', textFaint: '#484f58',
@@ -47,7 +50,7 @@ const ALL_VCF = ['eligible', 'ineligible', 'needs_review', 'pending']
 
 // ── Primitive components ──────────────────────────────────────────────────────
 
-function Badge({ label, color }) {
+export function Badge({ label, color }) {
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 5,
@@ -61,7 +64,7 @@ function Badge({ label, color }) {
   )
 }
 
-function Btn({ children, onClick, variant = 'ghost', disabled, style: extraStyle }) {
+export function Btn({ children, onClick, variant = 'ghost', disabled, style: extraStyle }) {
   const base = {
     border: '1px solid ' + C.borderHover, borderRadius: 6,
     padding: '6px 14px', fontSize: 12, cursor: disabled ? 'not-allowed' : 'pointer',
@@ -86,7 +89,7 @@ function Btn({ children, onClick, variant = 'ghost', disabled, style: extraStyle
   )
 }
 
-function Input({ value, onChange, placeholder, style: extra }) {
+export function Input({ value, onChange, placeholder, style: extra }) {
   return (
     <input
       value={value}
@@ -101,7 +104,7 @@ function Input({ value, onChange, placeholder, style: extra }) {
   )
 }
 
-function Select({ value, onChange, children, style: extra }) {
+export function Select({ value, onChange, children, style: extra }) {
   return (
     <select
       value={value}
@@ -141,6 +144,7 @@ function Sidebar({ active, setActive, counts }) {
     { id: 'screened', icon: '◇', label: 'Screened', count: counts?.['Screened'] },
     { id: 'qualified', icon: '◆', label: 'Qualified', count: counts?.['Qualified'] },
     { id: 'review', icon: '◈', label: 'Needs Review', count: counts?.['Needs Review'] },
+    { id: 'bulk-import', icon: '⇪', label: 'Bulk Import' },
     { id: 'partners', icon: '⬡', label: 'Partners' },
   ]
 
@@ -938,6 +942,7 @@ export default function App() {
       case 'screened': return <LeadsPage statusFilter="Screened" onViewCase={handleViewCase} />
       case 'qualified': return <LeadsPage statusFilter="Qualified" onViewCase={handleViewCase} />
       case 'review': return <LeadsPage statusFilter="Needs Review" onViewCase={handleViewCase} />
+      case 'bulk-import': return <BulkImportPage />
       case 'partners': return <PartnersPage />
       default: return <Dashboard onViewCase={handleViewCase} />
     }

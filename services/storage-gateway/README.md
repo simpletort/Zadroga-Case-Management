@@ -341,6 +341,7 @@ Resets the bucket to the standard Zadroga lifecycle policy.
 |---|---|---|
 | `staging/` | Delete | 1 day |
 | `quarantine/` | Delete | 90 days |
+| `system-uploads/` | Delete | 2 days |
 | *(all)* | Move to NEARLINE | 180 days |
 | *(all)* | Move to COLDLINE | 365 days |
 
@@ -348,7 +349,7 @@ Resets the bucket to the standard Zadroga lifecycle policy.
 ```json
 {
   "bucket": "zadroga-case-files-simpletort-zadroga-dev",
-  "rules_applied": 4,
+  "rules_applied": 5,
   "message": "Default Zadroga lifecycle policy applied successfully."
 }
 ```

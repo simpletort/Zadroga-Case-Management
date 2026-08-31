@@ -152,6 +152,130 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /leads/bulk-import:
+    post:
+      operationId: createBulkImportJob
+      summary: Bulk import leads from an Excel file with user-selected column mapping
+      description: |
+        Registers the uploaded .xlsx file with the storage-gateway service for
+        virus scanning and creates an async import job — the file is not
+        parsed inline. Poll `GET /leads/bulk-import/{jobId}` for progress;
+        rows are only parsed and processed once the virus scan clears. If the
+        file is infected or the scan fails, the whole job fails and no leads
+        are created. Each row is otherwise processed best-effort, matching
+        `POST /leads/bulk-assign`'s semantics — one invalid or duplicate row
+        never blocks the rest of the file.
+      tags:
+        - Bulk Import
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - mapping
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The .xlsx spreadsheet to import.
+                mapping:
+                  type: string
+                  description: JSON-encoded BulkImportRequest (see schema) describing the confirmed column mapping.
+      responses:
+        '202':
+          description: Import job accepted and queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeadImportJobResponse'
+        '400':
+          description: Invalid mapping, non-.xlsx file, or unmatched columns
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: File too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /leads/bulk-import/{jobId}:
+    get:
+      operationId: getBulkImportJobStatus
+      summary: Poll a bulk import job's status and summary counts
+      tags:
+        - Bulk Import
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Job found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeadImportJobResponse'
+        '404':
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /leads/bulk-import/{jobId}/results:
+    get:
+      operationId: listBulkImportJobResults
+      summary: List per-row results for a bulk import job
+      tags:
+        - Bulk Import
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 100
+            minimum: 1
+            maximum: 500
+        - name: pageToken
+          in: query
+          schema:
+            type: string
+        - name: outcome
+          in: query
+          description: Filter to a single outcome
+          schema:
+            type: string
+            enum:
+              - created
+              - skipped_duplicate
+              - failed
+      responses:
+        '200':
+          description: Page of row results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeadImportJobResultsPage'
+
 components:
   securitySchemes:
     BearerAuth:
@@ -400,3 +524,162 @@ components:
         message:
           type: string
           description: Human-readable field-level error
+
+    ColumnMapping:
+      type: object
+      required:
+        - excelColumn
+        - leadField
+      properties:
+        excelColumn:
+          type: string
+          description: Raw header text from the sheet, e.g. "First Name"
+          example: "First Name"
+        leadField:
+          type: string
+          description: Dotted path into LeadRequest, e.g. "exposureDates.start"
+          example: "firstName"
+
+    BulkImportRequest:
+      type: object
+      required:
+        - columnMappings
+        - marketingSource
+      properties:
+        columnMappings:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ColumnMapping'
+          description: >
+            Must include a mapping for every LeadRequest field required by
+            POST /leads (firstName, lastName, email, phone, exposureLocation,
+            exposureDates.start, exposureDates.end, wtcHealthProgramStatus,
+            priorAttorney) — marketingSource is supplied below, not mapped.
+        headerRowIndex:
+          type: integer
+          default: 0
+          minimum: 0
+          description: 0-based row index of the header row
+        sheetName:
+          type: string
+          nullable: true
+          description: Sheet to read; defaults to the first sheet
+        marketingSource:
+          type: string
+          maxLength: 100
+          description: Applied to every imported row
+        defaultReferralCode:
+          type: string
+          maxLength: 100
+          nullable: true
+          description: Used for rows that don't map a referralCode column
+
+    LeadImportJobSummary:
+      type: object
+      properties:
+        totalRows:
+          type: integer
+        processed:
+          type: integer
+        created:
+          type: integer
+        skipped:
+          type: integer
+        failed:
+          type: integer
+
+    LeadImportJobResponse:
+      type: object
+      required:
+        - jobId
+        - status
+        - summary
+        - createdAt
+        - updatedAt
+        - fileName
+        - partnerId
+        - requestId
+      properties:
+        jobId:
+          type: string
+        status:
+          type: string
+          enum:
+            - queued
+            - scanning
+            - processing
+            - succeeded
+            - failed
+            - cancelled
+        scanStatus:
+          type: string
+          nullable: true
+          description: Mirrors storage-gateway's virus-scan status while the job is in the scanning stage
+        summary:
+          $ref: '#/components/schemas/LeadImportJobSummary'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        fileName:
+          type: string
+        partnerId:
+          type: string
+        requestId:
+          type: string
+        errorMessage:
+          type: string
+          nullable: true
+          description: Set only on a job-level failure (virus scan rejection, unparseable file, etc.)
+
+    RowImportResult:
+      type: object
+      required:
+        - rowNumber
+        - outcome
+      properties:
+        rowNumber:
+          type: integer
+        outcome:
+          type: string
+          enum:
+            - created
+            - skipped_duplicate
+            - failed
+        caseId:
+          type: string
+          nullable: true
+        error:
+          nullable: true
+          $ref: '#/components/schemas/ErrorDetail'
+        vcfScreeningStatus:
+          type: string
+          nullable: true
+          enum:
+            - pending
+            - eligible
+            - ineligible
+            - needs_review
+
+    LeadImportJobResultsPage:
+      type: object
+      required:
+        - jobId
+        - results
+      properties:
+        jobId:
+          type: string
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RowImportResult'
+        nextPageToken:
+          type: string
+          nullable: true

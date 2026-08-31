@@ -25,11 +25,12 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import uuid
 from datetime import date, datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import StreamingResponse
 from google.auth.transport import requests as google_requests
 from google.cloud import firestore
@@ -39,22 +40,19 @@ from config import get_settings
 from logging_config import get_logger
 from middleware.auth import PartnerContext, get_partner
 from middleware.rate_limiter import limiter
+from models.bulk_import import BulkImportRequest, LeadImportJobResponse, LeadImportJobResultsPage
 from models.lead import (
-    CaseDocument, CaseStatus, ErrorDetail, ErrorResponse,
+    CaseDocument, CaseStatus,
     LeadCreatedResponse, LeadRequest, UpdateStatusRequest, VCFEligibility,
 )
+from services import bulk_import_service
 from services.case_service import (
-    create_case, get_case, update_case_status,
-    apply_vcf_screening_result, write_staff_screening_notification,
+    get_case, update_case_status, process_lead_submission,
     assign_case_transactional, AssignmentConflict,
 )
-from services.duplicate_detection import detect_duplicate, detect_ssn_dob_duplicate, is_idempotent_retry
+from services.duplicate_detection import is_idempotent_retry
 from services.firestore_client import get_db
-from services.pubsub_service import (
-    publish_lead_created, publish_lead_screened, publish_lead_followup,
-)
-from services.tasks_service import create_followup_task
-from services.vcf_screener import run_screening
+from services.pubsub_service import publish_lead_followup
 
 logger    = get_logger(__name__)
 router    = APIRouter(prefix="/leads", tags=["Leads"])
@@ -64,14 +62,6 @@ _TASKS_SA_EMAIL = (
     _settings.cloud_tasks_sa_email
     or f"lead-intake-service-account@{_settings.gcp_project_id}.iam.gserviceaccount.com"
 )
-
-
-def _err(request_id: str, code: str, message: str, details=None) -> dict:
-    return ErrorResponse(
-        error=code, message=message,
-        details=details or [], requestId=request_id,
-        timestamp=datetime.utcnow(),
-    ).model_dump(mode="json")
 
 
 # ── POST /leads ───────────────────────────────────────────────────────────────
@@ -106,163 +96,12 @@ async def create_lead(
                 timestamp=datetime.utcnow(),
             )
 
-    # ── SSN + DOB hard duplicate check (mass_tort per AI_CONTEXT.md) ─────────
-    # If match found: still create the case, but auto-flag as Disqualified
-    # with a note referencing the matched case.
-    ssn_dob_match = await detect_ssn_dob_duplicate(
-        ssn=lead.ssn, date_of_birth=lead.dateOfBirth, db=db,
-    )
-
-    # Email + phone soft duplicate — blocks entirely (409)
-    existing_case_id = await detect_duplicate(
-        email=str(lead.email), phone=lead.phone, db=db,
-    )
-    if existing_case_id:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=_err(
-                request_id, "DUPLICATE_LEAD",
-                "A lead with this email and phone already exists",
-                [ErrorDetail(field="email+phone", code="DUPLICATE",
-                             message=f"Case {existing_case_id} already exists")],
-            ),
-        )
-
-    # Create case in Firestore (atomic transaction)
-    try:
-        case: CaseDocument = await create_case(
-            lead=lead, partner_id=partner.partner_id,
-            request_id=request_id, db=db,
-        )
-    except Exception as exc:
-        logger.error("case_creation_failed", request_id=request_id, error=str(exc))
-        raise HTTPException(
-            status_code=500,
-            detail=_err(request_id, "INTERNAL_ERROR", "Failed to create case."),
-        )
-
-    # ── SSN + DOB hard duplicate → auto-Disqualify ────────────────────────────
-    # Case is created first (preserves the intake record for audit), then
-    # immediately flagged.  VCF screening is skipped for duplicates.
-    if ssn_dob_match:
-        dup_note = f"Duplicate: matched caseId={ssn_dob_match.matched_case_id}"
-        try:
-            await update_case_status(
-                case_id=case.caseId,
-                new_status=CaseStatus.DISQUALIFIED.value,
-                updated_by="system",
-                note=dup_note,
-                db=db,
-            )
-            case.status = CaseStatus.DISQUALIFIED
-            logger.info(
-                "ssn_dob_duplicate_auto_disqualified",
-                case_id=case.caseId,
-                matched_case_id=ssn_dob_match.matched_case_id,
-            )
-        except Exception as exc:
-            logger.error(
-                "ssn_dob_duplicate_disqualify_failed",
-                case_id=case.caseId, error=str(exc),
-            )
-
-        return LeadCreatedResponse(
-            leadId=case.caseId,
-            status=case.status,
-            vcfScreeningStatus=VCFEligibility.PENDING,
-            requestId=request_id,
-            timestamp=datetime.utcnow(),
-        )
-
-    # ── Inline VCF screening ──────────────────────────────────────────────────
-    screening_result = None
-    try:
-        case_dict        = case.to_firestore_dict()
-        screening_result = await run_screening(case.caseId, case_dict, db)
-        await apply_vcf_screening_result(
-            case_id           = case.caseId,
-            eligibility       = screening_result.eligibility,
-            new_status        = screening_result.case_status,
-            screening_details = screening_result.to_dict(),
-            db                = db,
-        )
-        case.vcfEligibility = VCFEligibility(screening_result.eligibility)
-        case.status         = CaseStatus(screening_result.case_status)
-        logger.info(
-            "vcf_screening_complete",
-            case_id=case.caseId,
-            eligibility=screening_result.eligibility,
-            score=screening_result.score,
-        )
-    except Exception as exc:
-        logger.error("vcf_screening_failed_non_fatal", case_id=case.caseId, error=str(exc))
-
-    # ── Staff in-app notification (Firestore write — not SMS) ─────────────────
-    if screening_result is not None:
-        try:
-            await write_staff_screening_notification(
-                case_id     = case.caseId,
-                first_name  = lead.firstName,
-                last_name   = lead.lastName,
-                eligibility = screening_result.eligibility,
-                score       = screening_result.score,
-                flags       = screening_result.flags,
-                assigned_to = case.assignedTo,
-                db          = db,
-            )
-        except Exception as exc:
-            logger.error("staff_notification_failed_non_fatal",
-                         case_id=case.caseId, error=str(exc))
-
-    # ── Pub/Sub: lead-created → notification service sends welcome_sms ────────
-    # Phone and name are included in the payload so the notification service
-    # can dispatch without making a Firestore lookup.
-    try:
-        await publish_lead_created(
-            case_id          = case.caseId,
-            partner_id       = partner.partner_id,
-            request_id       = request_id,
-            marketing_source = lead.marketingSource,
-            first_name       = lead.firstName,
-            last_name        = lead.lastName,
-            phone            = lead.phone,
-        )
-    except Exception as exc:
-        logger.error("pubsub_lead_created_failed", case_id=case.caseId, error=str(exc))
-
-    # ── Pub/Sub: lead-screened → audit trail ──────────────────────────────────
-    if screening_result is not None:
-        try:
-            await publish_lead_screened(
-                case_id     = case.caseId,
-                eligibility = screening_result.eligibility,
-                score       = screening_result.score,
-                flags       = screening_result.flags,
-                new_status  = screening_result.case_status,
-                request_id  = request_id,
-            )
-        except Exception as exc:
-            logger.error("pubsub_lead_screened_failed", case_id=case.caseId, error=str(exc))
-
-    # ── Cloud Task: 48h Admin Staff follow-up ─────────────────────────────────
-    # Schedules a task that calls /internal/tasks/followup 48h from now.
-    # That handler creates the Firestore task doc and publishes lead-followup
-    # which triggers the follow-up SMS via the notification service.
-    try:
-        task_name = await create_followup_task(
-            case_id=case.caseId, service_account_email=_TASKS_SA_EMAIL,
-        )
-        logger.info("followup_task_enqueued", case_id=case.caseId, task=task_name)
-    except Exception as exc:
-        logger.error("followup_task_failed_non_fatal", case_id=case.caseId, error=str(exc))
-
-    logger.info("lead_intake_complete", case_id=case.caseId, request_id=request_id)
-    return LeadCreatedResponse(
-        leadId             = case.caseId,
-        status             = case.status,
-        vcfScreeningStatus = case.vcfEligibility,
-        requestId          = request_id,
-        timestamp          = datetime.utcnow(),
+    # Dedup checks -> create case -> VCF screening -> notification -> pubsub
+    # -> follow-up task enqueue. Shared with the bulk-import row worker so
+    # both paths behave identically (services/case_service.py).
+    return await process_lead_submission(
+        lead=lead, partner_id=partner.partner_id, request_id=request_id,
+        db=db, sa_email=_TASKS_SA_EMAIL,
     )
 
 
@@ -438,6 +277,140 @@ async def export_leads_csv(
     )
 
 
+# ── POST /leads/bulk-import ───────────────────────────────────────────────────
+
+@router.post(
+    "/bulk-import",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=LeadImportJobResponse,
+    summary="Bulk import leads from an Excel file with column mapping",
+)
+async def create_bulk_import(
+    request: Request,
+    file:    UploadFile = File(...),
+    mapping: str        = Form(..., description="JSON-encoded BulkImportRequest"),
+    partner: PartnerContext = Depends(get_partner),
+    db:      firestore.AsyncClient = Depends(get_db),
+) -> LeadImportJobResponse:
+    """
+    Registers the uploaded file with storage-gateway's case-less upload path
+    for virus scanning and creates an async job — no parsing happens inline.
+    Poll GET /bulk-import/{jobId} for progress; the file is only parsed once
+    the scan clears (see services/bulk_import_service.handle_scan_check).
+    """
+    request_id = str(uuid.uuid4())
+
+    try:
+        mapping_data = json.loads(mapping)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail={
+            "error": "INVALID_REQUEST", "message": f"mapping is not valid JSON: {exc}", "details": [],
+        })
+    try:
+        bulk_request = BulkImportRequest(**mapping_data)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail={
+            "error": "INVALID_REQUEST", "message": f"mapping does not match the expected shape: {exc}", "details": [],
+        })
+
+    file_bytes = await file.read()
+    return await bulk_import_service.create_import_job(
+        file_bytes=file_bytes,
+        file_name=file.filename or "upload.xlsx",
+        mapping=bulk_request,
+        partner_id=partner.partner_id,
+        request_id=request_id,
+        db=db,
+        settings=_settings,
+        sa_email=_TASKS_SA_EMAIL,
+    )
+
+
+# ── GET /leads/bulk-import/{jobId} ────────────────────────────────────────────
+
+@router.get(
+    "/bulk-import/{job_id}",
+    response_model=LeadImportJobResponse,
+    summary="Get bulk import job status",
+)
+async def get_bulk_import_job(
+    job_id:  str,
+    partner: PartnerContext = Depends(get_partner),
+    db:      firestore.AsyncClient = Depends(get_db),
+) -> LeadImportJobResponse:
+    job = await bulk_import_service.get_job(job_id, db)
+    if not job:
+        raise HTTPException(status_code=404, detail={
+            "error": "NOT_FOUND", "message": f"Bulk import job {job_id} not found", "details": [],
+        })
+    return job
+
+
+# ── GET /leads/bulk-import/{jobId}/results ────────────────────────────────────
+
+@router.get(
+    "/bulk-import/{job_id}/results",
+    response_model=LeadImportJobResultsPage,
+    summary="List bulk import per-row results",
+)
+async def get_bulk_import_results(
+    job_id:     str,
+    partner:    PartnerContext = Depends(get_partner),
+    db:         firestore.AsyncClient = Depends(get_db),
+    page_size:  int = Query(100, ge=1, le=500, alias="pageSize"),
+    page_token: Optional[str] = Query(None, alias="pageToken"),
+    outcome:    Optional[str] = Query(None),
+) -> LeadImportJobResultsPage:
+    return await bulk_import_service.list_job_results(
+        job_id, db, page_size=page_size, page_token=page_token, outcome=outcome,
+    )
+
+
+# ── POST /leads/internal/tasks/bulk-import-scan-check ─────────────────────────
+
+@router.post("/internal/tasks/bulk-import-scan-check", include_in_schema=False)
+async def handle_bulk_import_scan_check(
+    request: Request,
+    db:      firestore.AsyncClient = Depends(get_db),
+) -> dict:
+    """Called by Cloud Tasks to poll storage-gateway's virus-scan status for
+    a bulk-import job. Re-enqueues itself while pending/scanning."""
+    _verify_cloud_tasks_oidc(request, "/api/v1/leads/internal/tasks/bulk-import-scan-check")
+
+    body   = await request.json()
+    job_id = body.get("jobId")
+    if not job_id:
+        logger.error("bulk_import_scan_check_missing_job_id")
+        return {"status": "error", "message": "Missing jobId"}
+
+    return await bulk_import_service.handle_scan_check(
+        job_id=job_id, db=db, settings=_settings, sa_email=_TASKS_SA_EMAIL,
+    )
+
+
+# ── POST /leads/internal/tasks/bulk-import ─────────────────────────────────────
+
+@router.post("/internal/tasks/bulk-import", include_in_schema=False)
+async def handle_bulk_import_chunk(
+    request: Request,
+    db:      firestore.AsyncClient = Depends(get_db),
+) -> dict:
+    """Called by Cloud Tasks to process one chunk of rows for a bulk-import job."""
+    _verify_cloud_tasks_oidc(request, "/api/v1/leads/internal/tasks/bulk-import")
+
+    body      = await request.json()
+    job_id    = body.get("jobId")
+    row_start = body.get("rowStart")
+    row_end   = body.get("rowEnd")
+    if not job_id or row_start is None or row_end is None:
+        logger.error("bulk_import_chunk_missing_fields")
+        return {"status": "error", "message": "Missing jobId/rowStart/rowEnd"}
+
+    return await bulk_import_service.process_chunk(
+        job_id=job_id, row_start=row_start, row_end=row_end, db=db, sa_email=_TASKS_SA_EMAIL,
+    )
+
+
 # ── POST /leads/internal/tasks/followup ──────────────────────────────────────
 
 @router.post("/internal/tasks/followup", include_in_schema=False)
@@ -451,7 +424,7 @@ async def handle_followup_task(
     Creates an Admin Staff task in /tasks (Firestore write).
     Publishes lead-followup to Pub/Sub — notification service sends followup_sms.
     """
-    _verify_cloud_tasks_oidc(request)
+    _verify_cloud_tasks_oidc(request, "/api/v1/leads/internal/tasks/followup")
 
     body    = await request.json()
     case_id = body.get("caseId")
@@ -512,8 +485,14 @@ async def handle_followup_task(
     return {"status": "created", "taskId": task_ref.id}
 
 
-def _verify_cloud_tasks_oidc(request: Request) -> None:
-    """Verify Google-signed OIDC token from Cloud Tasks. Skipped in dev/test."""
+def _verify_cloud_tasks_oidc(request: Request, expected_path: str) -> None:
+    """Verify Google-signed OIDC token from Cloud Tasks. Skipped in dev/test.
+
+    expected_path is the internal endpoint's own path (e.g.
+    "/api/v1/leads/internal/tasks/followup") — it's also the audience Cloud
+    Tasks signed the token for, since tasks_service.py sets audience=handler_url
+    per-endpoint.
+    """
     cfg = get_settings()
     if cfg.app_env in ("development", "test"):
         return
@@ -526,7 +505,7 @@ def _verify_cloud_tasks_oidc(request: Request) -> None:
         )
 
     token    = auth_header.split(" ", 1)[1]
-    audience = f"{cfg.cloud_tasks_handler_url}/api/v1/leads/internal/tasks/followup"
+    audience = f"{cfg.cloud_tasks_handler_url}{expected_path}"
     try:
         id_info     = id_token.verify_oauth2_token(
             token, google_requests.Request(), audience=audience,

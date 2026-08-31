@@ -32,6 +32,8 @@
 | `services/lead-intake/api/services/vcf_screener.py` | 🟡 AMBER | Eligibility screening logic |
 | `services/lead-intake/api/services/duplicate_detection.py` | 🟡 AMBER | Deduplication logic |
 | `services/lead-intake/api/services/validation.py` | 🟡 AMBER | Lead validation rules |
+| `services/lead-intake/api/services/case_service.py` | 🟡 AMBER | Case creation transaction, atomic case-ID allocation, and `process_lead_submission()` — the full dedup/screening/notification/pubsub/follow-up pipeline shared by `POST /leads` and bulk import. Same sensitivity tier as the AMBER files above it processes rows through. |
+| `services/lead-intake/api/services/bulk_import_service.py` | 🟡 AMBER | Drives `case_service.process_lead_submission()` per row for bulk lead import; job status transitions and per-row idempotency logic. |
 | `services/notification/services/` | 🟡 AMBER | Template rendering, opt-out enforcement |
 | `services/workflow-orchestrator/services/workflow_engine.py` | 🟡 AMBER | Event routing and workflow triggering |
 | `services/workflow-orchestrator/cloud_workflows/*.yaml` | 🟡 AMBER | Cloud Workflow definitions |
@@ -111,6 +113,8 @@ Follow these steps in order. Do not skip or merge steps.
 | `services/lead-intake/api/services/vcf_screener.py` | Eligibility screening logic. False negatives disqualify valid clients. |
 | `services/lead-intake/api/services/duplicate_detection.py` | Deduplication logic. False positives silently drop valid leads; false negatives create duplicate cases. |
 | `services/lead-intake/api/services/validation.py` | Lead validation rules. Determines which leads enter the pipeline. |
+| `services/lead-intake/api/services/case_service.py` | Case creation transaction and atomic case-ID allocation; hosts `process_lead_submission()`, the shared dedup/screening/notification/pubsub/follow-up pipeline used by both single-lead and bulk-import creation. Errors here corrupt case identity or duplicate/skip lead creation at scale. |
+| `services/lead-intake/api/services/bulk_import_service.py` | Drives `process_lead_submission()` per row for bulk lead import from Excel; owns job status transitions and per-row idempotency. A logic error can misfire hundreds of case creations from one bad column mapping. |
 | `services/notification/services/` | Template rendering and opt-out enforcement. Violations of opt-out are legally and regulatorily significant. |
 | `services/workflow-orchestrator/services/workflow_engine.py` | Event routing and workflow triggering. Incorrect routing silently breaks cross-service state transitions. |
 | `services/workflow-orchestrator/cloud_workflows/*.yaml` | Cloud Workflow definitions. Errors stall automated case progression across multiple services. |

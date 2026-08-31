@@ -55,6 +55,12 @@ DEFAULT_LIFECYCLE_RULES = [
         "condition": {"age": 90, "matchesPrefix": ["quarantine/"]},
     },
     {
+        # Bulk-import spreadsheets and other case-less system uploads are
+        # transient working data, not a permanent legal record — short TTL.
+        "action": {"type": "Delete"},
+        "condition": {"age": 2, "matchesPrefix": ["system-uploads/"]},
+    },
+    {
         "action": {"type": "SetStorageClass", "storageClass": "NEARLINE"},
         "condition": {"age": 180},
     },

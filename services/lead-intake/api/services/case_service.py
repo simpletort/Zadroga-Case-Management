@@ -13,14 +13,30 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
+from fastapi import HTTPException, status
 from google.cloud import firestore
 from google.cloud.firestore_v1 import AsyncTransaction
 
 from config import get_settings
-from models.lead import CaseDocument, CaseStatus, LeadRequest, VCFEligibility
+from models.lead import (
+    CaseDocument, CaseStatus, ErrorDetail, ErrorResponse,
+    LeadCreatedResponse, LeadRequest, VCFEligibility,
+)
 from logging_config import get_logger
+from services.duplicate_detection import detect_duplicate, detect_ssn_dob_duplicate
+from services.pubsub_service import publish_lead_created, publish_lead_screened
+from services.tasks_service import create_followup_task
+from services.vcf_screener import run_screening
 
 logger = get_logger(__name__)
+
+
+def _err(request_id: str, code: str, message: str, details=None) -> dict:
+    return ErrorResponse(
+        error=code, message=message,
+        details=details or [], requestId=request_id,
+        timestamp=datetime.utcnow(),
+    ).model_dump(mode="json")
 
 _case_id_prefix_cache: Optional[str] = None
 
@@ -91,6 +107,186 @@ async def create_case(
 
     transaction = db.transaction()
     return await _txn(transaction)
+
+
+async def process_lead_submission(
+    lead:       LeadRequest,
+    partner_id: str,
+    request_id: str,
+    db:         firestore.AsyncClient,
+    sa_email:   str,
+) -> LeadCreatedResponse:
+    """
+    Full lead pipeline shared by POST /leads and the bulk-import row worker:
+      dedup checks -> create_case -> VCF screening -> staff notification ->
+      pubsub events -> follow-up task enqueue.
+
+    Lifted verbatim from routers/leads.py's create_lead() (steps 2-9) so both
+    callers behave identically. Idempotency (X-Request-ID replay) is handled
+    by the caller before this is invoked — it isn't part of this pipeline
+    because the bulk-import worker uses its own idempotency key scheme
+    (job_id:row_number) rather than a client-supplied header.
+
+    Raises HTTPException(409, ...) on an email+phone soft duplicate.
+    """
+    # ── SSN + DOB hard duplicate check (mass_tort per AI_CONTEXT.md) ─────────
+    # If match found: still create the case, but auto-flag as Disqualified
+    # with a note referencing the matched case.
+    ssn_dob_match = await detect_ssn_dob_duplicate(
+        ssn=lead.ssn, date_of_birth=lead.dateOfBirth, db=db,
+    )
+
+    # Email + phone soft duplicate — blocks entirely (409)
+    existing_case_id = await detect_duplicate(
+        email=str(lead.email), phone=lead.phone, db=db,
+    )
+    if existing_case_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_err(
+                request_id, "DUPLICATE_LEAD",
+                "A lead with this email and phone already exists",
+                [ErrorDetail(field="email+phone", code="DUPLICATE",
+                             message=f"Case {existing_case_id} already exists")],
+            ),
+        )
+
+    # Create case in Firestore (atomic transaction)
+    try:
+        case: CaseDocument = await create_case(
+            lead=lead, partner_id=partner_id,
+            request_id=request_id, db=db,
+        )
+    except Exception as exc:
+        logger.error("case_creation_failed", request_id=request_id, error=str(exc))
+        raise HTTPException(
+            status_code=500,
+            detail=_err(request_id, "INTERNAL_ERROR", "Failed to create case."),
+        )
+
+    # ── SSN + DOB hard duplicate → auto-Disqualify ────────────────────────────
+    # Case is created first (preserves the intake record for audit), then
+    # immediately flagged.  VCF screening is skipped for duplicates.
+    if ssn_dob_match:
+        dup_note = f"Duplicate: matched caseId={ssn_dob_match.matched_case_id}"
+        try:
+            await update_case_status(
+                case_id=case.caseId,
+                new_status=CaseStatus.DISQUALIFIED.value,
+                updated_by="system",
+                note=dup_note,
+                db=db,
+            )
+            case.status = CaseStatus.DISQUALIFIED
+            logger.info(
+                "ssn_dob_duplicate_auto_disqualified",
+                case_id=case.caseId,
+                matched_case_id=ssn_dob_match.matched_case_id,
+            )
+        except Exception as exc:
+            logger.error(
+                "ssn_dob_duplicate_disqualify_failed",
+                case_id=case.caseId, error=str(exc),
+            )
+
+        return LeadCreatedResponse(
+            leadId=case.caseId,
+            status=case.status,
+            vcfScreeningStatus=VCFEligibility.PENDING,
+            requestId=request_id,
+            timestamp=datetime.utcnow(),
+        )
+
+    # ── Inline VCF screening ──────────────────────────────────────────────────
+    screening_result = None
+    try:
+        case_dict        = case.to_firestore_dict()
+        screening_result = await run_screening(case.caseId, case_dict, db)
+        await apply_vcf_screening_result(
+            case_id           = case.caseId,
+            eligibility       = screening_result.eligibility,
+            new_status        = screening_result.case_status,
+            screening_details = screening_result.to_dict(),
+            db                = db,
+        )
+        case.vcfEligibility = VCFEligibility(screening_result.eligibility)
+        case.status         = CaseStatus(screening_result.case_status)
+        logger.info(
+            "vcf_screening_complete",
+            case_id=case.caseId,
+            eligibility=screening_result.eligibility,
+            score=screening_result.score,
+        )
+    except Exception as exc:
+        logger.error("vcf_screening_failed_non_fatal", case_id=case.caseId, error=str(exc))
+
+    # ── Staff in-app notification (Firestore write — not SMS) ─────────────────
+    if screening_result is not None:
+        try:
+            await write_staff_screening_notification(
+                case_id     = case.caseId,
+                first_name  = lead.firstName,
+                last_name   = lead.lastName,
+                eligibility = screening_result.eligibility,
+                score       = screening_result.score,
+                flags       = screening_result.flags,
+                assigned_to = case.assignedTo,
+                db          = db,
+            )
+        except Exception as exc:
+            logger.error("staff_notification_failed_non_fatal",
+                         case_id=case.caseId, error=str(exc))
+
+    # ── Pub/Sub: lead-created → notification service sends welcome_sms ────────
+    # Phone and name are included in the payload so the notification service
+    # can dispatch without making a Firestore lookup.
+    try:
+        await publish_lead_created(
+            case_id          = case.caseId,
+            partner_id       = partner_id,
+            request_id       = request_id,
+            marketing_source = lead.marketingSource,
+            first_name       = lead.firstName,
+            last_name        = lead.lastName,
+            phone            = lead.phone,
+        )
+    except Exception as exc:
+        logger.error("pubsub_lead_created_failed", case_id=case.caseId, error=str(exc))
+
+    # ── Pub/Sub: lead-screened → audit trail ──────────────────────────────────
+    if screening_result is not None:
+        try:
+            await publish_lead_screened(
+                case_id     = case.caseId,
+                eligibility = screening_result.eligibility,
+                score       = screening_result.score,
+                flags       = screening_result.flags,
+                new_status  = screening_result.case_status,
+                request_id  = request_id,
+            )
+        except Exception as exc:
+            logger.error("pubsub_lead_screened_failed", case_id=case.caseId, error=str(exc))
+
+    # ── Cloud Task: 48h Admin Staff follow-up ─────────────────────────────────
+    # Schedules a task that calls /internal/tasks/followup 48h from now.
+    # That handler creates the Firestore task doc and publishes lead-followup
+    # which triggers the follow-up SMS via the notification service.
+    try:
+        task_name = await create_followup_task(
+            case_id=case.caseId, service_account_email=sa_email,
+        )
+        logger.info("followup_task_enqueued", case_id=case.caseId, task=task_name)
+    except Exception as exc:
+        logger.error("followup_task_failed_non_fatal", case_id=case.caseId, error=str(exc))
+
+    logger.info("lead_intake_complete", case_id=case.caseId, request_id=request_id)
+    return LeadCreatedResponse(
+        leadId             = case.caseId,
+        status             = case.status,
+        vcfScreeningStatus = case.vcfEligibility,
+        requestId          = request_id,
+        timestamp          = datetime.utcnow(),
+    )
 
 
 async def write_staff_screening_notification(

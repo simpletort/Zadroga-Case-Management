@@ -53,7 +53,7 @@ ROLES = [
         "displayName": "Admin Staff",
         "description": "Front-office staff",
         "permissions": [
-            "cases.read", "cases.write", "cases.status.update",
+            "cases.read", "cases.write", "cases.bulk.write", "cases.status.update",
             "clients.read", "clients.write",
             "documents.read", "documents.upload",
             "tasks.read", "tasks.write", "tasks.complete",
@@ -70,7 +70,7 @@ ROLES = [
         "displayName": "Paralegal",
         "description": "Paralegal — document review and case handling",
         "permissions": [
-            "cases.read", "cases.write", "cases.status.update",
+            "cases.read", "cases.write", "cases.bulk.write", "cases.status.update",
             "clients.read", "clients.write",
             "documents.read", "documents.upload", "documents.verify",
             "tasks.read", "tasks.write", "tasks.complete", "tasks.assign",
@@ -87,7 +87,7 @@ ROLES = [
         "displayName": "Junior Partner",
         "description": "Attorney — case approval and escalation",
         "permissions": [
-            "cases.read", "cases.write", "cases.status.update", "cases.approve",
+            "cases.read", "cases.write", "cases.bulk.write", "cases.status.update", "cases.approve",
             "clients.read", "clients.write",
             "documents.read", "documents.upload", "documents.verify",
             "tasks.read", "tasks.write", "tasks.complete", "tasks.assign", "tasks.skip",
@@ -107,7 +107,7 @@ ROLES = [
         "displayName": "Senior Partner",
         "description": "Full access except system administration",
         "permissions": [
-            "cases.read", "cases.write", "cases.status.update",
+            "cases.read", "cases.write", "cases.bulk.write", "cases.status.update",
             "cases.approve", "cases.delete",
             "clients.read", "clients.write",
             "documents.read", "documents.upload", "documents.verify", "documents.override",
@@ -131,7 +131,7 @@ ROLES = [
         "description": "Full platform access including role management",
         "permissions": [
             "system.admin", "staff.manage", "staff.invite", "auditLog.read",
-            "cases.read", "cases.write", "cases.delete",
+            "cases.read", "cases.write", "cases.bulk.write", "cases.delete",
             "settings.read", "settings.write",
             "storage.signed_url", "storage.metadata.read",
             "storage.upload.read", "storage.upload.write",

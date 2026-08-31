@@ -22,7 +22,7 @@ MB = 1024 * 1024
 MAX_FILE_SIZE_BYTES = 50 * MB
 
 ALLOWED_EXTENSIONS: frozenset[str] = frozenset(
-    {"pdf", "jpg", "jpeg", "png", "docx", "tiff"}
+    {"pdf", "jpg", "jpeg", "png", "docx", "tiff", "xlsx", "csv"}
 )
 
 
